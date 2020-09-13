@@ -1,0 +1,5 @@
+name "libcore"
+description "\"\""
+authors "David Zhang"
+copyright "Copyright © 2020, David Zhang"
+license "proprietary"

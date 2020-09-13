@@ -1,0 +1,124 @@
+= The Flare Project (v1)
+A 3D space game with advanced destruction and physically simulated phenomena.
+:toc:
+
+Version one of the project aims to create a minimum viable product that will act as a forerunner for funding acquisition.
+
+== V0.1: Roughing it Out
+
+=== Requirements
+
+. Gameplay
+.. Place and Remove Blocks into Chunks
+.. Collide Chunks by Applying Impulses
+.. Attractor Block to Force Collisions
+. Engine
+.. Core Technologies
+... Memory Management
+.... Temporary & Per-Frame Allocators
+.... Detailed Memory Usage by System/Object/Tool
+... Diagnostics
+.... Logger
+.... Resource Monitor
+.... Debug View
+... Unified Data Model
+.... Entity Component System?
+.. Graphics Pipeline
+... Vulkan Renderer
+... 3D Camera
+... Textured Models
+... Phong Shading
+... Skybox
+.. Physics
+... Calculate Mass, Force, Inertia
+... Arbitrary Construct-Construct Collisions
+.... Use Vulkan Compute for Broad/Narrow-Phase?
+... &ge; 10 Cubes
+... Velocity &le; 10 m/s (Supporting Collisions!)
+... Primitive Per-Collision Entropy (No infinite bounces)
+... Serialization of Object Positions
+... Recording and Replaying of Interactions
+.. User Interface
+... Buttons
+... Text
+... Spacing/Flow
+
+
+== V0.2: Polishing a Turd
+
+=== Requirements
+
+. Gameplay
+.. Blocks
+... Thruster
+... Control Seat
+.. Introduce Tools for Building Larger Structures
+... Copy/Paste
+... Mirroring across up to 3 axes
+. Engine
+.. Core Technologies
+... Multithreading
+... Data Management & Control
+.... Importing Blocks and Textures
+.. Physics
+... Acceleration
+... Friction on Collisions
+... &ge; 1000 Cubes
+... &le; 100 m/s with
+... Object Sleeping
+.. Sound
+... Background Music
+... Collision Noises
+. Theory
+.. Develop Voxel Deformation Model
+... Energy of Vapourization
+... Energy of Deformation
+... Fragmentation?
+... Force Propagation?
+.... Craters in Blocks!
+
+== V0.3 Diamond in the Rough
+
+=== Requirements
+
+. Gameplay
+.. Blocks
+... Lights
+... Sliding Door
+... Swinging Door
+. Engine
+.. Core Technologies
+... Scripting API
+.. Graphics Pipeline
+... Physically Based Rendering
+.... PBR Materials
+... Specularity
+... Point Light Sources
+... Plane Light Sources
+.. Networking
+... Separate Game and Display
+.. Physics
+... Reimplement
+... Performance Targets
+.... &ge; 1,000,000 Cubes
+.... &le; 1,000 m/s
+.... Implemented Voxel Deformation Model
+
+== V0.4 Refinement
+
+=== Requirements
+
+. Gameplay
+.. Player Presence
+... Player Character Model
+... Breathing Sounds
+... Walking Animation & Camera Movement
+.. Painting Blocks
+.. Blocks
+... Gravity Plate
+. Engine
+.. Physics
+... Optimized Non-Interacting Structures
+... Explore Measures of Structure Complexity
+.. IK Animation System
+... Character Animations

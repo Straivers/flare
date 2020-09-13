@@ -1,0 +1,15 @@
+.dub
+docs.json
+__dummy.html
+docs/
+/libcore
+libcore.so
+libcore.dylib
+libcore.dll
+libcore.a
+libcore.lib
+libcore-test-*
+*.exe
+*.o
+*.obj
+*.lst
