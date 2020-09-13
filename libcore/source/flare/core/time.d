@@ -4,9 +4,22 @@ module flare.core.time;
  An instant in time measured using the operating system's high-resolution timer.
  */
 struct Time {
-@safe @nogc nothrow:
-
     private long _raw_time;
+
+    /// Calculates the difference between two moments in time.
+    Duration opBinary(string op = '-')(Time rhs) @safe @nogc pure nothrow {
+        assert(_raw_time >= rhs._raw_time);
+
+        return Duration(_raw_time - rhs._raw_time);
+    }
+}
+
+struct Duration {
+    private long _raw_delta;
+
+    double to_msecs() @safe @nogc pure nothrow {
+        return to_msecs_impl(this);
+    }
 }
 
 /// TODO: struct(DeltaTime) and Time - Time
@@ -92,6 +105,18 @@ private:
 version (Windows) {
     import core.sys.windows.windows;
 
+    immutable long perf_counter_frequency_hz;
+    immutable real perf_counter_frequency_msecs;
+
+    shared static this() {
+        long hz;
+        if (!QueryPerformanceFrequency(&hz))
+            assert(false, "Failed to determine system timer frequency.");
+        perf_counter_frequency_hz = hz;
+        
+        perf_counter_frequency_msecs = (cast(real) perf_counter_frequency_hz) / 1000;
+    }
+
     // Because core.sys.windows.windows does not export this function.
     extern (Windows) void GetSystemTimePreciseAsFileTime(LPFILETIME) @nogc nothrow;
 
@@ -101,6 +126,10 @@ version (Windows) {
         assert(qpc_err == 0);
 
         return Time(time);
+    }
+
+    double to_msecs_impl(Duration d) @safe @nogc pure nothrow {
+        return d._raw_delta / perf_counter_frequency_msecs;
     }
 
     TimeStamp get_timestamp_impl() @trusted @nogc nothrow {
