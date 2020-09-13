@@ -1,0 +1,15 @@
+.dub
+docs.json
+__dummy.html
+docs/
+/libpresent
+libpresent.so
+libpresent.dylib
+libpresent.dll
+libpresent.a
+libpresent.lib
+libpresent-test-*
+*.exe
+*.o
+*.obj
+*.lst

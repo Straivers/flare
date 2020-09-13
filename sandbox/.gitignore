@@ -1,0 +1,15 @@
+.dub
+docs.json
+__dummy.html
+docs/
+/sandbox
+sandbox.so
+sandbox.dylib
+sandbox.dll
+sandbox.a
+sandbox.lib
+sandbox-test-*
+*.exe
+*.o
+*.obj
+*.lst

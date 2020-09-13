@@ -1,0 +1,45 @@
+# V0.1 Todos
+
+- [ ] Gameplay
+  - [ ] Place and Remove Blocks into Chunks
+  - [ ] Collide Chunks by Applying Impulses
+  - [ ] Attractor Block to Force Collisions
+- [ ] Engine
+  - [ ] Core Technologies (`libcore`)
+    - [x] High Resolution Timer
+    - [ ] Memory Management
+      - [ ] Temporary & Per-Frame Allocators
+      - [ ] Detailed Memory Usage Tracking
+    - [ ] Diagnostics
+      - [x] Logger
+      - [ ] Resource Monitor
+      - [ ] Debug View
+    - [ ] Unified Data Model (ECS?)
+    - [ ] File System API
+    - [ ] Math
+  - [ ] Physics
+    - [ ] Mass, Force, Intertia
+    - [ ] Arbitrary Construct-Construct Collisions
+    - [ ] GPU Accelleration
+    - [ ] &ge; 10 Cubes
+    - [ ] Velocity &le; 10m/s
+    - [ ] Primitive Per-Collision Entropy
+    - [ ] World Serialization
+    - [ ] Record & Replay Simulations
+  - [ ] Presentation (`libpresent`)
+    - [ ] Window Abstraction Layer
+      - [ ] Window Management
+      - [ ] Per-Window Input Handling
+    - [ ] Graphics Pipeline
+      - [ ] Vulkan Renderer
+      - [ ] 3D Camera
+      - [ ] Textured Models
+      - [ ] Phong Shading
+      - [ ] Skybox
+    - [ ] User Interface
+      - [ ] Components
+        - [ ] Buttons
+        - [ ] Text
+        - [ ] Panels
+        - [ ] Spacing
+      - [ ] Debug View

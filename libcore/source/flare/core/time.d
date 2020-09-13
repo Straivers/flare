@@ -83,7 +83,7 @@ struct TimeStamp {
     }
 
     unittest {
-        char[60] b;
+        char[23] b;
         assert(TimeStamp(2020, 9, 13, 2, 43, 7, 671).write_string(b) == "2020-09-13T02:43:07.671");
     }
 }

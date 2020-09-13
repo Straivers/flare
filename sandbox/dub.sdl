@@ -1,5 +1,5 @@
-name "libcore"
-description "Shared facilities"
+name "sandbox"
+description "Playground area to experiment with during development"
 authors "David Zhang"
 copyright "Copyright © 2020, David Zhang"
 license "proprietary"
