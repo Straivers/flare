@@ -1,13 +1,15 @@
 module flare.presentation.input;
 
-import flare.presentation.window : WindowId;
+import flare.presentation.window : WindowStatus;
 
+/// The state of an input button such as a key on the keyboard or a mouse button.
 enum ButtonState : ubyte {
     Released,
     Pressed,
     Held
 }
 
+/// Identifiers for mouse buttons.
 enum MouseButton : ubyte {
     Left,
     Right,
@@ -185,17 +187,32 @@ enum KeyCode : ubyte {
     KeyCodeTableSize
 }
 
+/**
+ Holds the callbacks used to pass events from the event loop for processing.
+
+ Any and all of these may be overwritten by a user to capture and deal with these events.
+ */
 struct WindowCallbacks {
 @safe @nogc nothrow:
-    void function(WindowId, KeyCode, ButtonState) on_key;
-    void function(WindowId, MouseButton, ButtonState) on_mouse_button;
+    /// Callback for key events.
+    void function(const WindowStatus*, KeyCode, ButtonState) on_key;
+    /// Callback for mouse button events.
+    void function(const WindowStatus*, MouseButton, ButtonState) on_mouse_button;
 
-    void function(WindowId, int) on_scroll;
-    void function(WindowId, short, short) on_cursor_move;
-    void function(WindowId) on_cursor_exit;
-    void function(WindowId, short, short) on_cursor_enter;
+    /// Callback for mouse wheel scroll events.
+    void function(const WindowStatus*, int) on_scroll;
+    /// Callback for cursor movement events.
+    void function(const WindowStatus*, short, short) on_cursor_move;
+    /// Callback for when the cursor leaves the window.
+    void function(const WindowStatus*) on_cursor_exit;
+    /// Callback for when the cursor enters the window.
+    void function(const WindowStatus*, short, short) on_cursor_enter;
 
-    void function(WindowId) on_close_request;
-    void function(WindowId, short, short) on_window_resize;
-    void function(WindowId) on_window_close;
+    /// Callback for when the user has clicked the 'X' to close the window.
+    void function(const WindowStatus*) on_close_request;
+    /// Callback for resizing the window.
+    void function(const WindowStatus*, short, short) on_resize;
+    /// Callback for just before the window is destroyed. Window destruction is
+    /// inevitable at this point, and cannot be aborted.
+    void function(const WindowStatus*) on_destroy;
 }

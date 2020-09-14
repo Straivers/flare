@@ -157,7 +157,7 @@ HCURSOR translate_cursor(CursorIcon icon) {
                 case ResizeVertical:                    return IDC_SIZENS;
                 case ResizeNorthwestSoutheast:          return IDC_SIZENWSE;
                 case ResizeCornerNortheastSouthwest:    return IDC_SIZENESW;
-                default:                                assert(false);
+                default:                                assert(false, "Custom Cursor Icons not Implemented.");
             }
         } ();
         () @trusted { cursor_icons[icon] = LoadCursor(null, ico); } ();
@@ -174,7 +174,7 @@ pragma (inline) void send(ref MSG msg) @trusted {
 void dispatch(string name, Args...)(WindowStatus* window, Args args) {
     import std.format: format;
 
-    mixin("if (window && window.callbacks.%s) window.callbacks.%s(window.id, args);".format(name, name));
+    mixin("if (window && window.callbacks.%s) window.callbacks.%s(window, args);".format(name, name));
 }
 
 extern (Windows) LRESULT window_procedure(HWND hwnd, uint msg, WPARAM wp, LPARAM lp) @trusted nothrow {
@@ -258,7 +258,7 @@ extern (Windows) LRESULT window_procedure(HWND hwnd, uint msg, WPARAM wp, LPARAM
         return 0;
 
     case WM_SIZE:
-        window.dispatch!"on_window_resize"(LOWORD(lp), HIWORD(lp));
+        window.dispatch!"on_resize"(LOWORD(lp), HIWORD(lp));
         return 0;
 
     case WM_CLOSE:
@@ -267,7 +267,7 @@ extern (Windows) LRESULT window_procedure(HWND hwnd, uint msg, WPARAM wp, LPARAM
         return 0;
 
     case WM_DESTROY:
-        window.dispatch!"on_window_close"();
+        window.dispatch!"on_destroy"();
         return 0;
 
     default:
