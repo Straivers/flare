@@ -1,10 +1,9 @@
 module flare.platform.vulkan.api;
 
 import flare.core.logger : Logger;
-import flare.core.memory.measures : kib;
 import flare.core.memory.static_allocator : StaticAllocator;
 import core.sys.windows.windows;
-import erupted;
+public import erupted;
 import erupted.platform_extensions;
 
 version (Windows) {
@@ -86,8 +85,6 @@ struct Vulkan {
 
         loadInstanceLevelFunctions(_instance);
         _logger.trace("Initialized Vulkan API version %s.%s.%s", _version.major, _version.minor, _version.patch);
-
-        auto dev = select_physical_device(this);
     }
 
     ~this() {
@@ -117,6 +114,32 @@ struct Vulkan {
         return _instance;
     }
 
+    VkPhysicalDevice[] load_physical_devices(VkPhysicalDevice[] buffer) {
+        uint count;
+        auto err = vkEnumeratePhysicalDevices(_instance, &count, null);
+        if (err >= VK_SUCCESS) {
+            if (count > buffer.length)
+                count = cast(uint) buffer.length;
+
+            err = vkEnumeratePhysicalDevices(_instance, &count, &buffer[0]);
+            if (err >= VK_SUCCESS) {
+                auto devices = buffer[0 .. count];
+                _logger.trace("Identified %s Graphics Device%s", devices.length, devices.length > 1 ? "s" : "");
+                return devices;
+            }
+        }
+
+        _logger.fatal("Unable to enumerate physical devices.");
+        assert(0, "Unable to enumerate physical devices.");
+    }
+
+    VkQueueFamilyProperties[] load_queue_families(VkPhysicalDevice device, VkQueueFamilyProperties[] buffer) {
+        uint count;
+        vkGetPhysicalDeviceQueueFamilyProperties(device, &count, null);
+        vkGetPhysicalDeviceQueueFamilyProperties(device, &count, &buffer[0]);
+        return buffer[0 .. count];
+    }
+
 private:
     Logger _logger;
     VkInstance _instance;
@@ -124,40 +147,32 @@ private:
     bool _is_loaded;
 }
 
-private:
+/**
+ Filters queue families for specific feature flags.
 
-VkPhysicalDevice select_physical_device(ref Vulkan vulkan) {
-    enum max_physical_devices = 64;
-    StaticAllocator!(VkPhysicalDevice.sizeof * max_physical_devices) mem;
-    
-    auto devices = () {
-        uint count;
-        auto err = vkEnumeratePhysicalDevices(vulkan.instance, &count, null);
-        if (err >= VK_SUCCESS) {
-            if (count > max_physical_devices)
-                count = max_physical_devices;
+ Returns: a forward range with an additional `range.index()` property for the queue family's index.
+ */
+auto filter_features(VkQueueFamilyProperties[] families, VkQueueFlagBits features) {
+    struct Range {
+        VkQueueFamilyProperties[] families;
+        VkQueueFlagBits required_features;
+        private size_t _index;
 
-            auto devices = mem.alloc_array!VkPhysicalDevice(count);
-            err = vkEnumeratePhysicalDevices(vulkan.instance, &count, &devices[0]);
-            if (err >= VK_SUCCESS)
-                return devices;
+        @safe @nogc pure nothrow:
+
+        // dfmt off
+        bool empty()        const { return _index == families.length; }
+        size_t index()      const { return _index; }
+        ref auto front()    const { return families[_index]; }
+        // dfmt on
+
+        void popFront() {
+            _index++;
+
+            while (!empty && (families[_index].queueFlags & required_features) == 0)
+                _index++;
         }
+    }
 
-        vulkan.log.fatal("Unable to enumerate physical devices.");
-        assert(0, "Unable to enumerate physical devices.");
-    } ();
-
-    vulkan.log.trace("Identified %s Graphics Device%s", devices.length, devices.length > 1 ? "s" : "");
-
-    auto device = devices[0];
-    VkPhysicalDeviceProperties properties;
-    vkGetPhysicalDeviceProperties(device, &properties);
-
-    int length;
-    for (; properties.deviceName[length] != '\0'; length++) {}
-
-    auto driver_version = VkVersion(properties.driverVersion);
-
-    vulkan.log.trace("Selected GPU: %s v%s.%s.%s", properties.deviceName[0 .. length], driver_version.major, driver_version.minor, driver_version.patch);
-    return device;
+    return Range(families, features);
 }
