@@ -1,0 +1,8 @@
+{
+	"fileVersion": 1,
+	"versions": {
+		"erupted": "2.0.70+v1.2.150",
+		"libcore": {"path":"../libcore"},
+		"libpresent": {"path":"../libpresent"}
+	}
+}

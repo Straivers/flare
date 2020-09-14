@@ -4,4 +4,5 @@ authors "David Zhang"
 copyright "Copyright © 2020, David Zhang"
 license "proprietary"
 
+dependency "erupted" version="~>2.0.70"
 dependency "libcore" path="../libcore"

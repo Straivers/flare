@@ -121,8 +121,12 @@ struct Logger {
     }
 
     /// Adjusts the level of detail filtering for this logger.
-    @nogc void set_log_level(LogLevel new_level) {
+    @nogc void log_level(LogLevel new_level) {
         _level = new_level;
+    }
+
+    @nogc LogLevel log_level() {
+        return _level;
     }
 
     /// Add an output location for this logger.
