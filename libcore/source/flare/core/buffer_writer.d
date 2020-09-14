@@ -4,8 +4,9 @@ module flare.core.buffer_writer;
  A basic writer to a buffer of elements.
  */
 struct Writer(ElementType) {
-    @safe @nogc pure nothrow:
+    import std.range: isInputRange;
 
+public @safe @nogc pure nothrow:
     /// Constructs a writer with a preallocated buffer. The lifetime of the
     /// buffer must be greater or equal to the lifetime of the writer.
     this(ElementType[] buffer) {
@@ -46,6 +47,14 @@ struct Writer(ElementType) {
         
         _buffer[_length .. _length + e.length] = e;
         _length += e.length;
+    }
+
+    void put(R)(auto ref R range) if (isInputRange!R) {
+        while (_length < _buffer.length && !range.empty) {
+            _buffer[_length] = range.front;
+            range.popFront();
+            _length++;
+        }
     }
 
 private:

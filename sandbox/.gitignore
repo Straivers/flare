@@ -13,3 +13,6 @@ sandbox-test-*
 *.o
 *.obj
 *.lst
+
+.vs
+*.sln
