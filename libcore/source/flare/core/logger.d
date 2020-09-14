@@ -1,3 +1,11 @@
+/**
+ Usage:
+
+ auto logger = Logger(LogLevel.All);
+ logger.add_sink(new ConsoleLogger(true));
+
+ logger.info("Hello");
+ */
 module flare.core.logger;
 
 import flare.core.time : TimeStamp, get_timestamp;
@@ -49,18 +57,18 @@ struct LogEvent {
     /// The line within the file where the log event was created.
     uint line;
     /// The name of the file where the log event was created.
-    string file_name;
+    string module_name;
     /// The name of the function that generated the log event.
     string func_name;
     /// The message provided by the creator of the log event.
     char[max_message_length] message_storage;
 
     /// Constructs a log event without a message.
-    this(TimeStamp time, LogLevel lod, string file, uint line, string func) {
+    this(TimeStamp time, LogLevel lod, string mod, uint line, string func) {
         this.time = time;
         this.level = lod;
         this.line = line;
-        this.file_name = file;
+        this.module_name = mod;
         this.func_name = func;
     }
 
@@ -98,7 +106,7 @@ struct Logger {
 
     /// Initialize this logger with a minimum level of detail, and an optional
     /// parent.
-    this(LogLevel level, Logger* parent = null) {
+    @nogc this(LogLevel level, Logger* parent = null) {
         _level = level;
         _parent = parent;
     }
@@ -113,12 +121,12 @@ struct Logger {
     }
 
     /// Adjusts the level of detail filtering for this logger.
-    void set_log_level(LogLevel new_level) {
+    @nogc void set_log_level(LogLevel new_level) {
         _level = new_level;
     }
 
     /// Add an output location for this logger.
-    SinkId add_event_sink(LogEventSink sink) {
+    SinkId add_sink(LogEventSink sink) {
         foreach (ubyte i, ref _sink; _event_sinks)
             if (_sink is null) {
                 _sink = sink;
@@ -130,12 +138,12 @@ struct Logger {
     }
 
     /// Retrieves the event sink identified by `id`.
-    LogEventSink get_event_sink(SinkId id) {
+    @nogc LogEventSink get_sink(SinkId id) {
         return _event_sinks[id.value];
     }
 
     /// Remove an output location from this logger.
-    void remove_event_sink(SinkId id) {
+    void remove_sink(SinkId id) {
         _event_sinks[id.value].end_logging();
 
         // Find the last logger and move it into this slot. This allows us to
@@ -150,18 +158,32 @@ struct Logger {
         }
     }
 
-    alias trace = log!(LogLevel.Trace);
-    alias info = log!(LogLevel.Info);
-    alias warn = log!(LogLevel.Warn);
-    alias error = log!(LogLevel.Error);
-    alias fatal = log!(LogLevel.Fatal);
+    void trace(Args...)(string fmt, Args args, uint line = __LINE__, string mod = __MODULE__, string func = __PRETTY_FUNCTION__) {
+        log!(LogLevel.Trace)(fmt, args, line, mod, func);
+    }
+
+    void info(Args...)(string fmt, Args args, uint line = __LINE__, string mod = __MODULE__, string func = __PRETTY_FUNCTION__) {
+        log!(LogLevel.Info)(fmt, args, line, mod, func);
+    }
+
+    void warn(Args...)(string fmt, Args args, uint line = __LINE__, string mod = __MODULE__, string func = __PRETTY_FUNCTION__) {
+        log!(LogLevel.Warn)(fmt, args, line, mod, func);
+    }
+
+    void error(Args...)(string fmt, Args args, uint line = __LINE__, string mod = __MODULE__, string func = __PRETTY_FUNCTION__) {
+        log!(LogLevel.Error)(fmt, args, line, mod, func);
+    }
+
+    void fatal(Args...)(string fmt, Args args, uint line = __LINE__, string mod = __MODULE__, string func = __PRETTY_FUNCTION__) {
+        log!(LogLevel.Fatal)(fmt, args, line, mod, func);
+    }
 
     /**
      Logs an event. the event is first checked for level of detail, then sent
      passed to each LogEventSink registered to this logger. Finally, it is
      passed on to its parent logger if one was provided.
      */
-    void log(LogLevel level, Args...)(string fmt, Args args, uint line = __LINE__, string file = __FILE__, string func = __PRETTY_FUNCTION__) {
+    void log(LogLevel level, Args...)(string fmt, Args args, uint line, string mod, string func) {
         import std.format : sformat;
 
         if (level < _level)
@@ -169,7 +191,7 @@ struct Logger {
 
         char[LogEvent.max_message_length] msgbuf;
 
-        auto event = LogEvent(get_timestamp(), level, file, line, func);
+        auto event = LogEvent(get_timestamp(), level, mod, line, func);
         try
             event.set_message(sformat(msgbuf, fmt, args));
         catch (Exception e)
@@ -235,7 +257,7 @@ interface LogEventSink {
 final class ConsoleLogger : LogEventSink {
 
     /// The number of log events to buffer before writing them out to `stdout`.
-    enum event_buffer_size = 64;
+    enum event_buffer_size = 2;
 
 public:
     this(bool colorize) {
@@ -271,7 +293,7 @@ public:
                     writer.put(colors[event.level]);
 
                 writer.formattedWrite!"%23s %s"(ts, text[event.level]);
-                debug writer.formattedWrite!"{%s:%s} "(event.file_name, event.line);
+                debug writer.formattedWrite!"{%s:%s} "(event.module_name, event.line);
                 writer.put(event.get_message());
                 writer.put("\033[0m\n\0");
                 () @trusted { printf(&writer.data()[0]); }();
