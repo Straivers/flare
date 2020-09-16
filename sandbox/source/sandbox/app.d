@@ -1,8 +1,7 @@
 module sandbox.app;
 
 import flare.core.logger;
-import flare.platform.vulkan.api;
-import flare.platform.vulkan.surface;
+import flare.vulkan.api;
 import flare.presentation.window_manager;
 import std.algorithm : filter;
 import std.range: enumerate;
@@ -15,7 +14,7 @@ void main() {
     auto vk = Vulkan(&logger);
 
     auto window = wm.make_window(WindowSettings("Hello", 1280, 720, false, null));
-    auto surface = vk.create_surface(wm, window);
+    auto surface = vk.create_surface(wm.get_hwnd(window));
 
     PhysicalDevice[32] device_buffer;
     auto devices = vk.load_physical_devices(device_buffer);

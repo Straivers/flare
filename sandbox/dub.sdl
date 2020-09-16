@@ -4,5 +4,6 @@ authors "David Zhang"
 copyright "Copyright © 2020, David Zhang"
 license "proprietary"
 
-dependency "libpresent" path="../libpresent"
 dependency "libcore" path="../libcore"
+dependency "libpresent" path="../libpresent"
+dependency "libvulkan" path="../libvulkan"

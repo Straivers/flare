@@ -1,5 +1,5 @@
 name "libcore"
-description "Shared facilities"
+description "Basic facilities shared by most of the other components."
 authors "David Zhang"
 copyright "Copyright © 2020, David Zhang"
 license "proprietary"
