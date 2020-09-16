@@ -3,6 +3,8 @@ module flare.presentation.window_manager;
 import flare.presentation.window;
 import flare.core.logger: Logger, LogLevel;
 
+public import flare.presentation.window;
+
 version (Windows)
     import flare.platform.win32.window;
 else

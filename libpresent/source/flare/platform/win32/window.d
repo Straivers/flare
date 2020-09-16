@@ -36,7 +36,7 @@ HWND platform_get_hwnd(PlatformWindowData window_data) {
         wc.hInstance = GetModuleHandle(null);
         wc.lpszClassName = &wndclass_name[0];
 
-        auto err = RegisterClassExW(&wc);
+        const err = RegisterClassExW(&wc);
         assert(err != 0, "Failed to register window class");
 
         registered_window_class = true;

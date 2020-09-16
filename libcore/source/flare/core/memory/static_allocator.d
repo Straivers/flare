@@ -4,6 +4,8 @@ import flare.core.memory.measures;
 import flare.core.memory.base;
 
 struct StaticAllocator(size_t size) {
+    @disable this(this);
+
     void[] alloc(size_t bytes, size_t alignment) {
         const padding = bytes % alignment;
         const total_size = padding + bytes;
@@ -31,4 +33,8 @@ struct StaticAllocator(size_t size) {
 
     size_t next_byte_position;
     void[size] memory;
+}
+
+StaticAllocator!size scoped_mem(size_t size)() {
+    return StaticAllocator!size();
 }

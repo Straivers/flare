@@ -1,12 +1,14 @@
 module flare.platform.vulkan.api;
 
-import flare.core.logger : Logger;
-import flare.core.memory.static_allocator : StaticAllocator;
-import core.sys.windows.windows;
 public import erupted;
 import erupted.platform_extensions;
+import flare.core.logger : Logger;
+import flare.core.memory.static_allocator : scoped_mem;
+import flare.platform.vulkan.surface;
 
 version (Windows) {
+    import core.sys.windows.windows;
+
     mixin Platform_Extensions!USE_PLATFORM_WIN32_KHR;
     immutable string[] platform_extensions = [VK_KHR_WIN32_SURFACE_EXTENSION_NAME];
 }
@@ -18,25 +20,29 @@ immutable string[] layers = ["VK_LAYER_LUNARG_standard_validation\0"];
 else immutable string[] layers = [];
 
 struct VkVersion {
+    @safe @nogc pure nothrow:
+
     uint value;
     alias value this;
 
-    uint major() {
+    @trusted uint major() const {
         return VK_VERSION_MAJOR(value);
     }
 
-    uint minor() {
+    @trusted uint minor() const {
         return VK_VERSION_MINOR(value);
     }
 
-    uint patch() {
+    @trusted uint patch() const {
         return VK_VERSION_PATCH(value);
     }
 }
 
 struct Vulkan {
-    this(Logger* logger) {
-        import erupted.vulkan_lib_loader;
+@safe nothrow:
+
+    @trusted this(Logger* logger) {
+        import erupted.vulkan_lib_loader: loadGlobalLevelFunctions;
 
         _logger = Logger(logger.log_level, logger);
 
@@ -61,7 +67,7 @@ struct Vulkan {
             apiVersion: _version.value
         };
 
-        StaticAllocator!1024 mem;
+        auto mem = scoped_mem!1024();
         auto layers_ = mem.alloc_array!(char*)(layers.length);
         foreach (i, l; layers)
             layers_[i] = cast(char*) l.ptr;
@@ -87,8 +93,8 @@ struct Vulkan {
         _logger.trace("Initialized Vulkan API version %s.%s.%s", _version.major, _version.minor, _version.patch);
     }
 
-    ~this() {
-        import erupted.vulkan_lib_loader;
+    @trusted ~this() {
+        import erupted.vulkan_lib_loader: freeVulkanLib;
 
         if (!_is_loaded)
             return;
@@ -102,42 +108,40 @@ struct Vulkan {
         _is_loaded = false;
     }
 
-    ref Logger log() return {
+    ref Logger log() return{
         return _logger;
     }
 
-    VkVersion api_version() const {
+    VkVersion api_version() const pure {
         return _version;
     }
 
-    VkInstance instance() {
+    VkInstance instance() pure {
         return _instance;
     }
 
-    VkPhysicalDevice[] load_physical_devices(VkPhysicalDevice[] buffer) {
+    @trusted PhysicalDevice[] load_physical_devices(PhysicalDevice[] buffer) {
         uint count;
         auto err = vkEnumeratePhysicalDevices(_instance, &count, null);
         if (err >= VK_SUCCESS) {
             if (count > buffer.length)
                 count = cast(uint) buffer.length;
 
-            err = vkEnumeratePhysicalDevices(_instance, &count, &buffer[0]);
+            auto mem = scoped_mem!(PhysicalDevice.sizeof * 32);
+            auto tmp_buff = mem.alloc_array!VkPhysicalDevice(count);
+            err = vkEnumeratePhysicalDevices(_instance, &count, cast(VkPhysicalDevice*) &tmp_buff[0]);
             if (err >= VK_SUCCESS) {
+                foreach (i, dev; tmp_buff[0 .. count])
+                    buffer[i] = PhysicalDevice(this, tmp_buff[i]);
+
                 auto devices = buffer[0 .. count];
-                _logger.trace("Identified %s Graphics Device%s", devices.length, devices.length > 1 ? "s" : "");
+                _logger.trace("Identified %s Graphics Device%s", count, count > 1 ? "s" : "");
                 return devices;
             }
         }
 
         _logger.fatal("Unable to enumerate physical devices.");
         assert(0, "Unable to enumerate physical devices.");
-    }
-
-    VkQueueFamilyProperties[] load_queue_families(VkPhysicalDevice device, VkQueueFamilyProperties[] buffer) {
-        uint count;
-        vkGetPhysicalDeviceQueueFamilyProperties(device, &count, null);
-        vkGetPhysicalDeviceQueueFamilyProperties(device, &count, &buffer[0]);
-        return buffer[0 .. count];
     }
 
 private:
@@ -147,32 +151,102 @@ private:
     bool _is_loaded;
 }
 
-/**
- Filters queue families for specific feature flags.
+struct PhysicalDevice {
+    @safe nothrow:
 
- Returns: a forward range with an additional `range.index()` property for the queue family's index.
- */
-auto filter_features(VkQueueFamilyProperties[] families, VkQueueFlagBits features) {
-    struct Range {
-        VkQueueFamilyProperties[] families;
-        VkQueueFlagBits required_features;
-        private size_t _index;
+    @trusted @nogc bool can_render_to(RenderSurface* surface, uint with_queue_family) {
+        VkBool32 out_;
+        if (!vkGetPhysicalDeviceSurfaceSupportKHR(_device, with_queue_family, surface.handle, &out_))
+            return out_ != 0;
 
-        @safe @nogc pure nothrow:
-
-        // dfmt off
-        bool empty()        const { return _index == families.length; }
-        size_t index()      const { return _index; }
-        ref auto front()    const { return families[_index]; }
-        // dfmt on
-
-        void popFront() {
-            _index++;
-
-            while (!empty && (families[_index].queueFlags & required_features) == 0)
-                _index++;
-        }
+        assert(false);
     }
 
-    return Range(families, features);
+    auto filter_renderable_queues_to(RenderSurface* surface, in QueueFamilyProperties[] families) {
+        struct Range {
+            @safe @nogc nothrow:
+            uint index() const { return _index; }
+
+            bool empty() const { return _index == _families.length; }
+
+            ref const(QueueFamilyProperties) front() const {
+                return _families[_index];
+            }
+
+            void popFront() nothrow {
+                _index++;
+                advance();
+            }
+
+        private:
+            void advance() nothrow {
+                while (!empty && !_device.can_render_to(_surface, _index))
+                    _index++;
+            }
+
+            RenderSurface* _surface;
+            PhysicalDevice* _device;
+            const QueueFamilyProperties[] _families;
+            uint _index;
+        }
+
+        auto ret = Range(surface, &this, families, 0);
+        ret.advance();
+        return ret;
+    }
+
+    @trusted const(QueueFamilyProperties[]) load_queue_families(QueueFamilyProperties[] buffer) {
+        uint count;
+        vkGetPhysicalDeviceQueueFamilyProperties(_device, &count, null);
+
+        auto mem = scoped_mem!(VkQueueFamilyProperties.sizeof * 32);
+        auto tmp = mem.alloc_array!VkQueueFamilyProperties(count);
+        vkGetPhysicalDeviceQueueFamilyProperties(_device, &count, &tmp[0]);
+
+        foreach (i, ref t; tmp[0 .. count])
+            buffer[i] = QueueFamilyProperties(cast(uint) i, t);
+
+        return buffer[0 .. count];
+    }
+
+    @trusted LogicalDevice init_logical_device(VkDeviceQueueCreateInfo[] queues, ref VkPhysicalDeviceFeatures features) {
+        VkDeviceCreateInfo dci = {
+            pQueueCreateInfos: queues.ptr,
+            queueCreateInfoCount: cast(uint) queues.length,
+            pEnabledFeatures : &features
+        };
+
+        VkDevice device;
+        auto err = vkCreateDevice(_device, &dci, null, &device);
+        if (err != VK_SUCCESS) {
+            _vulkan.log.fatal("Failed to initialize graphics device. Error: %s", err);
+            assert(false, "Failed to initialize graphics device.");
+        }
+
+        return LogicalDevice(_vulkan, device);
+    }
+
+private:
+    @trusted this(ref Vulkan vulkan, VkPhysicalDevice device) {
+        _vulkan = &vulkan;
+        _device = device;
+    }
+
+    Vulkan* _vulkan;
+    VkPhysicalDevice _device;
+}
+
+struct QueueFamilyProperties {
+    uint index;
+    VkQueueFamilyProperties properties;
+    alias properties this;
+}
+
+struct LogicalDevice {
+    Vulkan* _vulkan;
+    VkDevice _device;
+}
+
+bool has_flags(VkQueueFlagBits flags)(in VkQueueFamilyProperties props) {
+    return (props.queueFlags & flags) != 0;
 }
