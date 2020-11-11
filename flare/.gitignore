@@ -1,0 +1,15 @@
+.dub
+docs.json
+__dummy.html
+docs/
+/flare
+flare.so
+flare.dylib
+flare.dll
+flare.a
+flare.lib
+flare-test-*
+*.exe
+*.o
+*.obj
+*.lst

@@ -1,0 +1,7 @@
+name "flare"
+description "A minimal D application."
+authors "David"
+copyright "Copyright © 2020, David"
+license "proprietary"
+
+dependency "erupted" version="~>2.1.9"

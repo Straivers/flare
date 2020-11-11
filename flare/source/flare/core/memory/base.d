@@ -1,12 +1,22 @@
 module flare.core.memory.base;
 
 import std.traits: isIntegral;
+import flare.core.memory.measures;
+
+nothrow:
 
 PtrType!T emplace_obj(T, Args...)(void[] mem, Args args)
 in (mem.length >= object_size!T) {
     import std.conv : emplace;
 
     return (cast(PtrType!T) mem.ptr).emplace(args);
+}
+
+template PtrType(T) {
+    static if (is(T == class))
+        alias PtrType = T;
+    else
+        alias PtrType = T*;
 }
 
 pragma(inline, true) bool is_power_of_two(size_t n) {

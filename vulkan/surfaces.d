@@ -1,7 +1,7 @@
 module flare.vulkan.surfaces;
 
 import flare.vulkan.api;
-
+/*
 struct RenderSurface {
     private this(Vulkan* instance, VkSurfaceKHR surface) {
         _vulkan = instance;
@@ -43,3 +43,4 @@ version (Windows) {
 }
 else
     static assert(0, "Unsupported platform.");
+*/

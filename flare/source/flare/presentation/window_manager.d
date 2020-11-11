@@ -15,8 +15,6 @@ else
  windows.
  */
 struct WindowManager {
-    import flare.core.memory.static_allocator : StaticAllocator;
-
     /// The maximum number of windows that can be open at any time.
     enum max_open_windows = 64;
 

@@ -1,8 +1,0 @@
-name "libvulkan"
-description "GPU lifetime management and stuff"
-authors "David Zhang"
-copyright "Copyright © 2020, David Zhang"
-license "proprietary"
-
-dependency "libcore" path="../libcore"
-dependency "erupted" version="~>2.0.70"

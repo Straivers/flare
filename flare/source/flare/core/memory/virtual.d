@@ -9,6 +9,8 @@ version (Windows) {
         PAGE_READWRITE, PAGE_NOACCESS;
 }
 
+nothrow:
+
 void[] vm_alloc(size_t size) {
     const actual_size = round_to_page(size);
     version (Windows) {

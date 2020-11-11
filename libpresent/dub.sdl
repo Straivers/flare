@@ -1,8 +1,0 @@
-name "libpresent"
-description "Visualization"
-authors "David Zhang"
-copyright "Copyright © 2020, David Zhang"
-license "proprietary"
-
-dependency "libvulkan" path="../libvulkan"
-dependency "libcore" path="../libcore"

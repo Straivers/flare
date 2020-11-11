@@ -1,8 +1,9 @@
 {
 	"fileVersion": 1,
 	"versions": {
-		"erupted": "2.0.70+v1.2.150",
+		"erupted": "2.1.9+v1.2.159",
 		"libcore": {"path":"../libcore"},
-		"libpresent": {"path":"../libpresent"}
+		"libpresent": {"path":"../libpresent"},
+		"libvulkan": {"path":"../libvulkan"}
 	}
 }

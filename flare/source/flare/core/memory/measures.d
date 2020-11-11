@@ -6,13 +6,6 @@ size_t mib(size_t n) { return n * (1024 ^^ 2); }
 size_t gib(size_t n) { return n * (1024 ^^ 3); }
 // dfmt on
 
-template PtrType(T) {
-    static if (is(T == class))
-        alias PtrType = T;
-    else
-        alias PtrType = T*;
-}
-
 template object_size(T) {
     static if (is(T == class))
         enum object_size = __traits(classInstanceSize, T);
