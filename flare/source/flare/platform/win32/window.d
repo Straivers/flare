@@ -135,6 +135,7 @@ struct WCharBuffer {
     this(in char[] original) {
         auto writer = Writer!wchar(buffer);
         writer.put(original.byWchar());
+        writer.put('\0');
     }
 
     wchar* ptr() return {

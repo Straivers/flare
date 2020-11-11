@@ -13,9 +13,24 @@ struct InstanceOptions {
 }
 
 struct Vulkan {
+    @disable this();
+
+    ~this() {
+        if (is_valid) {
+            vkDestroyInstance(_instance, null);
+            this = Vulkan.init;
+        }
+    }
+
     bool is_valid() { return _instance !is null; }
 
 private:
+    this(VkInstance i, VkVersion ver, Logger* log) {
+        _instance = i;
+        _version = ver;
+        _logger = log;
+    }
+
     VkInstance _instance;
     VkVersion _version;
     Logger* _logger;
