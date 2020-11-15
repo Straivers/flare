@@ -2,9 +2,11 @@ module sandbox.app;
 
 import flare.core.logger;
 import flare.vulkan.api;
+import flare.core.memory.temp;
 import flare.presentation.window_manager;
 import std.algorithm : filter;
 import std.range: enumerate;
+import std.stdio: writeln, writefln;
 
 import flare.core.memory.buddy_allocator;
 
@@ -12,12 +14,35 @@ void main() {
     auto logger = Logger(LogLevel.All);
     logger.add_sink(new ConsoleLogger(true));
 
-    auto wm = WindowManager(&logger);
+    // auto wm = WindowManager(&logger);
 
-    auto options = InstanceOptions(VkVersion(1, 2, 0), ["VK_LAYER_KHRONOS_validation"], [VK_KHR_SWAPCHAIN_EXTENSION_NAME], &logger);
-    auto vk = init_instance(options);
 
-    auto window = wm.make_window(WindowSettings("Hello", 1280, 720, false, null));
+    auto vulkan_api = load_vulkan(&logger);
+    auto tmp = scoped!TempAllocator(4.kib);
+
+    auto layers = vulkan_api.get_supported_layer_names(tmp);
+    writefln("Layers (%s):", layers.length);
+    foreach (ref l; layers)
+        writeln(l);
+    writeln;
+
+    auto ext = vulkan_api.get_supported_extension_names(tmp);
+    writefln("Extensions (%s):", ext.length);
+    foreach (ref e; ext)
+        writeln(e);
+    writeln;
+
+
+    auto options = InstanceOptions(VkVersion(1, 2, 0), [
+        VK_LAYER_KHRONOS_VALIDATION_NAME
+    ], [
+        VK_KHR_SURFACE_EXTENSION_NAME,
+        VK_KHR_WIN32_SURFACE_EXTENSION_NAME
+    ]);
+
+    auto vulkan = vulkan_api.create_instance(options);
+
+    // auto window = wm.make_window(WindowSettings("Hello", 1280, 720, false, null));
     // auto surface = vk.create_surface(wm.get_hwnd(window));
 
     // auto devices = vk.get_physical_devices();
@@ -30,10 +55,10 @@ void main() {
     // vk.log.trace("Available draw queue families: %-(%s%)", draw_queues);
     // vk.log.trace("Available presentation queue families: %-(%s%)", show_queues);
 
-    while (wm.num_open_windows > 0) {
-        wm.wait_events();
-        wm.destroy_closed_windows();
-    }
+    // while (wm.num_open_windows > 0) {
+    //     wm.wait_events();
+    //     wm.destroy_closed_windows();
+    // }
 
     // assert(!draw_queues.empty);
     // assert(!show_queues.empty);
