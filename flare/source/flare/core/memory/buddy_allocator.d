@@ -48,10 +48,15 @@ nothrow:
     }
 
     void free(void[] bytes) {
-        assert(_memory_start <= bytes.ptr && bytes.ptr + bytes.length <= _memory_end);
+        assert(bytes == [] || (_memory_start <= bytes.ptr && bytes.ptr + bytes.length <= _memory_end));
         import std.algorithm: min;
 
+        if (bytes == [])
+            return;
+
         const order = Order.of(bytes.length);
+
+
         assert(order.is_aligned(bytes.ptr - _memory_start));
         const index = order.index_of(bytes.ptr - _memory_start);
 
@@ -60,6 +65,7 @@ nothrow:
         }
         else {
             auto buddy = bytes.ptr + (index % 2 ? -order.chunk_size : order.chunk_size);
+            remove_chunk(order, buddy);
             free(min(buddy, bytes.ptr)[0 .. Order(order + 1).chunk_size]);
         }
     }
