@@ -1,7 +1,6 @@
 module flare.core.memory.virtual;
 
 import core.memory : pageSize;
-import flare.core.memory.base;
 
 version (Windows) {
     import core.sys.windows.winbase : VirtualAlloc, VirtualFree;

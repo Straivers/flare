@@ -1,43 +1,37 @@
 module flare.vulkan.compat;
 
 import flare.core.memory.temp;
+import flare.core.memory.api;
 
-@safe:
+@safe nothrow:
 
 /**
- Converts an array of D-style strings to an array of C-style strings.
+ Converts an array of D-style strings to an array of C-style strings, using
+ allocator as the memory store. The strings will be copied so that a
+ null-termination character can be inserted at the ends of the strings. If the
+ allocator runs out of memory midway through the operation, everything that has
+ been allocated will be freed before the function returns.
  */
-@trusted auto to_cstr_array(in string[] strings) {
-    import std.algorithm: sum, map;
-    import flare.core.buffer_writer: Writer;
+@trusted char*[] to_cstr_array(in string[] strings, Allocator allocator) {
+    auto array = allocator.alloc_arr!(char*)(strings.length);
 
-    const array_size = strings.length * (char*).sizeof;
-    const data_size = strings.map!(s => s.length + 1).sum();
-    const size = array_size + data_size;
+    foreach (i, ref str; strings) {
+        auto tmp = allocator.alloc_arr!char(str.length + 1);
 
-    auto memory = tmp_alloc(size);
-    assert(memory, "Out of temporary memory!");
-    auto array = cast(char*[]) memory[0 .. array_size];
-    auto writer = Writer!char(cast(char[]) memory[array_size .. $]);
+        if (!tmp) {
+            // free all allocated strings
+            for (auto j = 0; j < array.length && array[j] !is null; j++)
+                allocator.free_arr(array[j][0 .. strings[j].length + 1]);
+            // free array of strings
+            allocator.free_arr(array);
 
-    foreach (i, ref ptr; array) {
-        ptr = writer.position;
-        writer.put(strings[i]);
-        writer.put('\0');
-    }
-
-    struct TmpCStrArray {
-        void[] memory;
-        char*[] array;
-
-        void free() {
-            tmp_free(memory);
+            return [];
         }
 
-        char** ptr() { return array.ptr; }
-
-        size_t length() { return array.length; }
+        tmp[0 .. str.length] = str;
+        tmp[$ - 1] = '\0';
+        array[i] = tmp.ptr;
     }
 
-    return TmpCStrArray(memory, array);
+    return array;
 }

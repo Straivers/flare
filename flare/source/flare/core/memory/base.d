@@ -1,7 +1,7 @@
 module flare.core.memory.base;
 
 import std.traits: isIntegral;
-import flare.core.memory.measures;
+public import flare.core.memory.measures: object_alignment, object_size;
 
 nothrow:
 
@@ -61,4 +61,9 @@ size_t truncate_to_power_of_two(size_t n) {
         return 1;
 
     return 1 << bsr(n);
+}
+
+void* align_pointer(void* ptr, size_t alignment) {
+    auto rem = (cast(size_t) ptr) % alignment;
+    return ptr + (alignment - rem);
 }
