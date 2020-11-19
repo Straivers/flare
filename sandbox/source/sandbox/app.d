@@ -41,7 +41,43 @@ void main() {
     assert(queues);
     writeln(tmp.bytes_free);
 
-    // filter queues
+    /+
+    /*
+    enum PhysicalDeviceDeviceTypeFilter {
+        prefer_discrete,
+        prefer_integrated,
+        no_preference,
+        discrete_only,
+        integrated_only
+    }
+    */
+
+    VulkanPhysicalDeviceCriteria criteria = {
+        min_draw_queues: 1,
+        min_show_queues: 1,
+        target_surface: surface,
+        required_extensions: [],
+        optional_extensions: [],
+        device_type: PhysicalDeviceDeviceTypeFilter.prefer_discrete,
+        required_features: &features,
+        optional_features: null,
+    };
+
+    /*
+    struct VulkanSelectedPhysicalDevice {
+        enum no_queue_family_found = uint.max;
+        uint draw_queue_family_index;
+        uint show_queue_family_index;
+        VkPhysicalDevice physical_device;
+    }
+    */
+
+    auto physical_device = vulkan.select_device(criteria);
+
+    ...
+
+    auto device = vulkan.create_device(physical_device, device_options);
+    +/
 
     // vk.log.trace("Available draw queue families: %-(%s%)", draw_queues);
     // vk.log.trace("Available presentation queue families: %-(%s%)", show_queues);
