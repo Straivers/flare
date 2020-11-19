@@ -2,6 +2,6 @@
 	"fileVersion": 1,
 	"versions": {
 		"erupted": "2.1.9+v1.2.159",
-		"flare": {"path":"../flare"},
+		"flare": {"path":"../flare"}
 	}
 }

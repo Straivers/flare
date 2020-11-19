@@ -1,19 +1,10 @@
 module flare.vulkan.base;
 
-public import erupted.types;
-public import erupted.functions;
-
 import flare.core.logger: Logger;
+import flare.vulkan.h;
 
 enum VK_LAYER_LUNARG_API_DUMP_NAME = "VK_LAYER_LUNARG_api_dump";
 enum VK_LAYER_KHRONOS_VALIDATION_NAME = "VK_LAYER_KHRONOS_validation";
-
-// Platform-Specific Interface
-import erupted.platform_extensions;
-version (Windows) {
-    public import core.sys.windows.windows;
-    mixin Platform_Extensions!USE_PLATFORM_WIN32_KHR;
-}
 
 struct VkVersion {
 @safe @nogc pure nothrow:
@@ -57,6 +48,8 @@ struct VulkanAPI {
     this(Logger* parent) {
         _logger = Logger(parent.log_level, parent);
     }
+
+    @disable this(this);
 
     VkLayerProperties[] get_supported_layers(Allocator mem) {
         uint count;
@@ -145,7 +138,7 @@ struct VulkanAPI {
             }
 
             _logger.info("Vulkan instance created with:\n\tLayers:%-( %s%)\n\tExtensions:%-( %s%)", options.layers, options.extensions);
-            loadInstanceLevelFunctions(instance);
+            loadInstanceLevelFunctionsExt(instance);
             return Vulkan(&_logger, instance);
         }
 

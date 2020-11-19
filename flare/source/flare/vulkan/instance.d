@@ -4,6 +4,9 @@ import flare.core.logger: Logger;
 import flare.core.memory.api;
 import flare.core.memory.temp;
 import flare.vulkan.base;
+import flare.vulkan.device;
+import flare.vulkan.surface;
+import flare.vulkan.h;
 
 struct InstanceOptions {
     VkVersion api_version;
@@ -29,19 +32,51 @@ struct Vulkan {
 
     bool is_valid() { return _instance !is null; }
 
-    VkPhysicalDevice[] get_physical_devices(Allocator allocator) in(is_valid) {
+    VkInstance handle() { return _instance; }
+
+    ref Logger log() return { return _logger; }
+
+    VkPhysicalDevice[] get_physical_devices(Allocator mem) {
         uint count;
-        if (vkEnumeratePhysicalDevices(_instance, &count, null) >= VK_SUCCESS) {
-            auto result = allocator.alloc_arr!VkPhysicalDevice(count);
-            
-            if (result && vkEnumeratePhysicalDevices(_instance, &count, result.ptr) >= VK_SUCCESS) {
-                _logger.trace("Identified %s Graphics Device%s", count, count > 1 ? "s" : "");
-                return result;
-            }
+        const r1 = vkEnumeratePhysicalDevices(_instance, &count, null);
+        if (r1 != VK_SUCCESS) {
+            _logger.fatal("Call to vkEnumeratePhysicalDevices failed: %s", r1);
+            return [];
         }
 
-        _logger.fatal("Unable to enumerate physical devices.");
-        assert(0, "Unable to enumerate physical devices.");
+        auto devices = mem.alloc_arr!VkPhysicalDevice(count);
+        if (!devices) {
+            _logger.fatal("Out of Temporary Memory!");
+            return [];
+        }
+
+        const r2 = vkEnumeratePhysicalDevices(_instance, &count, devices.ptr);
+        if (r2 != VK_SUCCESS) {
+            _logger.fatal("Call to vkEnumeratePhysicalDevices failed: %s", r2);
+            return [];
+        }
+
+        return devices;
+    }
+
+    VkQueueFamilyProperties[] get_queue_families(VkPhysicalDevice device, Allocator mem) {
+        return flare.vulkan.device.get_queue_families(this, device, mem);
+    }
+
+    VkDevice create_logical_device(VkPhysicalDevice physical_device, VkDeviceQueueCreateInfo[] queues, ref VkPhysicalDeviceFeatures features) {
+        return flare.vulkan.device.create_logical_device(this, physical_device, queues, features);
+    }
+
+    version (Windows) {
+        import core.sys.windows.windows: HWND;
+
+        RenderSurface create_surface(HWND hwnd) return {
+            return create_surface_win32(this, hwnd);
+        }
+    }
+
+    bool can_device_render_to(VkPhysicalDevice device, ref RenderSurface surface, uint with_queue_family) {
+        return flare.vulkan.surface.can_device_render_to(this, device, surface, with_queue_family);
     }
 
 private:
