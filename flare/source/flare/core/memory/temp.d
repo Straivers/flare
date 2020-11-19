@@ -28,6 +28,10 @@ final class TempAllocator : Allocator {
         return _end - _top;
     }
 
+    void reset() {
+        _top = cast(void*) _start;
+    }
+
     override void[] alloc_raw(size_t size, size_t alignment) {
         if (_top + size >= _end)
             return [];

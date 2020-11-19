@@ -36,12 +36,8 @@ struct Vulkan {
 
     ref Logger log() return { return _logger; }
 
-    VkPhysicalDevice[] get_physical_devices(Allocator mem) {
-        return flare.vulkan.device.get_physical_devices(this, mem);
-    }
-
-    VkQueueFamilyProperties[] get_queue_families(VkPhysicalDevice device, Allocator mem) {
-        return flare.vulkan.device.get_queue_families(this, device, mem);
+    VulkanSelectedDevice[] filter_physical_devices(ref VulkanDeviceCriteria criteria, Allocator mem) {
+        return flare.vulkan.device.filter_physical_devices(this, criteria, mem);
     }
 
     VkDevice create_logical_device(VkPhysicalDevice physical_device, VkDeviceQueueCreateInfo[] queues, ref VkPhysicalDeviceFeatures features) {

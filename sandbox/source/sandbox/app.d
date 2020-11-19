@@ -35,49 +35,19 @@ void main() {
     auto window = wm.make_window(WindowSettings("Hello", 1280, 720, false, null));
     auto surface = vulkan.create_surface(wm.get_hwnd(window));
 
-    auto devices = vulkan.get_physical_devices(tmp);
-    assert(devices);
-    auto queues = vulkan.get_queue_families(devices[0], tmp);
-    assert(queues);
-    writeln(tmp.bytes_free);
+    string[] exts = [
+        VK_KHR_SWAPCHAIN_EXTENSION_NAME
+    ];
 
-    /+
-    /*
-    enum PhysicalDeviceDeviceTypeFilter {
-        prefer_discrete,
-        prefer_integrated,
-        no_preference,
-        discrete_only,
-        integrated_only
-    }
-    */
-
-    VulkanPhysicalDeviceCriteria criteria = {
-        min_draw_queues: 1,
-        min_show_queues: 1,
-        target_surface: surface,
-        required_extensions: [],
-        optional_extensions: [],
-        device_type: PhysicalDeviceDeviceTypeFilter.prefer_discrete,
-        required_features: &features,
-        optional_features: null,
+    import flare.vulkan.device;
+    VulkanDeviceCriteria criteria = {
+        num_graphics_queues: 1,
+        num_transfer_queues: 1,
+        required_extensions: exts
     };
 
-    /*
-    struct VulkanSelectedPhysicalDevice {
-        enum no_queue_family_found = uint.max;
-        uint draw_queue_family_index;
-        uint show_queue_family_index;
-        VkPhysicalDevice physical_device;
-    }
-    */
-
-    auto physical_device = vulkan.select_device(criteria);
-
-    ...
-
-    auto device = vulkan.create_device(physical_device, device_options);
-    +/
+    auto physical_devices = vulkan.filter_physical_devices(criteria, tmp);
+    writeln(physical_devices);
 
     // vk.log.trace("Available draw queue families: %-(%s%)", draw_queues);
     // vk.log.trace("Available presentation queue families: %-(%s%)", show_queues);
