@@ -1,3 +1,6 @@
+/**
+ Application-agnostic Vulkan wrappers for convenience and improved correctness.
+ */
 module flare.vulkan.api;
 
 /**

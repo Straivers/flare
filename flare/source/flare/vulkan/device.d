@@ -5,6 +5,29 @@ import flare.vulkan.instance;
 import flare.vulkan.surface;
 import flare.vulkan.h;
 
+VkPhysicalDevice[] get_physical_devices(ref Vulkan instance, Allocator mem) {
+    uint count;
+    const r1 = vkEnumeratePhysicalDevices(instance.handle, &count, null);
+    if (r1 != VK_SUCCESS) {
+        instance.log.fatal("Call to vkEnumeratePhysicalDevices failed: %s", r1);
+        return [];
+    }
+
+    auto devices = mem.alloc_arr!VkPhysicalDevice(count);
+    if (!devices) {
+        instance.log.fatal("Out of Temporary Memory!");
+        return [];
+    }
+
+    const r2 = vkEnumeratePhysicalDevices(instance.handle, &count, devices.ptr);
+    if (r2 != VK_SUCCESS) {
+        instance.log.fatal("Call to vkEnumeratePhysicalDevices failed: %s", r2);
+        return [];
+    }
+
+    return devices;
+}
+
 VkQueueFamilyProperties[] get_queue_families(ref Vulkan instance, VkPhysicalDevice device, Allocator mem) {
     uint count;
     vkGetPhysicalDeviceQueueFamilyProperties(device, &count, null);

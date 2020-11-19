@@ -37,26 +37,7 @@ struct Vulkan {
     ref Logger log() return { return _logger; }
 
     VkPhysicalDevice[] get_physical_devices(Allocator mem) {
-        uint count;
-        const r1 = vkEnumeratePhysicalDevices(_instance, &count, null);
-        if (r1 != VK_SUCCESS) {
-            _logger.fatal("Call to vkEnumeratePhysicalDevices failed: %s", r1);
-            return [];
-        }
-
-        auto devices = mem.alloc_arr!VkPhysicalDevice(count);
-        if (!devices) {
-            _logger.fatal("Out of Temporary Memory!");
-            return [];
-        }
-
-        const r2 = vkEnumeratePhysicalDevices(_instance, &count, devices.ptr);
-        if (r2 != VK_SUCCESS) {
-            _logger.fatal("Call to vkEnumeratePhysicalDevices failed: %s", r2);
-            return [];
-        }
-
-        return devices;
+        return flare.vulkan.device.get_physical_devices(this, mem);
     }
 
     VkQueueFamilyProperties[] get_queue_families(VkPhysicalDevice device, Allocator mem) {
