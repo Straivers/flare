@@ -36,10 +36,10 @@ VulkanAPI load_vulkan(Logger* parent_logger) {
     if (!loadGlobalLevelFunctions())
         assert(0, "Unable to load Vulkan API");
     
-    return VulkanAPI(parent_logger);
+    return new VulkanAPI(parent_logger);
 }
 
-struct VulkanAPI {
+final class VulkanAPI {
     import flare.core.logger: Logger;
     import flare.core.memory.temp: Allocator, TempAllocator, scoped, kib;
     import flare.vulkan.instance: Vulkan, InstanceOptions;
@@ -48,8 +48,6 @@ struct VulkanAPI {
     this(Logger* parent) {
         _logger = Logger(parent.log_level, parent);
     }
-
-    @disable this(this);
 
     VkLayerProperties[] get_supported_layers(Allocator mem) {
         uint count;
