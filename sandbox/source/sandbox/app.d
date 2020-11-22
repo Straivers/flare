@@ -46,11 +46,11 @@ void a() {
     import flare.vulkan.device;
     VulkanDeviceCriteria criteria = {
         num_graphics_queues: 1,
-        required_extensions: exts
+        required_extensions: exts,
+        display_target: surface
     };
 
     auto physical_devices = vulkan.filter_physical_devices(criteria, tmp);
-    
     auto device = vulkan.create_device(physical_devices[0]);
 
     // vk.log.trace("Available draw queue families: %-(%s%)", draw_queues);

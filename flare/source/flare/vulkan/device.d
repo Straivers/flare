@@ -22,7 +22,6 @@ final class VulkanDevice {
     enum max_queues_per_family = 16;
 
 public:
-
     const uint compute_family;
     const uint n_compute_queues;
 
@@ -31,6 +30,9 @@ public:
 
     const uint transfer_family;
     const uint n_transfer_queues;
+
+    const uint present_family;
+    const uint n_present_queues;
 
     ~this() {
         vkDestroyDevice(handle, null);
@@ -42,23 +44,22 @@ public:
 
     VkQueue compute(uint index)
     in (index <= n_compute_queues) {
-        VkQueue queue;
-        vkGetDeviceQueue(handle, compute_family, index, &queue);
-        return queue;
+        return get_queue!"compute"(index);
+    }
+
+    VkQueue present(uint index)
+    in (index <= n_present_queues) {
+        return get_queue!"present"(index);
     }
 
     VkQueue graphics(uint index)
     in (index <= n_graphics_queues) {
-        VkQueue queue;
-        vkGetDeviceQueue(handle, graphics_family, index, &queue);
-        return queue;
+        return get_queue!"graphics"(index);
     }
 
     VkQueue transfer(uint index)
     in (index <= n_transfer_queues) {
-        VkQueue queue;
-        vkGetDeviceQueue(handle, transfer_family, index, &queue);
-        return queue;
+        return get_queue!"transfer"(index);
     }
 
 private:
@@ -67,17 +68,20 @@ private:
     static foreach (func; device_funcs)
         mixin("PFN_" ~ func ~ " " ~ func ~ ";");
 
-    this(VkDevice dev, uint n_compute, uint compute_id, uint n_graphics, uint graphics_id, uint n_transfer, uint transfer_id) {
+    this(VkDevice dev, ref VulkanSelectedDevice device_info) {
         _handle = dev;
 
-        n_compute_queues = n_compute;
-        compute_family = compute_id;
+        n_compute_queues = device_info.num_compute_queues;
+        compute_family = device_info.compute_queue_family_index;
 
-        n_graphics_queues = n_graphics;
-        graphics_family = graphics_id;
+        n_graphics_queues = device_info.num_graphics_queues;
+        graphics_family = device_info.graphics_queue_family_index;
 
-        n_transfer_queues = n_transfer;
-        transfer_family = transfer_id;
+        n_transfer_queues = device_info.num_transfer_queues;
+        transfer_family = device_info.transfer_queue_family_index;
+
+        n_present_queues = device_info.num_present_queues;
+        present_family = device_info.present_queue_family_index;
 
         load_device_functions();
     }
@@ -85,6 +89,12 @@ private:
     void load_device_functions() {
         static foreach (func; device_funcs)
             mixin(func ~ " = cast(PFN_" ~ func ~ ") vkGetDeviceProcAddr(handle, \"" ~ func ~ "\");");
+    }
+
+    VkQueue get_queue(string name)(uint index) {
+        VkQueue queue;
+        mixin("vkGetDeviceQueue(handle, " ~ name ~ "_family, index, &queue);");
+        return queue;
     }
 }
 
@@ -116,25 +126,19 @@ VulkanDevice create_device(ref Vulkan instance, ref VulkanSelectedDevice physica
         assert(0, "Could not create Vulkan device");
     }
 
-    instance.log.info("Vulkan device created with:\n\tExtensions:%-( %s%)\n\t%s compute queues  (id: %s)\n\t%s graphics queues (id: %s)\n\t%s transfer queues (id: %s)",
+    instance.log.info("Vulkan device created with:\n\tExtensions:%-( %s%)\n\t%s compute queues  (id: %s)\n\t%s present queues  (id: %s)\n\t%s graphics queues (id: %s)\n\t%s transfer queues (id: %s)",
             physical_device.extensions,
             physical_device.num_compute_queues,
             physical_device.compute_queue_family_index,
             physical_device.num_graphics_queues,
-            physical_device.graphics_queue_family_index,
+            physical_device.present_queue_family_index,
             physical_device.num_transfer_queues,
-            physical_device.transfer_queue_family_index);
+            physical_device.graphics_queue_family_index,
+            physical_device.num_present_queues,
+            physical_device.transfer_queue_family_index,
+    );
 
-    // dfmt off
-    return new VulkanDevice(
-        device,
-        physical_device.num_compute_queues,
-        physical_device.compute_queue_family_index,
-        physical_device.num_graphics_queues,
-        physical_device.graphics_queue_family_index,
-        physical_device.num_transfer_queues,
-        physical_device.transfer_queue_family_index);
-    // dfmt on
+    return new VulkanDevice(device, physical_device);
 }
 
 private:

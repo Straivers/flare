@@ -7,10 +7,12 @@ import flare.vulkan.h;
 import flare.vulkan.instance;
 import flare.vulkan.surface;
 
+enum num_presentation_queues_per_device = 1;
+
 struct VulkanDeviceCriteria {
     /**
      The number of compute queues that a device must support. A
-     compute-specialized queue will be preferred if available.
+     compute-specialized queue will be selected preferentially.
 
      Note: According to the spec, a compute-specialized queue is implicitly
      capable of transfer as well.
@@ -20,7 +22,7 @@ struct VulkanDeviceCriteria {
     /**
      The number of graphics queues that a device must support.
 
-     Note: According to the spec, a compute-specialized queue is implicitly
+     Note: According to the spec, a graphics-specialized queue is implicitly
      capable of transfer as well.
      */
     uint num_graphics_queues;
@@ -31,9 +33,11 @@ struct VulkanDeviceCriteria {
     uint num_transfer_queues;
 
     /**
-     A surface that the device must be able to draw to, or null.
+     A surface that the device must be able to draw to, or null. When
+     identifying presentation queues, a queue that also supports graphics
+     operations will be selected preferentially.
      */
-    RenderSurface* display_target;
+    RenderSurface display_target;
 
     /**
      Extensions that the device must support.
@@ -83,6 +87,16 @@ struct VulkanSelectedDevice {
      transfer_queue_family_index should be ignored.
      */
     uint num_transfer_queues;
+
+    /**
+     The index of a queue family that can present to a display.
+     */
+    uint present_queue_family_index = 0;
+
+    /**
+     The number of presentation queues to create. Must be either 0 or 1.
+     */
+    uint num_present_queues;
 
     /**
      The handle of the selected device.
@@ -202,6 +216,7 @@ bool select_queue_families(in VulkanDeviceCriteria criteria, in VkQueueFamilyPro
     import std.algorithm : min;
 
     bool found_compute_only_queue;
+    bool found_graphics_present_queue;
 
     // This algorithm starts from the end and works its way to the front. I.e.
     // if there are multiple graphics queues, the first one will be selected.
@@ -232,6 +247,15 @@ bool select_queue_families(in VulkanDeviceCriteria criteria, in VkQueueFamilyPro
                 device.transfer_queue_family_index = cast(uint) index;
                 device.num_transfer_queues = min(queue.queueCount, criteria.num_transfer_queues);
             }
+        }
+
+        if (criteria.display_target && !(device.num_present_queues && found_graphics_present_queue)) {
+            const is_also_graphics = (queue.queueFlags && VK_QUEUE_GRAPHICS_BIT) != 0;
+            VkBool32 can_present;
+            vkGetPhysicalDeviceSurfaceSupportKHR(device.device, cast(uint) index, criteria.display_target.handle, &can_present);
+
+            device.num_present_queues = num_presentation_queues_per_device;
+            found_graphics_present_queue = device.num_present_queues && is_also_graphics;
         }
     }
 
