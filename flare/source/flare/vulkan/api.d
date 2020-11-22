@@ -15,11 +15,10 @@ public import flare.vulkan.base;
 
 /**
  Functions:
-   can_device_render_to
-   get_available_queue_families
+   create_device
 
  Types:
-   
+   VulkanDevice
  */
 public import flare.vulkan.device;
 
@@ -37,7 +36,20 @@ public import flare.vulkan.instance;
 
 /**
  Functions:
-   create_surface_win32
+    filter_physical_devices
+    get_physical_devices
+    get_queue_families
+    get_supported_extensions
+
+ Types:
+    VulkanDeviceCriteria
+    VulkanSelectedDevice
+ */
+public import flare.vulkan.physical_device;
+
+/**
+ Functions:
+   create_surface
 
  Types:
    RenderSurface

@@ -9,6 +9,10 @@ import std.stdio: writeln, writefln;
 import flare.core.memory.buddy_allocator;
 
 void main() {
+    a();
+}
+
+void a() {
     auto logger = Logger(LogLevel.All);
     logger.add_sink(new ConsoleLogger(true));
 
@@ -42,12 +46,12 @@ void main() {
     import flare.vulkan.device;
     VulkanDeviceCriteria criteria = {
         num_graphics_queues: 1,
-        num_transfer_queues: 1,
         required_extensions: exts
     };
 
     auto physical_devices = vulkan.filter_physical_devices(criteria, tmp);
-    writeln(physical_devices);
+    
+    auto device = vulkan.create_device(physical_devices[0]);
 
     // vk.log.trace("Available draw queue families: %-(%s%)", draw_queues);
     // vk.log.trace("Available presentation queue families: %-(%s%)", show_queues);
@@ -56,4 +60,8 @@ void main() {
         wm.wait_events();
         wm.destroy_closed_windows();
     }
+
+    destroy(device);
+    destroy(surface);
+    destroy(vulkan);
 }

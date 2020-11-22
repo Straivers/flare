@@ -20,33 +20,41 @@ public nothrow:
      */
     void free_raw(void[] memory);
 
+    // TODO: Implement realloc for resizing allocations
+
     PtrType!T alloc_obj(T, Args...)(Args args) {
         auto mem = alloc_raw(object_size!T, object_alignment!T);
         return mem ? mem.emplace_obj!T(args) : null;
     }
 
     void free_obj(T)(PtrType!T object) {
-        destroy(object);
         free_raw((cast(void*) object)[0 .. object_size!T]);
     }
 
-    T[] alloc_arr(T)(size_t length) {
+    void destroy_obj(T)(PtrType!T object) {
+        destroy(object);
+        free_obj(object);
+    }
+
+    T[] alloc_arr(T)(size_t length, T default_value = T.init) {
         // D auto-conversion for array sizes from void[].
         auto arr = cast(T[]) alloc_raw(T.sizeof * length, T.alignof);
 
         // In case the allocation failed.
         if (arr)
-            arr[] = T.init;
+            arr[] = default_value;
 
         return arr;
     }
 
     void free_arr(T)(T[] array) {
-        foreach (ref t; array)
-            if (t)
-                destroy(t);
-        
         // D auto-conversion for array sizes to void[].
         free_raw(cast(void[]) array);
+    }
+
+    void destroy_arr(T)(T[] array) {
+        foreach (ref t; array)
+            destroy(t);
+        free_arr(array);
     }
 }

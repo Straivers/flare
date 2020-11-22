@@ -139,7 +139,7 @@ struct VulkanAPI {
 
             _logger.info("Vulkan instance created with:\n\tLayers:%-( %s%)\n\tExtensions:%-( %s%)", options.layers, options.extensions);
             loadInstanceLevelFunctionsExt(instance);
-            return Vulkan(&_logger, instance);
+            return new Vulkan(&_logger, instance);
         }
 
         _logger.fatal("Failed to create Vulkan instance: Out of Temporary Memory");
@@ -178,10 +178,4 @@ private:
     char* name_of(ref return VkLayerProperties properties) {
         return &properties.layerName[0];
     }
-}
-
-alias VulkanDeviceAPI = DispatchDeviceExt;
-
-VulkanDeviceAPI load_device_api(VkDevice device) {
-    return DispatchDeviceExt(device);
 }

@@ -1,17 +1,25 @@
 module flare.vulkan.surface;
 
-import flare.vulkan.instance;
 import flare.vulkan.h;
+import flare.vulkan.instance;
 
-struct RenderSurface {
-    Vulkan* instance;
-    VkSurfaceKHR handle;
-
-    @disable this(this);
+final class RenderSurface {
+    const Vulkan instance;
 
     ~this() {
-        if (handle)
-            vkDestroySurfaceKHR(instance.handle, handle, null);
+        vkDestroySurfaceKHR(instance.handle, handle, null);
+    }
+
+    VkSurfaceKHR handle() const {
+        return cast(VkSurfaceKHR) _handle;
+    }
+
+private:
+    const VkSurfaceKHR _handle;
+
+    this(Vulkan instance, VkSurfaceKHR handle) {
+        this.instance = instance;
+        _handle = handle;
     }
 }
 
@@ -26,18 +34,16 @@ bool can_device_render_to(ref Vulkan instance, VkPhysicalDevice device, ref Rend
 }
 
 version (Windows) {
-    import core.sys.windows.windows: HWND, GetModuleHandle, NULL;
+    import core.sys.windows.windows : HWND, GetModuleHandle, NULL;
 
-    RenderSurface create_surface_win32(ref return Vulkan instance, HWND window) {
-        VkWin32SurfaceCreateInfoKHR sci = {
-            hwnd : window,
-            hinstance : GetModuleHandle(NULL)
-        };
+    RenderSurface create_surface(ref return Vulkan instance, HWND window) {
+        VkWin32SurfaceCreateInfoKHR sci = {hwnd: window,
+        hinstance: GetModuleHandle(NULL)};
 
         VkSurfaceKHR handle;
         auto err = vkCreateWin32SurfaceKHR(instance.handle, &sci, null, &handle);
         if (err == VK_SUCCESS) {
-            return RenderSurface(&instance, handle);
+            return new RenderSurface(instance, handle);
         }
 
         instance.log.fatal("Unable to create window surface: %s", err);
