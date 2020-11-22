@@ -70,6 +70,28 @@ public:
         _array[index] = value;
     }
 
+    int opApply(scope int delegate(ref T) dg) {
+        int result = 0;
+        foreach (ref item; array()) {
+            result = dg(item);
+            if (result)
+                break;
+        }
+    
+        return result;
+    }
+
+    int opApply(scope int delegate(ref size_t index, ref T) dg) {
+        int result = 0;
+        foreach (i, ref item; array()) {
+            result = dg(i, item);
+            if (result)
+                break;
+        }
+    
+        return result;
+    }
+
 private:
     T[] _array;
     size_t _length;

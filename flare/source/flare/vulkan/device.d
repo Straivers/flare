@@ -147,63 +147,47 @@ auto create_queue_create_infos(ref VulkanSelectedDevice device, TempAllocator me
     import flare.core.array : Array;
     import std.algorithm : max;
 
+    static get_queue(ref Array!VkDeviceQueueCreateInfo queues, uint new_index) {
+        foreach (i, ref q; queues)
+            if (q.queueFamilyIndex == new_index)
+                return i;
+        return size_t.max;
+    }
+
+    static insert(ref Array!VkDeviceQueueCreateInfo queues, uint q_index, uint q_count) {
+        auto location = get_queue(queues, q_index);
+        if (location == size_t.max) {
+            VkDeviceQueueCreateInfo queue = {
+                queueFamilyIndex: q_index,
+                queueCount: q_count
+            };
+
+            queues ~= queue;
+        }
+        else {
+            queues[location].queueCount = max(q_count, queues[location].queueCount);
+        }
+    }
+
     // Graphics + Compute + Transfer
-    auto queues = Array!VkDeviceQueueCreateInfo(3, mem);
+    auto queues = Array!VkDeviceQueueCreateInfo(0, mem);
 
-    if (device.num_transfer_queues) {
-        // dfmt off
-        VkDeviceQueueCreateInfo transfer = {
-            queueFamilyIndex: device.transfer_queue_family_index,
-            queueCount: device.num_transfer_queues,
-            pQueuePriorities: mem.alloc_arr!float(device.num_transfer_queues, 1.0).ptr
-        };
-        // dfmt on
+    with (device) {
+        if (num_transfer_queues)
+            insert(queues, transfer_queue_family_index, num_transfer_queues);
 
-        queues ~= transfer;
+        if (num_graphics_queues)
+            insert(queues, graphics_queue_family_index, num_graphics_queues);
+
+        if (num_compute_queues)
+            insert(queues, compute_queue_family_index, num_compute_queues);
+
+        if (num_present_queues)
+            insert(queues, present_queue_family_index, num_present_queues);
     }
 
-    const shared_compute_graphics_queue = device.compute_queue_family_index == device.graphics_queue_family_index;
-
-    if (device.num_graphics_queues) {
-        // shared graphics-compute
-        if (device.num_compute_queues && shared_compute_graphics_queue) {
-            const count = max(device.num_graphics_queues, device.num_compute_queues);
-            // dfmt off
-            VkDeviceQueueCreateInfo graphics_compute = {
-                queueFamilyIndex: device.graphics_queue_family_index,
-                queueCount: count,
-                pQueuePriorities: mem.alloc_arr!float(count, 1.0).ptr
-            };
-            // dfmt on
-
-            queues ~= graphics_compute;
-        }
-        // graphics only
-    else {
-            // dfmt off
-            VkDeviceQueueCreateInfo graphics = {
-                queueFamilyIndex: device.graphics_queue_family_index,
-                queueCount: device.num_graphics_queues,
-                pQueuePriorities: mem.alloc_arr!float(device.num_graphics_queues, 1.0).ptr
-            };
-            // dfmt on
-
-            queues ~= graphics;
-        }
-    }
-
-    // compute only
-    if (device.num_compute_queues && !shared_compute_graphics_queue) {
-        // dfmt off
-        VkDeviceQueueCreateInfo compute = {
-            queueFamilyIndex: device.compute_queue_family_index,
-            queueCount: device.num_compute_queues,
-            pQueuePriorities: mem.alloc_arr!float(device.num_compute_queues, 1.0).ptr
-        };
-        // dfmt on
-
-        queues ~= compute;
-    }
+    foreach (ref q; queues)
+        q.pQueuePriorities = mem.alloc_arr!float(q.queueCount, 1.0).ptr;
 
     return queues;
 }
