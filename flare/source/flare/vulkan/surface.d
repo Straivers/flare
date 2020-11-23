@@ -1,13 +1,13 @@
 module flare.vulkan.surface;
 
 import flare.vulkan.h;
-import flare.vulkan.instance;
+import flare.vulkan.context;
 
 final class RenderSurface {
-    const Vulkan instance;
+    VulkanContext context;
 
     ~this() {
-        vkDestroySurfaceKHR(instance.handle, handle, null);
+        vkDestroySurfaceKHR(context.instance, handle, null);
     }
 
     VkSurfaceKHR handle() const {
@@ -17,36 +17,26 @@ final class RenderSurface {
 private:
     const VkSurfaceKHR _handle;
 
-    this(Vulkan instance, VkSurfaceKHR handle) {
-        this.instance = instance;
+    this(VulkanContext ctx, VkSurfaceKHR handle) {
+        context = ctx;
         _handle = handle;
     }
-}
-
-bool can_device_render_to(ref Vulkan instance, VkPhysicalDevice device, ref RenderSurface surface, uint queue_family) {
-    VkBool32 result;
-    const err = vkGetPhysicalDeviceSurfaceSupportKHR(device, queue_family, surface.handle, &result);
-    if (err == VK_SUCCESS)
-        return result != 0;
-
-    instance.log.fatal("Call to vkGetPhysicalDeviceSurfaceSupportKHR failed: %s", result);
-    assert(0, "Call to vkGetPhysicalDeviceSurfaceSupportKHR failed");
 }
 
 version (Windows) {
     import core.sys.windows.windows : HWND, GetModuleHandle, NULL;
 
-    RenderSurface create_surface(ref return Vulkan instance, HWND window) {
+    RenderSurface create_surface(ref return VulkanContext ctx, HWND window) {
         VkWin32SurfaceCreateInfoKHR sci = {hwnd: window,
         hinstance: GetModuleHandle(NULL)};
 
         VkSurfaceKHR handle;
-        auto err = vkCreateWin32SurfaceKHR(instance.handle, &sci, null, &handle);
+        auto err = vkCreateWin32SurfaceKHR(ctx.instance, &sci, null, &handle);
         if (err == VK_SUCCESS) {
-            return new RenderSurface(instance, handle);
+            return new RenderSurface(ctx, handle);
         }
 
-        instance.log.fatal("Unable to create window surface: %s", err);
+        ctx.logger.fatal("Unable to create window surface: %s", err);
         assert(0, "Unable to create window surface.");
     }
 }

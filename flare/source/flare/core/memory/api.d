@@ -58,3 +58,25 @@ public nothrow:
         free_arr(array);
     }
 }
+
+template as_api(T) {
+    final class as_api : Allocator {
+        override void[] alloc_raw(size_t size, size_t alignment) {
+            return base.alloc(size);
+        }
+
+        override void free_raw(void[] memory) {
+            return base.free(memory);
+        }
+
+        this(Args...)(Args args) {
+            base = T(args);
+        }
+
+        ~this() {
+            destroy(base);
+        }
+
+        private T base;
+    }
+}

@@ -5,7 +5,7 @@ import flare.core.memory.api;
 import flare.core.memory.temp;
 import flare.vulkan.compat;
 import flare.vulkan.h;
-import flare.vulkan.instance;
+import flare.vulkan.context;
 import flare.vulkan.physical_device;
 import flare.vulkan.surface;
 
@@ -98,8 +98,8 @@ private:
     }
 }
 
-VulkanDevice create_device(ref Vulkan instance, ref VulkanSelectedDevice physical_device) {
-    auto tmp = scoped!TempAllocator(4.kib);
+VulkanDevice create_device(ref VulkanContext ctx, ref VulkanSelectedDevice physical_device) {
+    auto tmp = TempAllocator(ctx.memory);
     auto queues = create_queue_create_infos(physical_device, tmp);
 
     VkPhysicalDeviceFeatures default_features;
@@ -122,11 +122,11 @@ VulkanDevice create_device(ref Vulkan instance, ref VulkanSelectedDevice physica
     auto err = vkCreateDevice(physical_device.device, &dci, null, &device);
 
     if (err != VK_SUCCESS) {
-        instance.log.fatal("Could not create Vulkan device: %s", err);
+        ctx.logger.fatal("Could not create Vulkan device: %s", err);
         assert(0, "Could not create Vulkan device");
     }
 
-    instance.log.info("Vulkan device created with:\n\tExtensions:%-( %s%)\n\t%s compute queues  (id: %s)\n\t%s present queues  (id: %s)\n\t%s graphics queues (id: %s)\n\t%s transfer queues (id: %s)",
+    ctx.logger.info("Vulkan device created with:\n\tExtensions:%-( %s%)\n\t%s compute queues  (id: %s)\n\t%s present queues  (id: %s)\n\t%s graphics queues (id: %s)\n\t%s transfer queues (id: %s)",
             physical_device.extensions,
             physical_device.num_compute_queues,
             physical_device.compute_queue_family_index,
@@ -143,7 +143,7 @@ VulkanDevice create_device(ref Vulkan instance, ref VulkanSelectedDevice physica
 
 private:
 
-auto create_queue_create_infos(ref VulkanSelectedDevice device, TempAllocator mem) {
+auto create_queue_create_infos(ref VulkanSelectedDevice device, Allocator mem) {
     import flare.core.array : Array;
     import std.algorithm : max;
 

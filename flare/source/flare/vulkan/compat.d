@@ -1,6 +1,6 @@
 module flare.vulkan.compat;
 
-import flare.core.memory.temp;
+import flare.core.memory.api;
 
 @safe nothrow:
 
@@ -11,7 +11,7 @@ import flare.core.memory.temp;
  allocator runs out of memory midway through the operation, everything that has
  been allocated will be freed before the function returns.
  */
-@trusted char*[] to_cstr_array(in string[] strings, TempAllocator allocator) {
+@trusted char*[] to_cstr_array(in string[] strings, Allocator allocator) {
     auto array = allocator.alloc_arr!(char*)(strings.length);
 
     foreach (i, ref str; strings) {

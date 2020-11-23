@@ -5,16 +5,6 @@ module flare.vulkan.api;
 
 /**
  Functions:
-    load_vulkan
-
- Types:
-    VkVersion
-    VulkanAPI
- */
-public import flare.vulkan.base;
-
-/**
- Functions:
    create_device
 
  Types:
@@ -28,11 +18,18 @@ public import flare.vulkan.device;
 public import flare.vulkan.h;
 
 /**
+ Functions:
+    init_vulkan
+
  Types:
-    InstanceOptions
-    Vulkan
+    ContextOptions
+    VulkanContext
+
+ Constants:
+    VK_LAYER_LUNARG_API_DUMP_NAME
+    VK_LAYER_KHRONOS_VALIDATION_NAME
  */
-public import flare.vulkan.instance;
+public import flare.vulkan.context;
 
 /**
  Functions:
