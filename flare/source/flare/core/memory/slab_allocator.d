@@ -15,7 +15,7 @@ nothrow public:
         return cast(void[]) _start[0 .. _end - _start];
     }
 
-    override void[] alloc_raw(size_t size, size_t alignment) {
+    override void[] alloc(size_t size, size_t alignment) {
         if (_top + size >= _end)
             return [];
         
@@ -24,7 +24,7 @@ nothrow public:
         return _top[0 .. size];
     }
 
-    override void free_raw(void[] memory) {
+    override void free(void[] memory) {
         // no-op
     }
 

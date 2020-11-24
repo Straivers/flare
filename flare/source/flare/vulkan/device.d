@@ -187,7 +187,7 @@ auto create_queue_create_infos(ref VulkanSelectedDevice device, Allocator mem) {
     }
 
     foreach (ref q; queues)
-        q.pQueuePriorities = mem.alloc_arr!float(q.queueCount, 1.0).ptr;
+        q.pQueuePriorities = mem.alloc_array!float(q.queueCount, 1.0).ptr;
 
     return queues;
 }

@@ -33,8 +33,9 @@ nothrow:
         vm_free(_memory_start[0 .. _memory_end - _memory_start]);
     }
 
-    void[] alloc(size_t size) {
+    void[] alloc(size_t size, size_t alignment = 8) {
         assert(_max_order.chunk_size > size);
+        assert(min_chunk_size % alignment == 0);
 
         if (size == 0) {
             return [];

@@ -5,6 +5,8 @@ public import flare.core.memory.measures: object_alignment, object_size;
 
 nothrow:
 
+enum default_alignment = 8;
+
 PtrType!T emplace_obj(T, Args...)(void[] mem, Args args)
 in (mem.length >= object_size!T) {
     import std.conv : emplace;

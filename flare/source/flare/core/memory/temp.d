@@ -17,7 +17,7 @@ nothrow public:
 
     this(Allocator source, size_t size = default_size) {
         this.source = source;
-        this(source.alloc_raw(size, 8));
+        this(source.alloc(size, 8));
     }
 
     this(void[] memory) {
@@ -31,6 +31,6 @@ nothrow public:
 
     ~this() {
         if (source)
-            source.free_raw(base.range);
+            source.free(base.range);
     }
 }

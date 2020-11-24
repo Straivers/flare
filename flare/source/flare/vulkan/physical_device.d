@@ -117,12 +117,11 @@ struct VulkanSelectedDevice {
 }
 
 VulkanSelectedDevice[] filter_physical_devices(ref VulkanContext context, in VulkanDeviceCriteria criteria, Allocator mem) {
-    /// Loop independent temp memory
     auto tmp = TempAllocator(context.memory);
-    /// Growing array of accepted devices, allocated from tmp
-    auto interim_result = Array!VulkanSelectedDevice(0, tmp);
-
     auto devices = context.get_physical_devices(tmp);
+    auto selected_devices = tmp.alloc_array!VulkanSelectedDevice(devices.length);
+    auto n_selected_devices = 0;
+
     foreach (device; devices) {
         auto device_tmp = TempAllocator(context.memory, 64.kib);
         // dfmt off
@@ -132,21 +131,23 @@ VulkanSelectedDevice[] filter_physical_devices(ref VulkanContext context, in Vul
         };
         // dfmt on
 
-        const queues_satisfied = select_queue_families(criteria, context.get_queue_families(device, device_tmp), selected_device);
+        auto queues = context.get_queue_families(device, device_tmp);
+        const queues_satisfied = select_queue_families(criteria, queues, selected_device);
 
-        const extensions_satisfied = has_required_extensions(criteria.required_extensions, context.get_supported_extensions(device, device_tmp), device_tmp);
+        auto extensions = context.get_supported_extensions(device, device_tmp);
+        const extensions_satisfied = has_required_extensions(criteria.required_extensions, extensions, device_tmp);
 
-        const features_satisfied = () { return true; }();
+        const features_satisfied = true;
 
         // If all satisfied, add device to list
-        if (queues_satisfied && extensions_satisfied && features_satisfied)
-            interim_result ~= selected_device;
-
-        // device_tmp.reset();
+        if (queues_satisfied && extensions_satisfied && features_satisfied) {
+            selected_devices[n_selected_devices] = selected_device;
+            n_selected_devices++;
+        }
     }
 
-    auto result = mem.alloc_arr!VulkanSelectedDevice(interim_result.length);
-    result[] = interim_result.array;
+    auto result = mem.alloc_array!VulkanSelectedDevice(n_selected_devices);
+    result[] = selected_devices[0 .. n_selected_devices];
     return result;
 }
 
@@ -158,7 +159,7 @@ VkPhysicalDevice[] get_physical_devices(ref VulkanContext context, Allocator mem
         return [];
     }
 
-    auto devices = mem.alloc_arr!VkPhysicalDevice(count);
+    auto devices = mem.alloc_array!VkPhysicalDevice(count);
     if (!devices) {
         context.logger.fatal("Out of Temporary Memory!");
         return [];
@@ -175,7 +176,7 @@ VkPhysicalDevice[] get_physical_devices(ref VulkanContext context, Allocator mem
 
 T[] enumerate_device_property(alias get_count, alias set_array, T)(ref VulkanContext context, VkPhysicalDevice device, Allocator mem) {
     auto count = get_count(device);
-    if (auto array = mem.alloc_arr!T(count)) {
+    if (auto array = mem.alloc_array!T(count)) {
         set_array(device, count, array);
         return array;
     }
@@ -267,7 +268,7 @@ bool has_required_extensions(const(string)[] required_extensions, VkExtensionPro
     auto tmp = TempAllocator(mem);
 
     const available_ext_hashes = () {
-        auto array = tmp.alloc_arr!Hash(available_extensions.length);
+        auto array = tmp.alloc_array!Hash(available_extensions.length);
         foreach (i, ref slot; array) {
             import core.stdc.string : strlen;
 
@@ -278,7 +279,7 @@ bool has_required_extensions(const(string)[] required_extensions, VkExtensionPro
     }();
 
     const required_ext_hashes = () {
-        auto array = tmp.alloc_arr!Hash(required_extensions.length);
+        auto array = tmp.alloc_array!Hash(required_extensions.length);
         foreach (i, ref slot; array)
             slot = hash_of(required_extensions[i]);
         return array;

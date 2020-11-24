@@ -10,13 +10,13 @@ public:
     @disable this(this);
 
     this(size_t length, Allocator mem) {
-        _array = mem.alloc_arr!T(length);
+        _array = mem.alloc_array!T(length);
         _mem = mem;
     }
 
     ~this() {
         if (_mem) {
-            _mem.destroy_arr(_array);
+            _mem.dispose(_array);
             _array = [];
             _mem = null;
         }
@@ -28,13 +28,13 @@ public:
             _length++;
         }
         else if (_length > 0) {
-            auto tmp = _mem.alloc_arr!T(_array.length * 2);
+            auto tmp = _mem.alloc_array!T(_array.length * 2);
             tmp[0 .. _array.length] = _array;
-            _mem.free_arr(_array);
+            _mem.free(_array);
             _array = tmp;
         }
         else {
-            _array = _mem.alloc_arr!T(default_size);
+            _array = _mem.alloc_array!T(default_size);
             _array[0] = value;
             _length = 1;
         }

@@ -12,17 +12,17 @@ import flare.core.memory.api;
  been allocated will be freed before the function returns.
  */
 @trusted char*[] to_cstr_array(in string[] strings, Allocator allocator) {
-    auto array = allocator.alloc_arr!(char*)(strings.length);
+    auto array = allocator.alloc_array!(char*)(strings.length);
 
     foreach (i, ref str; strings) {
-        auto tmp = allocator.alloc_arr!char(str.length + 1);
+        auto tmp = allocator.alloc_array!char(str.length + 1);
 
         if (!tmp) {
             // free all allocated strings
             for (auto j = 0; j < array.length && array[j] !is null; j++)
-                allocator.destroy_arr(array[j][0 .. strings[j].length + 1]);
+                allocator.dispose(array[j][0 .. strings[j].length + 1]);
             // free array of strings
-            allocator.destroy_arr(array);
+            allocator.dispose(array);
 
             return [];
         }
