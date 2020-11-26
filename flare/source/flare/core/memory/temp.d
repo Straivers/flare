@@ -10,7 +10,7 @@ struct TempAllocator {
     enum default_size = 16.kib;
 
 nothrow public:
-    typeof(scoped!SlabAllocator([])) base;
+    typeof(scoped!Impl([])) base;
     alias base this;
 
     Allocator source;
@@ -22,7 +22,7 @@ nothrow public:
 
     this(void[] memory) {
         try
-            base = scoped!SlabAllocator(memory);
+            base = scoped!Impl(memory);
         catch (Exception e)
             assert(0, "Nothrow violation");
     }
@@ -31,6 +31,30 @@ nothrow public:
 
     ~this() {
         if (source)
-            source.free(base.range);
+            source.free(base.slab.range);
+    }
+
+    size_t bytes_free() {
+        return base.slab.bytes_free();
+    }
+
+private:
+    final class Impl : Allocator {
+        SlabAllocator slab;
+
+        this(void[] memory) {
+            slab = SlabAllocator(memory);
+        }
+
+        override void[] alloc(size_t size, size_t alignment) {
+            auto result = slab.alloc(size, alignment);
+            if (result.length != size)
+                assert(0, "Temporary memory exhausted.");
+            return result;
+        }
+
+        override void free(void[] memory) {
+            slab.free(memory);
+        }
     }
 }

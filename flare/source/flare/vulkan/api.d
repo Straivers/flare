@@ -9,6 +9,9 @@ module flare.vulkan.api;
 
  Types:
    VulkanDevice
+
+ Constants:
+   device_funcs
  */
 public import flare.vulkan.device;
 
@@ -33,22 +36,24 @@ public import flare.vulkan.context;
 
 /**
  Functions:
-    filter_physical_devices
-    get_physical_devices
-    get_queue_families
-    get_supported_extensions
+    load_gpu_info
+    select_gpu
 
  Types:
+    VulkanGpuInfo
     VulkanDeviceCriteria
-    VulkanSelectedDevice
  */
-public import flare.vulkan.physical_device;
+// public import flare.vulkan.physical_device;
+public import flare.vulkan.gpu;
 
 /**
  Functions:
+   load_swapchain_support
+   create_swapchain
    create_surface
 
  Types:
-   RenderSurface
+   Swapchain
+   SwapchainSupport
  */
-public import flare.vulkan.surface;
+public import flare.vulkan.swapchain;

@@ -2,7 +2,7 @@ module flare.core.memory.slab_allocator;
 
 import flare.core.memory.api: Allocator;
 
-final class SlabAllocator : Allocator {
+struct SlabAllocator {
     import flare.core.memory.base: align_pointer;
 
 nothrow public:
@@ -15,7 +15,11 @@ nothrow public:
         return cast(void[]) _start[0 .. _end - _start];
     }
 
-    override void[] alloc(size_t size, size_t alignment) {
+    size_t bytes_free() {
+        return _end - _top;
+    }
+
+    void[] alloc(size_t size, size_t alignment) {
         if (_top + size >= _end)
             return [];
         
@@ -24,7 +28,7 @@ nothrow public:
         return _top[0 .. size];
     }
 
-    override void free(void[] memory) {
+    void free(void[] memory) {
         // no-op
     }
 

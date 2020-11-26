@@ -1,38 +1,27 @@
 module flare.vulkan.device;
 
-import flare.core.hash;
-import flare.core.memory.api;
 import flare.core.memory.temp;
-import flare.vulkan.compat;
-import flare.vulkan.h;
 import flare.vulkan.context;
-import flare.vulkan.physical_device;
-import flare.vulkan.surface;
+import flare.vulkan.gpu;
+import flare.vulkan.h;
 
 immutable device_funcs = [
     "vkDestroyDevice",
-    "vkGetDeviceQueue"
+    "vkGetDeviceQueue",
+    "vkCreateSwapchainKHR",
+    "vkDestroySwapchainKHR",
+    "vkGetSwapchainImagesKHR",
+    "vkCreateImageView",
+    "vkDestroyImageView",
 ];
-
-static foreach (func; device_funcs)
-    mixin("auto " ~ func ~ "(Args...)(ref VulkanDevice device, Args args) { " ~ func ~ "(device.handle, args); }");
 
 final class VulkanDevice {
 
     enum max_queues_per_family = 16;
 
 public:
-    const uint compute_family;
-    const uint n_compute_queues;
-
-    const uint graphics_family;
-    const uint n_graphics_queues;
-
-    const uint transfer_family;
-    const uint n_transfer_queues;
-
-    const uint present_family;
-    const uint n_present_queues;
+    VulkanGpuInfo gpu;
+    alias gpu this;
 
     ~this() {
         vkDestroyDevice(handle, null);
@@ -42,47 +31,57 @@ public:
         return cast(VkDevice) _handle;
     }
 
-    VkQueue compute(uint index)
-    in (index <= n_compute_queues) {
-        return get_queue!"compute"(index);
+    inout(VulkanContext) context() inout {
+        return _context;
     }
 
-    VkQueue present(uint index)
-    in (index <= n_present_queues) {
-        return get_queue!"present"(index);
+    VkQueue compute() {
+        return get_queue!"compute"();
     }
 
-    VkQueue graphics(uint index)
-    in (index <= n_graphics_queues) {
-        return get_queue!"graphics"(index);
+    VkQueue present() {
+        return get_queue!"present"();
     }
 
-    VkQueue transfer(uint index)
-    in (index <= n_transfer_queues) {
-        return get_queue!"transfer"(index);
+    VkQueue graphics() {
+        return get_queue!"graphics"();
+    }
+
+    VkQueue transfer() {
+        return get_queue!"transfer"();
+    }
+
+    VkResult d_create_swapchain(VkSwapchainCreateInfoKHR* sci, VkSwapchainKHR* result) {
+        return vkCreateSwapchainKHR(handle, sci, null, result);
+    }
+
+    void d_destroy_swapchain(VkSwapchainKHR swapchain) {
+        vkDestroySwapchainKHR(handle, swapchain, null);
+    }
+
+    VkResult d_get_swapchain_images(VkSwapchainKHR swapchain, uint* count, VkImage* images) {
+        return vkGetSwapchainImagesKHR(handle, swapchain, count, images);
+    }
+
+    VkResult d_create_image_view(VkImageViewCreateInfo* vci, VkImageView* result) {
+        return vkCreateImageView(handle, vci, null, result);
+    }
+
+    void d_destroy_image_view(VkImageView view) {
+        vkDestroyImageView(handle, view, null);
     }
 
 private:
     const VkDevice _handle;
+    VulkanContext _context;
 
     static foreach (func; device_funcs)
         mixin("PFN_" ~ func ~ " " ~ func ~ ";");
 
-    this(VkDevice dev, ref VulkanSelectedDevice device_info) {
+    this(VulkanContext ctx, VkDevice dev, ref VulkanGpuInfo device_info) {
+        _context = ctx;
         _handle = dev;
-
-        n_compute_queues = device_info.num_compute_queues;
-        compute_family = device_info.compute_queue_family_index;
-
-        n_graphics_queues = device_info.num_graphics_queues;
-        graphics_family = device_info.graphics_queue_family_index;
-
-        n_transfer_queues = device_info.num_transfer_queues;
-        transfer_family = device_info.transfer_queue_family_index;
-
-        n_present_queues = device_info.num_present_queues;
-        present_family = device_info.present_queue_family_index;
-
+        this.gpu = device_info;
         load_device_functions();
     }
 
@@ -91,22 +90,23 @@ private:
             mixin(func ~ " = cast(PFN_" ~ func ~ ") vkGetDeviceProcAddr(handle, \"" ~ func ~ "\");");
     }
 
-    VkQueue get_queue(string name)(uint index) {
+    VkQueue get_queue(string name)() {
         VkQueue queue;
-        mixin("vkGetDeviceQueue(handle, " ~ name ~ "_family, index, &queue);");
+        mixin("assert(gpu." ~ name ~ "_family != uint.max);");
+        mixin("vkGetDeviceQueue(handle, gpu." ~ name ~ "_family, 0, &queue);");
         return queue;
     }
 }
 
-VulkanDevice create_device(ref VulkanContext ctx, ref VulkanSelectedDevice physical_device) {
-    auto tmp = TempAllocator(ctx.memory);
-    auto queues = create_queue_create_infos(physical_device, tmp);
+VulkanDevice create_device(ref VulkanContext ctx, ref VulkanGpuInfo gpu) {
+    import flare.vulkan.compat: to_cstr_array;
+
+    auto mem = TempAllocator(ctx.memory);
+    auto queues = create_queue_create_infos(gpu, mem);
 
     VkPhysicalDeviceFeatures default_features;
-    if (physical_device.enabled_features is null)
-        physical_device.enabled_features = &default_features;
 
-    auto extensions = to_cstr_array(physical_device.extensions, tmp);
+    auto extensions = to_cstr_array(gpu.enabled_extensions, mem);
 
     // dfmt off
     VkDeviceCreateInfo dci = {
@@ -114,80 +114,59 @@ VulkanDevice create_device(ref VulkanContext ctx, ref VulkanSelectedDevice physi
         queueCreateInfoCount: cast(uint) queues.length,
         ppEnabledExtensionNames: extensions.ptr,
         enabledExtensionCount: cast(uint) extensions.length,
-        pEnabledFeatures: physical_device.enabled_features,
+        pEnabledFeatures: &default_features,
     };
     // dfmt on
 
     VkDevice device;
-    auto err = vkCreateDevice(physical_device.device, &dci, null, &device);
+    auto err = vkCreateDevice(gpu.device, &dci, null, &device);
 
     if (err != VK_SUCCESS) {
         ctx.logger.fatal("Could not create Vulkan device: %s", err);
         assert(0, "Could not create Vulkan device");
     }
 
-    ctx.logger.info("Vulkan device created with:\n\tExtensions:%-( %s%)\n\t%s compute queues  (id: %s)\n\t%s present queues  (id: %s)\n\t%s graphics queues (id: %s)\n\t%s transfer queues (id: %s)",
-            physical_device.extensions,
-            physical_device.num_compute_queues,
-            physical_device.compute_queue_family_index,
-            physical_device.num_graphics_queues,
-            physical_device.present_queue_family_index,
-            physical_device.num_transfer_queues,
-            physical_device.graphics_queue_family_index,
-            physical_device.num_present_queues,
-            physical_device.transfer_queue_family_index,
+    ctx.logger.info("Vulkan device created with:\n\tExtensions:%-( %s%)\n\tCompute family:  %s\n\tPresent family:  %s\n\tGraphics family: %s\n\tTransfer family: %s",
+            gpu.enabled_extensions,
+            gpu.compute_family,
+            gpu.present_family,
+            gpu.graphics_family,
+            gpu.transfer_family,
     );
 
-    return new VulkanDevice(device, physical_device);
+    return new VulkanDevice(ctx, device, gpu);
 }
 
 private:
 
-auto create_queue_create_infos(ref VulkanSelectedDevice device, Allocator mem) {
-    import flare.core.array : Array;
-    import std.algorithm : max;
+auto create_queue_create_infos(in VulkanGpuInfo device_info, ref TempAllocator mem) {
+    import std.algorithm: filter, uniq;
 
-    static get_queue(ref Array!VkDeviceQueueCreateInfo queues, uint new_index) {
-        foreach (i, ref q; queues)
-            if (q.queueFamilyIndex == new_index)
-                return i;
-        return size_t.max;
+    uint[4] all_families = [
+        device_info.compute_family,
+        device_info.graphics_family,
+        device_info.transfer_family,
+        device_info.present_family,
+    ];
+
+    auto families = all_families[].filter!(f => f != uint.max).uniq();
+    const n_families = () {
+        uint count;
+        foreach (fam; families.save())
+            count++;
+        return count;
+    } ();
+
+    auto dwcis = mem.alloc_array!VkDeviceQueueCreateInfo(n_families);
+    auto priority = mem.alloc_object!float(1.0);
+
+    foreach (i, ref ci; dwcis) {
+        ci.queueFamilyIndex = families.front;
+        ci.queueCount = 1;
+        ci.pQueuePriorities = priority;
+
+        families.popFront();
     }
 
-    static insert(ref Array!VkDeviceQueueCreateInfo queues, uint q_index, uint q_count) {
-        auto location = get_queue(queues, q_index);
-        if (location == size_t.max) {
-            VkDeviceQueueCreateInfo queue = {
-                queueFamilyIndex: q_index,
-                queueCount: q_count
-            };
-
-            queues ~= queue;
-        }
-        else {
-            queues[location].queueCount = max(q_count, queues[location].queueCount);
-        }
-    }
-
-    // Graphics + Compute + Transfer
-    auto queues = Array!VkDeviceQueueCreateInfo(0, mem);
-
-    with (device) {
-        if (num_transfer_queues)
-            insert(queues, transfer_queue_family_index, num_transfer_queues);
-
-        if (num_graphics_queues)
-            insert(queues, graphics_queue_family_index, num_graphics_queues);
-
-        if (num_compute_queues)
-            insert(queues, compute_queue_family_index, num_compute_queues);
-
-        if (num_present_queues)
-            insert(queues, present_queue_family_index, num_present_queues);
-    }
-
-    foreach (ref q; queues)
-        q.pQueuePriorities = mem.alloc_array!float(q.queueCount, 1.0).ptr;
-
-    return queues;
+    return dwcis;
 }

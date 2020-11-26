@@ -16,7 +16,7 @@ public nothrow:
 
     // TODO: Implement realloc for resizing allocations
 
-    PtrType!T alloc(T, Args...)(Args args) {
+    PtrType!T alloc_object(T, Args...)(Args args) {
         auto mem = alloc(object_size!T, object_alignment!T);
         return mem ? mem.emplace_obj!T(args) : null;
     }
