@@ -1,0 +1,23 @@
+Microsoft Visual Studio Solution File, Format Version 11.00
+# Visual Studio 2010
+Project("{90C64696-3BDA-429F-B3C0-6949FB144A95}") = "sandbox", ".dub/sandbox.visualdproj", "{9DA75557-8E5C-47C3-A63D-EE8BE5A630C2}"
+	ProjectSection(ProjectDependencies) = postProject
+		{B264515A-5C7D-480B-9825-4FCF1E3F8BC8} = {B264515A-5C7D-480B-9825-4FCF1E3F8BC8}
+	EndProjectSection
+EndProject
+Project("{90C64696-3BDA-429F-B3C0-6949FB144A95}") = "flare", ".dub/flare.visualdproj", "{B264515A-5C7D-480B-9825-4FCF1E3F8BC8}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		debug|x64 = debug|x64
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{9DA75557-8E5C-47C3-A63D-EE8BE5A630C2}.debug|x64.ActiveCfg = debug|x64
+		{9DA75557-8E5C-47C3-A63D-EE8BE5A630C2}.debug|x64.Build.0 = debug|x64
+		{B264515A-5C7D-480B-9825-4FCF1E3F8BC8}.debug|x64.ActiveCfg = debug|x64
+		{B264515A-5C7D-480B-9825-4FCF1E3F8BC8}.debug|x64.Build.0 = debug|x64
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+EndGlobal

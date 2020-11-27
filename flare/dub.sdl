@@ -4,4 +4,11 @@ authors "David"
 copyright "Copyright © 2020, David"
 license "proprietary"
 
-dependency "erupted" version="~>2.1.9"
+subPackage "./app"
+subPackage "./core"
+subPackage "./display"
+subPackage "./input"
+subPackage "./renderer"
+subPackage "./ui"
+
+targetType "none"

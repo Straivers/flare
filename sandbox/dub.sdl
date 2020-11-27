@@ -4,7 +4,6 @@ authors "David Zhang"
 copyright "Copyright © 2020, David Zhang"
 license "proprietary"
 
-dependency "flare" path="../flare"
-// dependency "libcore" path="../libcore"
-// dependency "libpresent" path="../libpresent"
-// dependency "libvulkan" path="../libvulkan"
+dependency "flare:app" path="../flare"
+
+targetType "executable"

@@ -1,0 +1,5 @@
+name "app"
+
+dependency "flare:renderer" version="*"
+dependency "flare:display" version="*"
+dependency "flare:ui" version="*"
