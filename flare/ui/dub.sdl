@@ -1,4 +1,0 @@
-name "ui"
-
-dependency "flare:core" version="*"
-dependency "flare:input" version="*"

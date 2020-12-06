@@ -1,0 +1,4 @@
+.vs/
+build/
+sandbox.sln
+shaders/*.spv

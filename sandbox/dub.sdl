@@ -7,3 +7,4 @@ license "proprietary"
 dependency "flare:app" path="../flare"
 
 targetType "executable"
+targetPath "build"

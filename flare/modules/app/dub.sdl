@@ -1,0 +1,6 @@
+name "app"
+targetPath "../../build"
+
+dependency "flare:renderer" version="*"
+dependency "flare:display" version="*"
+dependency "flare:ui" version="*"

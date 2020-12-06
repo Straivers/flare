@@ -1,0 +1,6 @@
+name "renderer"
+targetPath "../../build"
+
+dependency "flare:core" version="*"
+dependency "flare:display" version="*"
+dependency "erupted" version="~>2.1.12"
