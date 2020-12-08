@@ -56,12 +56,11 @@ public import flare.renderer.vulkan.gpu;
 
 /**
  Functions:
-   load_swapchain_support
-   create_swapchain
    create_surface
+   create_vulkan_window
+   destroy_vulkan_window
 
  Types:
-   Swapchain
-   SwapchainSupport
+   VulkanWindow
  */
-public import flare.renderer.vulkan.swapchain;
+public import flare.renderer.vulkan.vk_window;

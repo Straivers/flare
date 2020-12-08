@@ -94,69 +94,6 @@ VkPipeline create_pipeline(VulkanDevice device, VkExtent2D viewport_size, VkShad
     return pipeline[0];
 }
 
-VkRenderPass create_render_pass(VulkanDevice device, VkFormat color_format) {
-    VkAttachmentDescription color_attachment = {
-        format: color_format,
-        samples: VK_SAMPLE_COUNT_1_BIT,
-        loadOp: VK_ATTACHMENT_LOAD_OP_CLEAR,
-        storeOp: VK_ATTACHMENT_STORE_OP_STORE,
-        stencilLoadOp: VK_ATTACHMENT_LOAD_OP_DONT_CARE,
-        stencilStoreOp: VK_ATTACHMENT_STORE_OP_DONT_CARE,
-        initialLayout: VK_IMAGE_LAYOUT_UNDEFINED,
-        finalLayout: VK_IMAGE_LAYOUT_PRESENT_SRC_KHR
-    };
-
-    VkAttachmentReference color_attachment_ref = {
-        attachment: 0,
-        layout: VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL
-    };
-
-    VkSubpassDescription subpass = {
-        pipelineBindPoint: VK_PIPELINE_BIND_POINT_GRAPHICS,
-        colorAttachmentCount: 1,
-        pColorAttachments: &color_attachment_ref
-    };
-
-    VkSubpassDependency dependency = {
-        srcSubpass: VK_SUBPASS_EXTERNAL,
-        dstSubpass: 0,
-        srcStageMask: VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
-        srcAccessMask: 0,
-        dstStageMask: VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
-        dstAccessMask: VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
-    };
-
-    VkRenderPassCreateInfo ci = {
-        attachmentCount: 1,
-        pAttachments: &color_attachment,
-        subpassCount: 1,
-        pSubpasses: &subpass,
-        dependencyCount: 1,
-        pDependencies: &dependency
-    };
-
-    VkRenderPass render_pass;
-    device.d_create_render_pass(&ci, &render_pass);
-    return render_pass;
-}
-
-void create_framebuffers(VulkanDevice device, VkExtent2D size, VkRenderPass render_pass, VkImageView[] views, VkFramebuffer[] buffers) {
-    assert(views.length == buffers.length);
-
-    foreach (i, ref buffer; buffers) {
-        VkFramebufferCreateInfo ci = {
-            renderPass: render_pass,
-            attachmentCount: 1,
-            pAttachments: &views[i],
-            width: size.width,
-            height: size.height,
-            layers: 1
-        };
-
-        device.d_create_framebuffer(&ci, &buffer);
-    }
-}
-
 VkPipelineLayout create_pipeline_layout(VulkanDevice device) {
     VkPipelineLayoutCreateInfo ci = {
 

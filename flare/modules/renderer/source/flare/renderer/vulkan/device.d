@@ -5,38 +5,58 @@ import flare.renderer.vulkan.context;
 import flare.renderer.vulkan.gpu;
 import flare.renderer.vulkan.h;
 
-immutable device_funcs = [
-    "vkDestroyDevice",
-    "vkGetDeviceQueue",
-    "vkQueueWaitIdle",
-    "vkDeviceWaitIdle",
-    "vkCreateSemaphore",
-    "vkDestroySemaphore",
-    "vkCreateSwapchainKHR",
-    "vkDestroySwapchainKHR",
-    "vkGetSwapchainImagesKHR",
-    "vkAcquireNextImageKHR",
-    "vkQueuePresentKHR",
-    "vkCreateImageView",
-    "vkDestroyImageView",
-    "vkCreateShaderModule",
-    "vkDestroyShaderModule",
-    "vkCreatePipelineLayout",
-    "vkDestroyPipelineLayout",
-    "vkCreateRenderPass",
-    "vkDestroyRenderPass",
-    "vkCreateGraphicsPipelines",
-    "vkDestroyPipeline",
-    "vkCreateFramebuffer",
-    "vkDestroyFramebuffer",
-    "vkCreateCommandPool",
-    "vkDestroyCommandPool",
-    "vkAllocateCommandBuffers",
-    "vkFreeCommandBuffers"
-];
+struct VulkanDeviceDispatchTable {
+    this(VulkanDevice device) {
+        static foreach (func; func_names) {
+            mixin(func ~ " = cast(PFN_" ~ func ~ ") vkGetDeviceProcAddr(device.handle, \"" ~ func ~ "\");");
+            mixin("assert(" ~ func ~ ", \"Could not load " ~ func ~ "\");");
+        }
+    }
+
+    auto opDispatch(string op, Args...)(Args args) {
+        mixin("return vk" ~ op ~ "(args);");
+    }
+
+private:
+    static immutable func_names = [
+        "vkDestroyDevice",
+        "vkGetDeviceQueue",
+        "vkQueueWaitIdle",
+        "vkDeviceWaitIdle",
+        "vkCreateSemaphore",
+        "vkDestroySemaphore",
+        "vkCreateFence",
+        "vkDestroyFence",
+        "vkResetFences",
+        "vkWaitForFences",
+        "vkCreateSwapchainKHR",
+        "vkDestroySwapchainKHR",
+        "vkGetSwapchainImagesKHR",
+        "vkAcquireNextImageKHR",
+        "vkQueuePresentKHR",
+        "vkCreateImageView",
+        "vkDestroyImageView",
+        "vkCreateShaderModule",
+        "vkDestroyShaderModule",
+        "vkCreatePipelineLayout",
+        "vkDestroyPipelineLayout",
+        "vkCreateRenderPass",
+        "vkDestroyRenderPass",
+        "vkCreateGraphicsPipelines",
+        "vkDestroyPipeline",
+        "vkCreateFramebuffer",
+        "vkDestroyFramebuffer",
+        "vkCreateCommandPool",
+        "vkDestroyCommandPool",
+        "vkAllocateCommandBuffers",
+        "vkFreeCommandBuffers"
+    ];
+
+    static foreach (func; func_names)
+        mixin("PFN_" ~ func ~ " " ~ func ~ ";");
+}
 
 final class VulkanDevice {
-
     enum max_queues_per_family = 16;
 
 public:
@@ -44,7 +64,7 @@ public:
     alias gpu this;
 
     ~this() {
-        vkDestroyDevice(handle, null);
+        _dispatch.DestroyDevice(handle, null);
     }
 
     VkDevice handle() const {
@@ -71,11 +91,15 @@ public:
         return get_queue!"transfer"();
     }
 
+    VulkanDeviceDispatchTable* dispatch_table() {
+        return &_dispatch;
+    }
+
     VkSemaphore create_semaphore() {
         VkSemaphoreCreateInfo ci;
         VkSemaphore semaphore;
-        const err = vkCreateSemaphore(handle, &ci, null, &semaphore);
 
+        const err = _dispatch.CreateSemaphore(handle, &ci, null, &semaphore);
         if (err != VK_SUCCESS) {
             context.logger.fatal("Call to vkCreateSemaphore failed: %s", err);
             assert(0, "Call to vkCreateSemaphore failed");
@@ -85,19 +109,49 @@ public:
     }
 
     void destroy_semaphore(VkSemaphore semaphore) {
-        vkDestroySemaphore(handle, semaphore, null);
+        _dispatch.DestroySemaphore(handle, semaphore, null);
+    }
+
+    VkFence create_fence(bool start_signalled = false) {
+        VkFenceCreateInfo ci;
+
+        if (start_signalled)
+            ci.flags = VK_FENCE_CREATE_SIGNALED_BIT;
+
+        VkFence fence;
+        const err = _dispatch.CreateFence(handle, &ci, null, &fence);
+        if (err != VK_SUCCESS) {
+            context.logger.fatal("Call to vkCreateFence failed: %s", err);
+            assert(0, "Call to vkCreateFence failed");
+        }
+
+        return fence;
+    }
+
+    void destroy_fence(VkFence fence) {
+        _dispatch.DestroyFence(handle, fence, null);
+    }
+
+    void reset_fences(VkFence[] fences...) {
+        const err = _dispatch.ResetFences(handle, cast(uint) fences.length, fences.ptr);
+        assert(err == VK_SUCCESS);
+    }
+
+    void wait_fences(bool wait_all, VkFence[] fences...) {
+        const err = _dispatch.WaitForFences(handle, cast(uint) fences.length, fences.ptr, wait_all ? VK_TRUE : VK_FALSE, ulong.max);
+        assert(err == VK_SUCCESS);
     }
 
     void wait_idle() {
-        vkDeviceWaitIdle(handle);
+        _dispatch.DeviceWaitIdle(handle);
     }
 
     void wait_idle(VkQueue queue) {
-        vkQueueWaitIdle(queue);
+        _dispatch.QueueWaitIdle(queue);
     }
 
     void d_create_swapchain(VkSwapchainCreateInfoKHR* sci, VkSwapchainKHR* result) {
-        const err = vkCreateSwapchainKHR(handle, sci, null, result);
+        const err = _dispatch.CreateSwapchainKHR(handle, sci, null, result);
         if (err != VK_SUCCESS) {
             context.logger.fatal("Call to vkCreateSwapchainKHR failed: %s", err);
             assert(0, "Call to vkCreateSwapchainKHR failed");
@@ -105,11 +159,11 @@ public:
     }
 
     void d_destroy_swapchain(VkSwapchainKHR swapchain) {
-        vkDestroySwapchainKHR(handle, swapchain, null);
+        _dispatch.DestroySwapchainKHR(handle, swapchain, null);
     }
 
     void d_acquire_next_image(VkSwapchainKHR swapchain, ulong timeout, VkSemaphore semaphore, VkFence fence, uint* image_index) {
-        const err = vkAcquireNextImageKHR(handle, swapchain, timeout, semaphore, fence, image_index);
+        const err = _dispatch.AcquireNextImageKHR(handle, swapchain, timeout, semaphore, fence, image_index);
         if (err != VK_SUCCESS) {
             context.logger.fatal("Call to vkAcquireNextImageKHR failed: %s", err);
             assert(0, "Call to vkAcquireNextImageKHR failed");
@@ -117,7 +171,7 @@ public:
     }
 
     void d_get_swapchain_images(VkSwapchainKHR swapchain, uint* count, VkImage* images) {
-        const err = vkGetSwapchainImagesKHR(handle, swapchain, count, images);
+        const err = _dispatch.GetSwapchainImagesKHR(handle, swapchain, count, images);
         if (err != VK_SUCCESS) {
             context.logger.fatal("Call to vkGetSwapchainImagesKHR failed: %s", err);
             assert(0, "Call to vkGetSwapchainImagesKHR failed");
@@ -125,7 +179,7 @@ public:
     }
 
     void d_queue_present(VkQueue queue, VkPresentInfoKHR* pi) {
-        const err = vkQueuePresentKHR(queue, pi);
+        const err = _dispatch.QueuePresentKHR(queue, pi);
         if (err != VK_SUCCESS) {
             context.logger.fatal("Call to vkQueuePresent failed: %s", err);
             assert(0, "Call to vkQueuePresent failed");
@@ -133,7 +187,7 @@ public:
     }
 
     void d_create_image_view(VkImageViewCreateInfo* vci, VkImageView* result) {
-        const err = vkCreateImageView(handle, vci, null, result);
+        const err = _dispatch.CreateImageView(handle, vci, null, result);
         if (err != VK_SUCCESS) {
             context.logger.fatal("Call to vkCreateImageView failed: %s", err);
             assert(0, "Call to vkCreateImageView failed");
@@ -141,11 +195,11 @@ public:
     }
 
     void d_destroy_image_view(VkImageView view) {
-        vkDestroyImageView(handle, view, null);
+        _dispatch.DestroyImageView(handle, view, null);
     }
 
     void d_create_shader_module(VkShaderModuleCreateInfo* ci, VkShaderModule* result) {
-        const err = vkCreateShaderModule(handle, ci, null, result);
+        const err = _dispatch.CreateShaderModule(handle, ci, null, result);
         if (err != VK_SUCCESS) {
             context.logger.fatal("Call to vkCreateShaderModule failed: %s", err);
             assert(0, "Call to vkCreateShaderModule failed");
@@ -153,11 +207,11 @@ public:
     }
 
     void d_destroy_shader_module(VkShaderModule shader) {
-        vkDestroyShaderModule(handle, shader, null);
+        _dispatch.DestroyShaderModule(handle, shader, null);
     }
 
     void d_create_pipeline_layout(VkPipelineLayoutCreateInfo* ci, VkPipelineLayout* result) {
-        const err = vkCreatePipelineLayout(handle, ci, null, result);
+        const err = _dispatch.CreatePipelineLayout(handle, ci, null, result);
         if (err != VK_SUCCESS) {
             context.logger.fatal("Call to vkCreatePipelineLayout failed: %s", err);
             assert(0, "Call to vkCreatePipelineLayout failed");
@@ -165,11 +219,11 @@ public:
     }
 
     void d_destroy_pipeline_layout(VkPipelineLayout pipeline) {
-        vkDestroyPipelineLayout(handle, pipeline, null);
+        _dispatch.DestroyPipelineLayout(handle, pipeline, null);
     }
 
     void d_create_render_pass(VkRenderPassCreateInfo* ci, VkRenderPass* result) {
-        const err = vkCreateRenderPass(handle, ci, null, result);
+        const err = _dispatch.CreateRenderPass(handle, ci, null, result);
         if (err != VK_SUCCESS) {
             context.logger.fatal("Call to vkCreateRenderPass failed: %s", err);
             assert(0, "Call to vkCreateRenderPass failed");
@@ -177,12 +231,12 @@ public:
     }
 
     void d_destroy_render_pass(VkRenderPass pass) {
-        vkDestroyRenderPass(handle, pass, null);
+        _dispatch.DestroyRenderPass(handle, pass, null);
     }
 
     void d_create_graphics_pipelines(VkPipelineCache cache, VkGraphicsPipelineCreateInfo[] infos, VkPipeline[] result) {
         assert(infos.length == result.length);
-        const err = vkCreateGraphicsPipelines(handle, cache, cast(uint) infos.length, infos.ptr, null, result.ptr);
+        const err = _dispatch.CreateGraphicsPipelines(handle, cache, cast(uint) infos.length, infos.ptr, null, result.ptr);
         if (err != VK_SUCCESS) {
             context.logger.fatal("Call to vkCreateGraphicsPipelines failed: %s", err);
             assert(0, "Call to vkCreateGraphicsPipelines failed");
@@ -190,11 +244,11 @@ public:
     }
 
     void d_destroy_pipeline(VkPipeline pipeline) {
-        vkDestroyPipeline(handle, pipeline, null);
+        _dispatch.DestroyPipeline(handle, pipeline, null);
     }
 
     void d_create_framebuffer(VkFramebufferCreateInfo* ci, VkFramebuffer* result) {
-        const err = vkCreateFramebuffer(handle, ci, null, result);
+        const err = _dispatch.CreateFramebuffer(handle, ci, null, result);
         if (err != VK_SUCCESS) {
             context.logger.fatal("Call to vkCreateFramebuffer failed: %s", err);
             assert(0, "Call to vkCreateFramebuffer failed");
@@ -202,11 +256,11 @@ public:
     }
 
     void d_destroy_framebuffer(VkFramebuffer buffer) {
-        vkDestroyFramebuffer(handle, buffer, null);
+        _dispatch.DestroyFramebuffer(handle, buffer, null);
     }
 
     void d_create_command_pool(VkCommandPoolCreateInfo* ci, VkCommandPool* result) {
-        const err = vkCreateCommandPool(handle, ci, null, result);
+        const err = _dispatch.CreateCommandPool(handle, ci, null, result);
         if (err != VK_SUCCESS) {
             context.logger.fatal("Call to vkCreateCommandPool failed: %s", err);
             assert(0, "Call to vkCreateCommandPool failed");
@@ -214,11 +268,11 @@ public:
     }
 
     void d_destroy_command_pool(VkCommandPool pool) {
-        vkDestroyCommandPool(handle, pool, null);
+        _dispatch.DestroyCommandPool(handle, pool, null);
     }
 
     void d_allocate_command_buffers(VkCommandBufferAllocateInfo* ai, VkCommandBuffer[] buffers) {
-        const err = vkAllocateCommandBuffers(handle, ai, buffers.ptr);
+        const err = _dispatch.AllocateCommandBuffers(handle, ai, buffers.ptr);
         if (err != VK_SUCCESS) {
             context.logger.fatal("Call to vkAllocateCommandBuffers failed: %s", err);
             assert(0, "Call to vkAllocateCommandBuffers failed");
@@ -228,26 +282,19 @@ public:
 private:
     const VkDevice _handle;
     VulkanContext _context;
-
-    static foreach (func; device_funcs)
-        mixin("PFN_" ~ func ~ " " ~ func ~ ";");
+    VulkanDeviceDispatchTable _dispatch;
 
     this(VulkanContext ctx, VkDevice dev, ref VulkanGpuInfo device_info) {
         _context = ctx;
         _handle = dev;
         this.gpu = device_info;
-        load_device_functions();
-    }
-
-    void load_device_functions() {
-        static foreach (func; device_funcs)
-            mixin(func ~ " = cast(PFN_" ~ func ~ ") vkGetDeviceProcAddr(handle, \"" ~ func ~ "\");");
+        _dispatch = VulkanDeviceDispatchTable(this);
     }
 
     VkQueue get_queue(string name)() {
         VkQueue queue;
         mixin("assert(gpu." ~ name ~ "_family != uint.max);");
-        mixin("vkGetDeviceQueue(handle, gpu." ~ name ~ "_family, 0, &queue);");
+        mixin("_dispatch.GetDeviceQueue(handle, gpu." ~ name ~ "_family, 0, &queue);");
         return queue;
     }
 }

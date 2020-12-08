@@ -26,12 +26,12 @@ final class CommandPool {
         }
     }
 
-    void free(VkCommandBuffer[] buffers) {
+    void free(VkCommandBuffer[] buffers...) {
         vkFreeCommandBuffers(_device.handle, handle, cast(uint) buffers.length, buffers.ptr);
     }
 
-    void submit(VkQueue queue, VkSubmitInfo[] submissions...) {
-        const err = vkQueueSubmit(queue, cast(uint) submissions.length, submissions.ptr, null);
+    void submit(VkQueue queue, VkFence fence_on_complete, VkSubmitInfo[] submissions...) {
+        const err = vkQueueSubmit(queue, cast(uint) submissions.length, submissions.ptr, fence_on_complete);
         if (err != VK_SUCCESS) {
             _device.context.logger.fatal("Failed call to vkQueueSubmit: %s", err);
             assert(0, "Failed call to vkQueueSubmit");
