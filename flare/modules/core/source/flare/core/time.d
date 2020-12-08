@@ -28,28 +28,41 @@ struct Duration {
  An instant in time in a more digestible format with millisecond resolution.
  */
 struct TimeStamp {
+    import std.bitmanip: bitfields;
+
     alias StringBuffer = char[23];
 
     /// The year of the Gregorian Calendar.
     short year;
-    /// The month of a Gregorian year. 0 is January.
-    ubyte month;
-    /// The day of a Gregorian month.
-    ubyte day;
-    /// Hours past midnight, between 0-23.
-    ubyte hour;
-    /// Minutes past the current hour, between 0-59.
-    ubyte minute;
-    /// Seconds past the current minute between 0-60. It will only be 60 on a
-    /// leap second.
-    ubyte second;
+
     /// Milliseconds past the current second.
-    short milliseconds;
+    ushort milliseconds;
+
+@safe @nogc pure nothrow:
+
+    mixin(bitfields!(
+        uint, "month", 5,
+        uint, "day", 4,
+        uint, "hour", 6,
+        uint, "minute", 7,
+        uint, "second", 7,
+        uint, "", 3
+    ));
+
+    this(short year, uint month, uint day, uint hour, uint minute, uint second, ushort milliseconds) {
+        this.year = year;
+        this.month = month;
+        this.day = day;
+        this.hour = hour;
+        this.minute = minute;
+        this.second = second;
+        this.milliseconds = milliseconds;
+    }
 
     /// Writes the time as a string in ISO 8601 form to the buffer.
     ///
     /// Returns: The portion of the buffer that was written to.
-    char[] write_string(char[] buffer) @safe @nogc const pure nothrow {
+    char[] write_string(char[] buffer) const {
         // We use our own conversion to chars to ensure @nogc compatibility.
         import flare.core.buffer_writer : Writer;
         import flare.core.conv : to_chars;

@@ -42,26 +42,35 @@ enum LogLevel : ubyte {
  */
 struct LogEvent {
 @safe @nogc pure nothrow:
-    static assert(typeof(this).sizeof == 256);
+    struct Header {
+        /// The time at which the log was generated.
+        TimeStamp time;
+        /// The level of detail at which this log event was created.
+        LogLevel level;
+        ubyte[1] pad;
+        /// The length of the string message.
+        ushort message_length;
+        /// The line within the file where the log event was created.
+        uint line;
+        /// The name of the file where the log event was created.
+        string module_name;
+        /// The name of the function that generated the log event.
+        string func_name;
+    }
+
+    /// The size of an event in bytes.
+    enum event_size = 512;
 
     /// The maximum length of any log message. This does not include the
     /// timestamp and other metadata.
-    enum max_message_length = 208;
+    enum max_message_length = event_size - Header.sizeof;
 
-    /// The time at which the log was generated.
-    TimeStamp time;
-    /// The level of detail at which this log event was created.
-    LogLevel level;
-    /// The length of the string message.
-    ubyte message_length;
-    /// The line within the file where the log event was created.
-    uint line;
-    /// The name of the file where the log event was created.
-    string module_name;
-    /// The name of the function that generated the log event.
-    string func_name;
+    /// Message header
+    Header header;
     /// The message provided by the creator of the log event.
     char[max_message_length] message_storage;
+
+    alias header this;
 
     /// Constructs a log event without a message.
     this(TimeStamp time, LogLevel lod, string mod, uint line, string func) {
@@ -75,7 +84,7 @@ struct LogEvent {
     ///
     void set_message(in char[] message)
     in (message.length <= message_storage.length) {
-        message_length = cast(ubyte) message.length;
+        message_length = cast(ushort) message.length;
         message_storage[0 .. message_length] = message;
     }
 
@@ -259,14 +268,8 @@ interface LogEventSink {
 
 /**
  Colorized `stdout` implementation of LogEventSink.
-
- Log events are buffered up to `event_buffer_size` events.
  */
 final class ConsoleLogger : LogEventSink {
-
-    /// The number of log events to buffer before writing them out to `stdout`.
-    enum event_buffer_size = 2;
-
 public:
     this(bool colorize) {
         _colorized = colorize;
@@ -277,51 +280,45 @@ public:
     }
 
     override void log_event(in LogEvent event) {
-        if (_buff_size == _buffer.length)
-            flush();
-
-        _buffer[_buff_size] = event;
-        _buff_size++;
-    }
-
-    override void flush() {
         import std.format : formattedWrite;
         import flare.core.buffer_writer : Writer;
         import core.stdc.stdio : printf;
 
-        char[512] out_buffer;
+        enum n_metadata_chars = 64;
+
+        char[LogEvent.max_message_length + n_metadata_chars] out_buffer;
         TimeStamp.StringBuffer ts_buffer;
 
         auto writer = Writer!char(out_buffer);
-        foreach (ref event; _buffer[0 .. _buff_size]) {
-            auto ts = event.time.write_string(ts_buffer);
+        auto ts = event.time.write_string(ts_buffer);
 
-            try {
-                if (_colorized)
-                    writer.put(colors[event.level]);
+        try {
+            if (_colorized)
+                writer.put(colors[event.level]);
 
-                writer.formattedWrite!"%23s %s"(ts, text[event.level]);
-                debug writer.formattedWrite!"{%s:%s} "(event.module_name, event.line);
-                writer.put(event.get_message());
-                writer.put("\033[0m\n\0");
-                () @trusted { printf(&writer.data()[0]); }();
-            }
-            catch (Exception e)
-                return;
-            finally
-                writer.clear();
+            writer.formattedWrite!"%23s %s"(ts, text[event.level]);
+            debug writer.formattedWrite!"{%s:%s} "(event.module_name, event.line);
+
+            writer.put(event.get_message());
+            writer.put(clear_colors);
+            writer.put("\n\0");
+
+            () @trusted { printf(&writer.data()[0]); }();
         }
+        catch (Exception e)
+            return;
+    }
 
-        _buff_size = 0;
+    override void flush() {
+        // no-op
     }
 
     override void end_logging() {
-        flush();
     }
 
 private:
     // dfmt off
-    immutable colors = [
+    static immutable colors = [
         ""       , // LogLevel.All
         "\033[0m", // LogLevel.Trace
         "\033[96m", // LogLevel.Info
@@ -330,7 +327,7 @@ private:
         "\033[91m", // LogLevel.Fatal
     ];
 
-    immutable text = [
+    static immutable text = [
         "",         // LogLevel.All
         "[Trace] ",  // LogLevel.Trace
         "[Info ] ",   // LogLevel.Info
@@ -340,7 +337,7 @@ private:
     ];
     // dfmt on
 
+    static immutable clear_colors = "\033[0m";
+
     bool _colorized;
-    ubyte _buff_size;
-    LogEvent[event_buffer_size] _buffer;
 }
