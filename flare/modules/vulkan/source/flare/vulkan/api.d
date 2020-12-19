@@ -1,7 +1,7 @@
 /**
  Application-agnostic Vulkan wrappers for convenience and improved correctness.
  */
-module flare.renderer.vulkan.api;
+module flare.vulkan.api;
 
 /**
  Functions:
@@ -13,12 +13,12 @@ module flare.renderer.vulkan.api;
  Constants:
    device_funcs
  */
-public import flare.renderer.vulkan.device;
+public import flare.vulkan.device;
 
 /**
  Machine-translated Vulkan headers
  */
-public import flare.renderer.vulkan.h;
+public import flare.vulkan.h;
 
 /**
  Functions:
@@ -32,7 +32,7 @@ public import flare.renderer.vulkan.h;
     VK_LAYER_LUNARG_API_DUMP_NAME
     VK_LAYER_KHRONOS_VALIDATION_NAME
  */
-public import flare.renderer.vulkan.context;
+public import flare.vulkan.context;
 
 /**
  Functions:
@@ -41,7 +41,7 @@ public import flare.renderer.vulkan.context;
   Types:
       CommandPool
  */
-public import flare.renderer.vulkan.commands;
+public import flare.vulkan.commands;
 
 /**
  Functions:
@@ -52,15 +52,18 @@ public import flare.renderer.vulkan.commands;
     VulkanGpuInfo
     VulkanDeviceCriteria
  */
-public import flare.renderer.vulkan.gpu;
+public import flare.vulkan.gpu;
 
 /**
  Functions:
    create_surface
-   create_vulkan_window
-   destroy_vulkan_window
+   create_swapchain
+   destroy_swapchain
 
  Types:
-   VulkanWindow
+   Frame
+   FrameSemaphores
+   Swapchain
+   SwapchainImage
  */
-public import flare.renderer.vulkan.vk_window;
+public import flare.vulkan.swapchain;

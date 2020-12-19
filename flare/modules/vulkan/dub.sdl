@@ -1,5 +1,6 @@
-name "renderer"
+name "vulkan"
+
 targetPath "../../build"
 
 dependency "flare:core" version="*"
-dependency "flare:vulkan" version="*"
+dependency "erupted" version="~>2.1.12"

@@ -1,5 +1,7 @@
 module flare.core.memory.measures;
 
+nothrow:
+
 // dfmt off
 size_t kib(size_t n) { return n * 1024; }
 size_t mib(size_t n) { return n * (1024 ^^ 2); }

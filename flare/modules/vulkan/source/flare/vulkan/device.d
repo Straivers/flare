@@ -1,11 +1,14 @@
-module flare.renderer.vulkan.device;
+module flare.vulkan.device;
 
 import flare.core.memory.temp;
-import flare.renderer.vulkan.context;
-import flare.renderer.vulkan.gpu;
-import flare.renderer.vulkan.h;
+import flare.vulkan.context;
+import flare.vulkan.gpu;
+import flare.vulkan.h;
+
+nothrow:
 
 struct VulkanDeviceDispatchTable {
+nothrow:
     this(VulkanDevice device) {
         static foreach (func; func_names) {
             mixin(func ~ " = cast(PFN_" ~ func ~ ") vkGetDeviceProcAddr(device.handle, \"" ~ func ~ "\");");
@@ -59,7 +62,7 @@ private:
 final class VulkanDevice {
     enum max_queues_per_family = 16;
 
-public:
+nothrow public:
     VulkanGpuInfo gpu;
     alias gpu this;
 
@@ -279,7 +282,7 @@ public:
         }
     }
 
-private:
+nothrow private:
     const VkDevice _handle;
     VulkanContext _context;
     VulkanDeviceDispatchTable _dispatch;
@@ -300,7 +303,7 @@ private:
 }
 
 VulkanDevice create_device(ref VulkanContext ctx, ref VulkanGpuInfo gpu) {
-    import flare.renderer.vulkan.compat: to_cstr_array;
+    import flare.vulkan.compat: to_cstr_array;
 
     auto mem = TempAllocator(ctx.memory);
     auto queues = create_queue_create_infos(gpu, mem);
@@ -320,7 +323,7 @@ VulkanDevice create_device(ref VulkanContext ctx, ref VulkanGpuInfo gpu) {
     // dfmt on
 
     VkDevice device;
-    const err = vkCreateDevice(gpu.device, &dci, null, &device);
+    const err = vkCreateDevice(gpu.handle, &dci, null, &device);
 
     if (err != VK_SUCCESS) {
         ctx.logger.fatal("Could not create Vulkan device: %s", err);

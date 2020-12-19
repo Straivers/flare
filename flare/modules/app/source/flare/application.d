@@ -1,6 +1,6 @@
 module flare.application;
 
-import flare.display.window_manager;
+import flare.display.display_manager;
 import flare.core.logger;
 
 enum uint flare_version_major = 0;
@@ -8,7 +8,7 @@ enum uint flare_version_minor = 1;
 enum uint flare_version_patch = 0;
 
 struct FlareAppSettings {
-    string name = "Flare Application";
+    const(char)[] name = "Flare Application";
     ushort main_window_width = 1280;
     ushort main_window_height = 720;
 }
@@ -20,11 +20,11 @@ abstract class FlareApp {
         log.all("Flare Engine v%s.%s.%s", flare_version_major, flare_version_minor, flare_version_patch);
 
         app_settings = settings;
-
-        window_manager = WindowManager(&log);
+        display_manager = new DisplayManager();
     }
 
     ~this() {
+        destroy(display_manager);
     }
 
     abstract void on_init();
@@ -34,7 +34,7 @@ abstract class FlareApp {
     abstract void run();
 
     Logger log;
-    WindowManager window_manager;
+    DisplayManager display_manager;
     FlareAppSettings app_settings;
 }
 

@@ -1,4 +1,4 @@
-module flare.renderer.vulkan.compat;
+module flare.vulkan.compat;
 
 import flare.core.memory.api;
 

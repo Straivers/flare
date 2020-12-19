@@ -1,8 +1,8 @@
-module flare.renderer.vulkan.context;
+module flare.vulkan.context;
 
 import flare.core.logger : Logger;
 import flare.core.memory.api : Allocator;
-import flare.renderer.vulkan.h;
+import flare.vulkan.h;
 
 enum VK_LAYER_LUNARG_API_DUMP_NAME = "VK_LAYER_LUNARG_api_dump";
 enum VK_LAYER_KHRONOS_VALIDATION_NAME = "VK_LAYER_KHRONOS_validation";
@@ -50,7 +50,7 @@ void load_vulkan() {
 }
 
 VkInstance create_instance(ref ContextOptions options) {
-    import flare.renderer.vulkan.compat: to_cstr_array;
+    import flare.vulkan.compat: to_cstr_array;
     import flare.core.memory.temp: TempAllocator, kib;
 
     VkApplicationInfo ai = {

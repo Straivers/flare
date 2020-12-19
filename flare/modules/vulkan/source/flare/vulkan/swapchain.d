@@ -1,10 +1,12 @@
-module flare.renderer.vulkan.vk_window;
+module flare.vulkan.swapchain;
 
 import flare.core.memory.temp;
-import flare.renderer.vulkan.commands;
-import flare.renderer.vulkan.context;
-import flare.renderer.vulkan.device;
-import flare.renderer.vulkan.h;
+import flare.vulkan.commands;
+import flare.vulkan.context;
+import flare.vulkan.device;
+import flare.vulkan.h;
+
+nothrow:
 
 version (Windows) {
     import core.sys.windows.windows : GetModuleHandle, HWND, NULL;
@@ -23,61 +25,65 @@ version (Windows) {
     }
 }
 
-/**
- Vulkan-specific information about how to present to a window.
- */
-struct VulkanWindow {
-    /// Triple buffered
-    enum num_images_preferred = 3;
+struct Frame {
+    uint index;
+    VkFramebuffer framebuffer;
 
-    /// The information required to draw to a single frame buffer.
-    struct Frame {
-        /// The image memory backing the framebuffer.
-        VkImage image;
+    VkFence frame_complete_fence;
+    VkSemaphore image_acquire;
+    VkSemaphore render_complete;
 
-        /// The image view used by the framebuffer.
-        VkImageView view;
-
-        /// The framebuffer for this frame.
-        VkFramebuffer framebuffer;
-
-        /// The buffer to write commands to for this frame.
-        /// TODO: Figure out how to get this out of VulkanWindow
-        VkCommandBuffer command_buffer;
-        
-        /// Fence to set when the frame has been presented.
-        VkFence frame_complete_fence;
+    bool opCast(T: bool)() const {
+        return framebuffer !is null;
     }
+}
 
-    /// Primitives to coordinate the order of operations for a frame to be rendered.
-    struct FrameSemaphores {
-        /// Semaphore to set when an image is available to be rendered to. See
-        /// `vkAcquireNextImage` and `VkSubmitInfo` for details.
-        VkSemaphore image_acquire;
+/// Primitives to coordinate the order of operations for a frame to be rendered.
+struct FrameSemaphores {
+    /// Semaphore to set when an image is available to be rendered to. See
+    /// `vkAcquireNextImage` and `VkSubmitInfo` for details.
+    VkSemaphore image_acquire;
 
-        /// Semaphore to set when the render pipeline for this frame has
-        /// completed.
-        VkSemaphore render_complete;
-    }
+    /// Semaphore to set when the render pipeline for this frame has
+    /// completed.
+    VkSemaphore render_complete;
+}
 
-    /// The logical device which created this window.
-    VulkanDevice device;
+/// The information required to draw to a single frame buffer.
+struct SwapchainImage {
+    /// 
+    uint index;
 
-    /// The surface representing the window.
-    VkSurfaceKHR surface;
+    /// The image memory backing the framebuffer.
+    VkImage image;
+
+    /// The image view used by the framebuffer.
+    VkImageView view;
+
+    /// The framebuffer for this frame.
+    VkFramebuffer framebuffer;
+
+    /// Fence to set when the frame has been presented.
+    VkFence frame_complete_fence;
+}
+
+struct Swapchain {
+nothrow:
 
     /// The swapchain of images that will be displayed to the surface.
-    VkSwapchainKHR swapchain;
+    VkSwapchainKHR handle;
 
     /// 
     VkRenderPass render_pass;
 
     /// Per-frame information for rendering.
-    Frame* frames;
+    SwapchainImage[] frames;
 
-    /// Rotating buffer of semaphores for frame synchronization.
-    FrameSemaphores* frame_semaphores;
-    
+    FrameSemaphores[] semaphores;
+
+    /// The size of every image in the swapchain.
+    VkExtent2D image_size;
+
     /// The format of the images in the swapchain.
     VkFormat format;
 
@@ -88,117 +94,80 @@ struct VulkanWindow {
     /// The format of the images in the swapchain.
     VkPresentModeKHR present_mode;
 
-    /// The size of every image in the swapchain.
-    VkExtent2D image_size;
-
     /// The number of images in the swapchain.
-    uint num_frames;
+    // uint num_frames;
+    size_t num_frames() { return frames.length; }
 
-    ref Frame current_frame() {
-        return frames[_frame_index];
+    Frame get_frame(VulkanDevice device) {
+        auto sync_pair = &semaphores[_current_semaphore_index];
+
+        device.d_acquire_next_image(handle, ulong.max, sync_pair.image_acquire, null, &_current_frame_index);
+        auto frame = &frames[_current_frame_index];
+
+        device.wait_fences(true, frame.frame_complete_fence);
+        device.reset_fences(frame.frame_complete_fence);
+
+        return Frame(
+            _current_frame_index,
+            frame.framebuffer,
+            frame.frame_complete_fence,
+            sync_pair.image_acquire,
+            sync_pair.render_complete);
     }
 
-    ref FrameSemaphores current_semaphores() {
-        return frame_semaphores[_semaphore_index];
-    }
-
-    Frame* acquire_next_frame() {
-        // Get the index of the next frame.
-        uint index;
-        device.d_acquire_next_image(swapchain, ulong.max, current_semaphores.image_acquire, null, &index);
-
-        // If the frame is still in use, wait for it.
-        device.wait_fences(true, frames[index].frame_complete_fence);
-        device.reset_fences(frames[index].frame_complete_fence);
-
-        // Finalize the frame acquisition by making it accessible by current_frame().
-        _frame_index = index;
-        return &frames[_frame_index];
-    }
-
-    void swap_buffers() {
+    void swap_buffers(VulkanDevice device) {
         VkPresentInfoKHR pi = {
             waitSemaphoreCount: 1,
-            pWaitSemaphores: &current_semaphores.render_complete,
+            pWaitSemaphores: &semaphores[_current_semaphore_index].render_complete,
             swapchainCount: 1,
-            pSwapchains: &swapchain,
-            pImageIndices: &_frame_index,
+            pSwapchains: &handle,
+            pImageIndices: &_current_frame_index,
             pResults: null,
         };
 
         device.d_queue_present(device.graphics, &pi);
 
-        // Make the next set of semaphores available for the subsequent frame.
-        _semaphore_index = (_semaphore_index + 1) % num_frames;
+        _current_semaphore_index = (_current_semaphore_index + 1) % num_frames;
+    }
+
+    bool opCast(T: bool)() const {
+        return handle != null;
     }
 
 private:
-    /// The index into frames.
-    uint _frame_index;
-
-    /// The index into frame_semaphores.
-    uint _semaphore_index;
+    uint _current_frame_index;
+    uint _current_semaphore_index;
 }
 
-void create_vulkan_window(VulkanDevice device, VkSurfaceKHR surface, CommandPool cmd_pool, out VulkanWindow window) {
-    create_swapchain(device, surface, cmd_pool, window);
-}
-
-void destroy_vulkan_window(CommandPool cmd_pool, ref VulkanWindow window) {
-    foreach (ref frame; window.frames[0 .. window.num_frames]) {
-        cmd_pool.free(frame.command_buffer);
-        window.device.d_destroy_framebuffer(frame.framebuffer);
-        window.device.d_destroy_image_view(frame.view);
-        window.device.destroy_fence(frame.frame_complete_fence);
-    }
-
-    window.device.context.memory.free(window.frames[0 .. window.num_frames]);
-
-    foreach (ref sync; window.frame_semaphores[0 .. window.num_frames]) {
-        window.device.destroy_semaphore(sync.image_acquire);
-        window.device.destroy_semaphore(sync.render_complete);
-    }
-
-    window.device.context.memory.free(window.frame_semaphores[0 .. window.num_frames]);
-
-    window.device.d_destroy_render_pass(window.render_pass);
-    window.device.d_destroy_swapchain(window.swapchain);
-    vkDestroySurfaceKHR(window.device.context.instance, window.surface, null);
-}
-
-private:
-
-void create_swapchain(VulkanDevice device, VkSurfaceKHR surface, CommandPool cmd_pool, out VulkanWindow window) {
+void create_swapchain(VulkanDevice device, VkSurfaceKHR surface, out Swapchain swapchain) {
     auto mem = TempAllocator(device.context.memory);
 
-    window.device = device;
-    window.surface = surface;
-
+    uint num_frames;
     { // Swapchain format and size information
         SwapchainSupport support;
-        load_swapchain_support(device.gpu.device, surface, mem, support);
+        load_swapchain_support(device.gpu.handle, surface, mem, support);
 
-        window.image_size = swapchain_size(support.capabilities, support.capabilities.currentExtent);
+        swapchain.image_size = swapchain_size(support.capabilities, support.capabilities.currentExtent);
 
         auto format = select(support.formats);
-        window.format = format.format;
-        window.color_space = format.colorSpace;
+        swapchain.format = format.format;
+        swapchain.color_space = format.colorSpace;
 
-        window.present_mode = select(support.modes);
+        swapchain.present_mode = select(support.modes);
 
-        window.num_frames = num_images(support.capabilities);
+        num_frames = num_images(support.capabilities);
     }
 
     { // Create swapchain
         VkSwapchainCreateInfoKHR ci = {
             surface: surface,
-            imageFormat: window.format,
-            imageColorSpace: window.color_space,
+            imageFormat: swapchain.format,
+            imageColorSpace: swapchain.color_space,
             imageArrayLayers: 1,
-            minImageCount: window.num_frames,
+            minImageCount: num_frames,
             imageUsage: VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT,
-            imageExtent: window.image_size,
-            presentMode: window.present_mode,
+            imageExtent: swapchain.image_size,
+            presentMode: swapchain.present_mode,
             preTransform: VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR,
             compositeAlpha: VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR,
             clipped: VK_TRUE
@@ -216,13 +185,13 @@ void create_swapchain(VulkanDevice device, VkSurfaceKHR surface, CommandPool cmd
         }
         else
             ci.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;
-        
-        device.d_create_swapchain(&ci, &window.swapchain);
+
+        device.d_create_swapchain(&ci, &swapchain.handle);
     }
 
     { // Create render pass
         VkAttachmentDescription color_attachment = {
-            format: window.format,
+            format: swapchain.format,
             samples: VK_SAMPLE_COUNT_1_BIT,
             loadOp: VK_ATTACHMENT_LOAD_OP_CLEAR,
             storeOp: VK_ATTACHMENT_STORE_OP_STORE,
@@ -261,31 +230,25 @@ void create_swapchain(VulkanDevice device, VkSurfaceKHR surface, CommandPool cmd
             pDependencies: &dependency
         };
 
-        device.d_create_render_pass(&ci, &window.render_pass);
+        device.d_create_render_pass(&ci, &swapchain.render_pass);
     }
 
     { // Create per-frame objects
-        device.d_get_swapchain_images(window.swapchain, &window.num_frames, null);
-        auto images = mem.alloc_array!VkImage(window.num_frames);
-        device.d_get_swapchain_images(window.swapchain, &window.num_frames, images.ptr);
+        swapchain.frames = device.context.memory.alloc_array!SwapchainImage(num_frames);
 
-        auto cmd_buffers = mem.alloc_array!VkCommandBuffer(window.num_frames);
-        cmd_pool.allocate(cmd_buffers);
+        device.d_get_swapchain_images(swapchain.handle, &num_frames, null);
+        auto images = mem.alloc_array!VkImage(num_frames);
+        device.d_get_swapchain_images(swapchain.handle, &num_frames, images.ptr);
 
-        with (device.context.memory) {
-            window.frames = alloc_array!(VulkanWindow.Frame)(window.num_frames).ptr;
-            window.frame_semaphores = alloc_array!(VulkanWindow.FrameSemaphores)(window.num_frames).ptr;
-        }
-
-        foreach (i, ref frame; window.frames[0 .. window.num_frames]) {
+        foreach (i, ref frame; swapchain.frames[0 .. num_frames]) {
+            frame.index = cast(uint) i;
             frame.image = images[i];
-            frame.command_buffer = cmd_buffers[i];
             frame.frame_complete_fence = device.create_fence(true);
 
             {
                 VkImageViewCreateInfo vci = {
                     image: images[i],
-                    format: window.format,
+                    format: swapchain.format,
                     viewType: VK_IMAGE_VIEW_TYPE_2D,
                     components: VkComponentMapping(),
                     subresourceRange: {
@@ -302,11 +265,11 @@ void create_swapchain(VulkanDevice device, VkSurfaceKHR surface, CommandPool cmd
 
             {
                 VkFramebufferCreateInfo fci = {
-                    renderPass: window.render_pass,
+                    renderPass: swapchain.render_pass,
                     attachmentCount: 1,
                     pAttachments: &frame.view,
-                    width: window.image_size.width,
-                    height: window.image_size.height,
+                    width: swapchain.image_size.width,
+                    height: swapchain.image_size.height,
                     layers: 1
                 };
 
@@ -314,12 +277,38 @@ void create_swapchain(VulkanDevice device, VkSurfaceKHR surface, CommandPool cmd
             }
         }
 
-        foreach (ref sync; window.frame_semaphores[0 .. window.num_frames]) {
-            sync.image_acquire = device.create_semaphore();
-            sync.render_complete = device.create_semaphore();
+        swapchain.semaphores = device.context.memory.alloc_array!FrameSemaphores(num_frames);
+
+        foreach (ref pair; swapchain.semaphores) {
+            pair.image_acquire = device.create_semaphore();
+            pair.render_complete = device.create_semaphore();
         }
     }
 }
+
+void destroy_swapchain(VulkanDevice device, ref Swapchain swapchain) {
+    device.wait_idle();
+
+    foreach (ref frame; swapchain.frames) {
+        device.d_destroy_image_view(frame.view);
+        device.d_destroy_framebuffer(frame.framebuffer);
+        device.destroy_fence(frame.frame_complete_fence);
+    }
+    device.context.memory.free(swapchain.frames);
+
+    foreach (ref pair; swapchain.semaphores) {
+        device.destroy_semaphore(pair.image_acquire);
+        device.destroy_semaphore(pair.render_complete);
+    }
+    device.context.memory.free(swapchain.semaphores);
+
+    device.d_destroy_render_pass(swapchain.render_pass);
+    device.d_destroy_swapchain(swapchain.handle);
+
+    swapchain = Swapchain();
+}
+
+private:
 
 struct SwapchainSupport {
     VkSurfaceKHR target;

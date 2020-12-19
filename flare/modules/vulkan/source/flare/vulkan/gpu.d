@@ -1,12 +1,14 @@
-module flare.renderer.vulkan.gpu;
+module flare.vulkan.gpu;
 
 import flare.core.memory.temp;
-import flare.renderer.vulkan.context;
-import flare.renderer.vulkan.h;
+import flare.vulkan.context;
+import flare.vulkan.h;
+
+nothrow:
 
 struct VulkanGpuInfo {
     // device properties
-    VkPhysicalDevice device;
+    VkPhysicalDevice handle;
     VkPhysicalDeviceProperties properties;
     VkPhysicalDeviceMemoryProperties memory_properties;
     VkExtensionProperties[] available_extensions;
@@ -41,7 +43,7 @@ void load_gpu_info(
     ref TempAllocator mem,
     out VulkanGpuInfo result
 ) {
-    result.device = device;
+    result.handle = device;
     vkGetPhysicalDeviceProperties(device, &result.properties);
     vkGetPhysicalDeviceMemoryProperties(device, &result.memory_properties);
 
@@ -119,7 +121,7 @@ bool select_queue_families(ref VulkanGpuInfo gpu, in VulkanDeviceCriteria criter
         // If we require a display queue that is also a graphics queue
         if (criteria.display_target && !(gpu.present_family != uint.max && found_graphics_present_queue)) {
             VkBool32 can_present;
-            vkGetPhysicalDeviceSurfaceSupportKHR(gpu.device, cast(uint) index, cast(VkSurfaceKHR) criteria.display_target, &can_present);
+            vkGetPhysicalDeviceSurfaceSupportKHR(gpu.handle, cast(uint) index, cast(VkSurfaceKHR) criteria.display_target, &can_present);
             if (can_present == VK_TRUE) {
                 gpu.present_family = cast(uint) index;
                 found_graphics_present_queue = (queue.queueFlags & VK_QUEUE_GRAPHICS_BIT) != 0;
@@ -137,7 +139,7 @@ bool select_queue_families(ref VulkanGpuInfo gpu, in VulkanDeviceCriteria criter
 bool has_extensions(ref VulkanGpuInfo gpu, in VulkanDeviceCriteria criteria, ref TempAllocator mem) {
     import flare.core.hash: hash_of, Hash;
 
-    const available_hashes = () {
+    const available_hashes = () nothrow {
         auto array = mem.alloc_array!Hash(gpu.available_extensions.length);
         foreach (i, ref slot; array) {
             import core.stdc.string : strlen;
@@ -148,7 +150,7 @@ bool has_extensions(ref VulkanGpuInfo gpu, in VulkanDeviceCriteria criteria, ref
         return array;
     } ();
 
-    const required_hashes = () {
+    const required_hashes = () nothrow {
         auto array = mem.alloc_array!Hash(criteria.required_extensions.length);
         foreach (i, ref slot; array)
             slot = hash_of(criteria.required_extensions[i]);

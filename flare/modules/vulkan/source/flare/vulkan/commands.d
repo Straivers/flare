@@ -1,7 +1,7 @@
-module flare.renderer.vulkan.commands;
+module flare.vulkan.commands;
 
-import flare.renderer.vulkan.device;
-import flare.renderer.vulkan.h;
+import flare.vulkan.device;
+import flare.vulkan.h;
 
 final class CommandPool {
     ~this() {
@@ -50,6 +50,10 @@ final class CommandPool {
         return vkEndCommandBuffer(buffer);
     }
 
+    void cmd_set_viewport(VkCommandBuffer buffer, VkViewport[] viewports...) {
+        vkCmdSetViewport(buffer, 0, cast(uint) viewports.length, viewports.ptr);
+    }
+
     void cmd_begin_render_pass(VkCommandBuffer buffer, ref VkRenderPassBeginInfo render_pass_info) {
         vkCmdBeginRenderPass(buffer, &render_pass_info, VK_SUBPASS_CONTENTS_INLINE);
     }
@@ -76,6 +80,7 @@ private:
         "vkFreeCommandBuffers",
         "vkBeginCommandBuffer",
         "vkEndCommandBuffer",
+        "vkCmdSetViewport",
         "vkCmdBeginRenderPass",
         "vkCmdEndRenderPass",
         "vkCmdBindPipeline",

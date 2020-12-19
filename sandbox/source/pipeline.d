@@ -3,7 +3,7 @@ module pipeline;
 import flare.core.memory.api;
 import flare.core.memory.buddy_allocator;
 import flare.core.os.file;
-import flare.renderer.vulkan.api;
+import flare.vulkan.api;
 
 VkPipeline create_pipeline(VulkanDevice device, VkExtent2D viewport_size, VkShaderModule vert, VkShaderModule frag, VkRenderPass render_pass, VkPipelineLayout layout) {
     VkPipelineShaderStageCreateInfo[2] pipeline_stages = [{
@@ -72,6 +72,12 @@ VkPipeline create_pipeline(VulkanDevice device, VkExtent2D viewport_size, VkShad
         pAttachments: &color_blend_attachment
     };
 
+    VkDynamicState[1] dynamic_states = [VK_DYNAMIC_STATE_VIEWPORT];
+    VkPipelineDynamicStateCreateInfo dynamic_state = {
+        dynamicStateCount: cast(uint) dynamic_states.length,
+        pDynamicStates: dynamic_states.ptr
+    };
+
     VkGraphicsPipelineCreateInfo[1] pipeline_info = [{
         stageCount: cast(uint) pipeline_stages.length,
         pStages: pipeline_stages.ptr,
@@ -82,6 +88,7 @@ VkPipeline create_pipeline(VulkanDevice device, VkExtent2D viewport_size, VkShad
         pMultisampleState: &multisample,
         pDepthStencilState: null,
         pColorBlendState: &color_blending,
+        pDynamicState: &dynamic_state,
         layout: layout,
         renderPass: render_pass,
         subpass: 0,

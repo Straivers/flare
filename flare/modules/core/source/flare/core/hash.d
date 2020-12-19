@@ -1,5 +1,7 @@
 module flare.core.hash;
 
+nothrow:
+
 alias Hash = Hash64;
 
 struct Hash64 {

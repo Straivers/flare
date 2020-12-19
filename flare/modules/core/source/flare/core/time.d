@@ -42,11 +42,11 @@ struct TimeStamp {
 
     mixin(bitfields!(
         uint, "month", 5,
-        uint, "day", 4,
+        uint, "day", 6,
         uint, "hour", 6,
         uint, "minute", 7,
         uint, "second", 7,
-        uint, "", 3
+        uint, "", 1
     ));
 
     this(short year, uint month, uint day, uint hour, uint minute, uint second, ushort milliseconds) {

@@ -1,11 +1,11 @@
 module flare.core.memory.api;
 
 public import flare.core.memory.measures: kib, mib, gib;
+import std.traits: hasElaborateDestructor, ReturnType;
 
 abstract class Allocator {
     import flare.core.memory.base: PtrType, emplace_obj;
     import flare.core.memory.measures: object_size, object_alignment;
-    import std.traits: hasElaborateDestructor;
     
 public nothrow:
     /**
@@ -66,7 +66,11 @@ public nothrow:
     }
 }
 
-template as_api(T) {
+enum is_allocator_impl(T) = is(typeof(T.init) == T)
+                         && is(ReturnType!((T t) => t.alloc(1, 1)) == void[])
+                         && is(typeof((T t) => t.free([])));
+
+template as_api(T) if (is_allocator_impl!T) {
     final class as_api : Allocator {
         override void[] alloc(size_t size, size_t alignment) {
             return base.alloc(size, alignment);

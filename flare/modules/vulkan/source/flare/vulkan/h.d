@@ -1,4 +1,4 @@
-module flare.renderer.vulkan.h;
+module flare.vulkan.h;
 
 public import erupted.types;
 public import erupted.functions;

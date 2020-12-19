@@ -1,12 +1,12 @@
-module flare.display.win32_window;
+module flare.display.win32_display;
 
 version (Windows) :
 
 
 import core.sys.windows.windows;
 import flare.core.buffer_writer;
-import flare.input.input;
-import flare.display.window;
+import flare.display.display_manager;
+import flare.display.input;
 import std.utf : byWchar;
 
 pragma(lib, "user32");
@@ -18,16 +18,17 @@ immutable wndclass_name = "flare_window_class\0"w;
 immutable window_property = "flare_property\0"w;
 
 alias PlatformWindowData = HWND;
+enum invalid_platform_window_data = null;
 
 private alias get_hwnd = platform_get_hwnd;
 
-@safe @nogc nothrow:
+@safe nothrow:
 
 HWND platform_get_hwnd(PlatformWindowData window_data) {
     return window_data;
 }
 
-@trusted HWND platform_create_window(WindowSettings settings, void* destination) {
+@trusted HWND platform_create_window(in DisplayProperties settings, DisplayImpl* display) {
     if (!registered_window_class) {
         WNDCLASSEXW wc;
         wc.cbSize = WNDCLASSEXW.sizeof;
@@ -49,7 +50,7 @@ HWND platform_get_hwnd(PlatformWindowData window_data) {
     if (!settings.is_resizable)
         style ^= WS_SIZEBOX;
 
-    RECT rect = {0, 0, settings.inner_width, settings.inner_height};
+    RECT rect = {0, 0, settings.width, settings.height};
     AdjustWindowRectEx(&rect, style, FALSE, 0);
 
     //dfmt off
@@ -63,13 +64,13 @@ HWND platform_get_hwnd(PlatformWindowData window_data) {
         NULL,                                           // Parent window
         NULL,                                           // Menu
         GetModuleHandleW(NULL),                         // hInstance handle
-        destination
+        display
     );
 
     assert(hwnd, "Failed to create window!");
-    SetPropW(hwnd, window_property.ptr, destination);
+    SetPropW(hwnd, window_property.ptr, display);
     platform_set_cursor(hwnd, settings.cursor_icon);
-    platform_set_mode(hwnd, WindowMode.Windowed);
+    platform_set_mode(hwnd, DisplayMode.Windowed);
     return hwnd;
 }
 
@@ -77,21 +78,23 @@ HWND platform_get_hwnd(PlatformWindowData window_data) {
 
 @trusted void platform_close_window(PlatformWindowData window) { PostMessageW(get_hwnd(window), WM_CLOSE, 0, 0); }
 
+@trusted HWND platform_get_os_handle(PlatformWindowData window) { return get_hwnd(window); }
+
 @trusted void platform_set_cursor(PlatformWindowData window, CursorIcon icon) { SetCursor(translate_cursor(icon)); }
 
-@trusted void platform_set_mode(PlatformWindowData window, WindowMode mode) {
+@trusted void platform_set_mode(PlatformWindowData window, DisplayMode mode) {
     auto hwnd = get_hwnd(window);
     switch (mode) {
-        case WindowMode.Hidden:
+        case DisplayMode.Hidden:
             ShowWindow(hwnd, SW_HIDE);
             break;
-        case WindowMode.Windowed:
+        case DisplayMode.Windowed:
             ShowWindow(hwnd, SW_SHOWNORMAL);
             break;
-        case WindowMode.Minimized:
+        case DisplayMode.Minimized:
             ShowWindow(hwnd, SW_SHOWMINIMIZED);
             break;
-        case WindowMode.Maximized:
+        case DisplayMode.Maximized:
             ShowWindow(hwnd, SW_SHOWMAXIMIZED);
             break;
         default:
@@ -107,6 +110,10 @@ HWND platform_get_hwnd(PlatformWindowData window_data) {
 
 @trusted void platform_retitle(PlatformWindowData window, const char[] new_title) {
     SetWindowText(get_hwnd(window), WCharBuffer(new_title).ptr);
+}
+
+@trusted void platform_send_close_request(PlatformWindowData window) {
+    PostMessage(get_hwnd(window), WM_CLOSE, 0, 0);
 }
 
 @trusted void platform_poll_events() {
@@ -128,10 +135,10 @@ HWND platform_get_hwnd(PlatformWindowData window_data) {
         send(msg);
 }
 
-@safe @nogc nothrow private:
+@safe nothrow private:
 
 struct WCharBuffer {
-@safe @nogc nothrow:
+@safe nothrow:
     this(in char[] original) {
         auto writer = Writer!wchar(buffer);
         writer.put(original.byWchar());
@@ -142,7 +149,7 @@ struct WCharBuffer {
         return &buffer[0];
     }
 
-    wchar[WindowSettings.max_title_length] buffer;
+    wchar[DisplayManager.max_title_length] buffer;
 }
 
 HCURSOR translate_cursor(CursorIcon icon) {
@@ -172,73 +179,73 @@ pragma (inline) void send(ref MSG msg) @trusted {
     DispatchMessage(&msg);
 }
 
-void dispatch(string name, Args...)(WindowStatus* window, Args args) {
+void dispatch(string name, Args...)(DisplayImpl* display, Args args) {
     import std.format: format;
 
-    mixin("if (window && window.callbacks.%s) window.callbacks.%s(window, args);".format(name, name));
+    mixin("if (display.callbacks.%s) display.callbacks.%s(display.manager, display.id, args);".format(name, name));
 }
 
 extern (Windows) LRESULT window_procedure(HWND hwnd, uint msg, WPARAM wp, LPARAM lp) @trusted nothrow {
     static immutable aux_buttons = [MouseButton.Button_4, MouseButton.Button_5];
 
-    auto window = cast(WindowStatus*) GetPropW(hwnd, &window_property[0]);
+    auto display = cast(DisplayImpl*) GetPropW(hwnd, &window_property[0]);
 
-    if (window is null)
+    if (display is null)
         return DefWindowProc(hwnd, msg, wp, lp);
 
     switch (msg) {
     case WM_KEYDOWN:
     case WM_SYSKEYDOWN:
-        window.dispatch!"on_key"(keycode_table[wp], ButtonState.Pressed);
+        display.dispatch!"on_key"(keycode_table[wp], ButtonState.Pressed);
         return 0;
 
     case WM_KEYUP:
     case WM_SYSKEYUP:
-        window.dispatch!"on_key"(keycode_table[wp], ButtonState.Released);
+        display.dispatch!"on_key"(keycode_table[wp], ButtonState.Released);
         return 0;
 
     case WM_LBUTTONDOWN:
-        window.dispatch!"on_mouse_button"(MouseButton.Left, ButtonState.Pressed);
+        display.dispatch!"on_mouse_button"(MouseButton.Left, ButtonState.Pressed);
         return 0;
 
     case WM_LBUTTONUP:
-        window.dispatch!"on_mouse_button"(MouseButton.Left, ButtonState.Released);
+        display.dispatch!"on_mouse_button"(MouseButton.Left, ButtonState.Released);
         return 0;
 
     case WM_MBUTTONDOWN:
-        window.dispatch!"on_mouse_button"(MouseButton.Middle, ButtonState.Pressed);
+        display.dispatch!"on_mouse_button"(MouseButton.Middle, ButtonState.Pressed);
         return 0;
 
     case WM_MBUTTONUP:
-        window.dispatch!"on_mouse_button"(MouseButton.Middle, ButtonState.Released);
+        display.dispatch!"on_mouse_button"(MouseButton.Middle, ButtonState.Released);
         return 0;
 
     case WM_RBUTTONDOWN:
-        window.dispatch!"on_mouse_button"(MouseButton.Right, ButtonState.Pressed);
+        display.dispatch!"on_mouse_button"(MouseButton.Right, ButtonState.Pressed);
         return 0;
 
     case WM_RBUTTONUP:
-        window.dispatch!"on_mouse_button"(MouseButton.Right, ButtonState.Released);
+        display.dispatch!"on_mouse_button"(MouseButton.Right, ButtonState.Released);
         return 0;
 
     case WM_XBUTTONDOWN:
-        window.dispatch!"on_mouse_button"(aux_buttons[(wp & 0x20) != 0], ButtonState.Pressed);
+        display.dispatch!"on_mouse_button"(aux_buttons[(wp & 0x20) != 0], ButtonState.Pressed);
         return 0;
 
     case WM_XBUTTONUP:
-        window.dispatch!"on_mouse_button"(aux_buttons[(wp & 0x20) != 0], ButtonState.Released);
+        display.dispatch!"on_mouse_button"(aux_buttons[(wp & 0x20) != 0], ButtonState.Released);
         return 0;
 
     case WM_MOUSELEAVE:
-        window.has_cursor = false;
-        window.dispatch!"on_cursor_exit"();
+        display.has_cursor = false;
+        display.dispatch!"on_cursor_exit"();
         return 0;
 
     case WM_MOUSEMOVE:
         auto x = cast(short) (lp & 0xFFFF);
         auto y = cast(short) ((lp >> 16) & 0xFFFF);
-        if (window.has_cursor)
-            window.dispatch!"on_cursor_move"(x, y);
+        if (display.has_cursor)
+            display.dispatch!"on_cursor_move"(x, y);
         else {
             TRACKMOUSEEVENT tme;
             tme.cbSize = tme.sizeof;
@@ -247,28 +254,38 @@ extern (Windows) LRESULT window_procedure(HWND hwnd, uint msg, WPARAM wp, LPARAM
             tme.dwHoverTime = HOVER_DEFAULT;
             TrackMouseEvent(&tme);
 
-            window.has_cursor = true;
-            window.dispatch!"on_cursor_enter"(x, y);
-            SetCursor(translate_cursor(window.cursor_icon));
+            display.has_cursor = true;
+            display.dispatch!"on_cursor_enter"(x, y);
+            SetCursor(translate_cursor(display.cursor_icon));
         }
         return 0;
 
     case WM_MOUSEWHEEL:
         auto lines = (GET_WHEEL_DELTA_WPARAM(wp) / WHEEL_DELTA) * num_scroll_lines;
-        window.dispatch!"on_scroll"(lines);
+        display.dispatch!"on_scroll"(lines);
         return 0;
 
     case WM_SIZE:
-        window.dispatch!"on_resize"(LOWORD(lp), HIWORD(lp));
+        display.properties.renderer.resize(display.swapchain, LOWORD(lp), HIWORD(lp));
+        display.dispatch!"on_resize"(LOWORD(lp), HIWORD(lp));
+        return 0;
+
+    case WM_CREATE:
+        display.dispatch!"on_create"();
         return 0;
 
     case WM_CLOSE:
-        window.is_close_requested = true;
-        window.dispatch!"on_close_request"();
+        display.is_close_requested = true;
+        if (display.callbacks.on_close_request)
+            display.callbacks.on_close_request(display.manager, display.id);
+        else
+            display.manager.destroy_display(display.id);
         return 0;
 
     case WM_DESTROY:
-        window.dispatch!"on_destroy"();
+        display.dispatch!"on_destroy"();
+        display.properties.renderer.destroy(display.swapchain);
+        display.manager.free(display);
         return 0;
 
     default:
