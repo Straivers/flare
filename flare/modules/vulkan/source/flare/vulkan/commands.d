@@ -4,6 +4,7 @@ import flare.vulkan.device;
 import flare.vulkan.h;
 
 final class CommandPool {
+nothrow:
     ~this() {
         _device.d_destroy_command_pool(handle);
     }
@@ -102,12 +103,12 @@ private:
     }
 }
 
-CommandPool create_graphics_command_pool(VulkanDevice device) {
+CommandPool create_graphics_command_pool(VulkanDevice device) nothrow {
     VkCommandPool handle;
     {
         VkCommandPoolCreateInfo ci = {
             queueFamilyIndex: device.graphics_family,
-            flags: 0
+            flags: VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT
         };
 
         device.d_create_command_pool(&ci, &handle);

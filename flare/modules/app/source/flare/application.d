@@ -1,6 +1,5 @@
 module flare.application;
 
-import flare.display.display_manager;
 import flare.core.logger;
 
 enum uint flare_version_major = 0;
@@ -20,11 +19,10 @@ abstract class FlareApp {
         log.all("Flare Engine v%s.%s.%s", flare_version_major, flare_version_minor, flare_version_patch);
 
         app_settings = settings;
-        display_manager = new DisplayManager();
     }
 
     ~this() {
-        destroy(display_manager);
+        destroy(log);
     }
 
     abstract void on_init();
@@ -34,7 +32,6 @@ abstract class FlareApp {
     abstract void run();
 
     Logger log;
-    DisplayManager display_manager;
     FlareAppSettings app_settings;
 }
 
@@ -45,5 +42,5 @@ void run_app(App: FlareApp)(ref FlareAppSettings settings) {
     app.run();
     app.log.info("Shutting down engine");
     app.on_shutdown();
-    // destroy(app);
+    destroy(app);
 }

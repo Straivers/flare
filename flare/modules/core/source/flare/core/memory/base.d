@@ -21,6 +21,13 @@ template PtrType(T) {
         alias PtrType = T*;
 }
 
+PtrType!T get_ptr_type(T)(ref T object) {
+    static if (is(T == class))
+        return object;
+    else
+        return &object;
+}
+
 pragma(inline, true) bool is_power_of_two(size_t n) {
     return (n != 0) & ((n & (n - 1)) == 0);
 }

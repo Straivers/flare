@@ -24,6 +24,7 @@ private:
     static immutable func_names = [
         "vkDestroyDevice",
         "vkGetDeviceQueue",
+        "vkQueueSubmit",
         "vkQueueWaitIdle",
         "vkDeviceWaitIdle",
         "vkCreateSemaphore",
@@ -51,8 +52,16 @@ private:
         "vkDestroyFramebuffer",
         "vkCreateCommandPool",
         "vkDestroyCommandPool",
+        "vkResetCommandPool",
         "vkAllocateCommandBuffers",
-        "vkFreeCommandBuffers"
+        "vkFreeCommandBuffers",
+        "vkBeginCommandBuffer",
+        "vkEndCommandBuffer",
+        "vkCmdSetViewport",
+        "vkCmdBeginRenderPass",
+        "vkCmdEndRenderPass",
+        "vkCmdBindPipeline",
+        "vkCmdDraw",
     ];
 
     static foreach (func; func_names)
@@ -165,12 +174,13 @@ nothrow public:
         _dispatch.DestroySwapchainKHR(handle, swapchain, null);
     }
 
-    void d_acquire_next_image(VkSwapchainKHR swapchain, ulong timeout, VkSemaphore semaphore, VkFence fence, uint* image_index) {
+    VkResult d_acquire_next_image(VkSwapchainKHR swapchain, ulong timeout, VkSemaphore semaphore, VkFence fence, uint* image_index) {
         const err = _dispatch.AcquireNextImageKHR(handle, swapchain, timeout, semaphore, fence, image_index);
-        if (err != VK_SUCCESS) {
+        if (err != VK_SUCCESS && err != VK_SUBOPTIMAL_KHR && err != VK_ERROR_OUT_OF_DATE_KHR) {
             context.logger.fatal("Call to vkAcquireNextImageKHR failed: %s", err);
             assert(0, "Call to vkAcquireNextImageKHR failed");
         }
+        return err;
     }
 
     void d_get_swapchain_images(VkSwapchainKHR swapchain, uint* count, VkImage* images) {
@@ -181,12 +191,13 @@ nothrow public:
         }
     }
 
-    void d_queue_present(VkQueue queue, VkPresentInfoKHR* pi) {
+    VkResult d_queue_present(VkQueue queue, VkPresentInfoKHR* pi) {
         const err = _dispatch.QueuePresentKHR(queue, pi);
-        if (err != VK_SUCCESS) {
+        if (err != VK_SUCCESS && err != VK_SUBOPTIMAL_KHR && err != VK_ERROR_OUT_OF_DATE_KHR) {
             context.logger.fatal("Call to vkQueuePresent failed: %s", err);
             assert(0, "Call to vkQueuePresent failed");
         }
+        return err;
     }
 
     void d_create_image_view(VkImageViewCreateInfo* vci, VkImageView* result) {

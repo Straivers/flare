@@ -1,10 +1,24 @@
 module flare.renderer.vulkan_renderer;
 
 public import flare.renderer.renderer;
+import flare.vulkan.api;
+
+struct Frame {
+    uint index;
+    VkFramebuffer framebuffer;
+    VkExtent2D image_size;
+
+    VkFence frame_complete_fence;
+    VkSemaphore image_acquire;
+    VkSemaphore render_complete;
+
+    VkRenderPass render_pass;
+    VkCommandBuffer graphics_commands;
+}
 
 final class VulkanRenderer : Renderer {
     import flare.core.os.types : OsWindow;
-    import flare.vulkan.api;
+    import flare.core.memory.object_pool: ObjectPool;
 
     /// Vulkan instance extensions required by the renderer.
     static immutable required_instance_extensions = [
@@ -22,14 +36,17 @@ final class VulkanRenderer : Renderer {
 nothrow public:
     this(VulkanContext context) {
         _instance = context;
+        _swapchains = ObjectPool!(SwapchainInfo, 64)(SwapchainInfo.init);
     }
 
     ~this() {
-        foreach (ref swapchain; _swapchains) {
-            if (swapchain)
-                destroy_unchecked(&swapchain);
+        _device.wait_idle();
+
+        foreach (slot; _swapchains.get_all_allocated()) {
+            destroy_unchecked(slot.handle);
         }
 
+        object.destroy(graphics_command_pool);
         object.destroy(_device);
     }
 
@@ -38,7 +55,7 @@ nothrow public:
     }
 
     Swapchain* get_swapchain(SwapchainId id) {
-        if (auto slot = get_swapchain_from_id(id))
+        if (auto slot = _swapchains.get(id))
             return &slot.swapchain;
         return null;
     }
@@ -49,65 +66,80 @@ nothrow public:
         if (!_device)
             init_renderer(surface);
 
-        size_t index;
-        SwapchainInfo* info = () {
-            foreach (i, ref swap; _swapchains)
-                if (swap.id == SwapchainIdImpl()) {
-                    index = i;
-                    return &swap;
-                }
-            
-            return null;
-        } ();
+        auto slot = _swapchains.alloc();
+        slot.surface = surface;
+        flare.vulkan.api.create_swapchain(_device, graphics_command_pool, surface, slot.swapchain);
 
-        assert(info, "All window slots are occupied! Unable to create new windows.");
-
-        info.id.index = cast(ubyte) index;
-        info.surface = surface;
-        flare.vulkan.api.create_swapchain(_device, surface, info.swapchain);
-
-        return info.id.value;
+        return slot.handle;
     }
 
     override void destroy(SwapchainId id) {
-        if (auto slot = get_swapchain_from_id(id)) {
-            destroy_unchecked(slot);
-        }
-        else {
-            assert(false, "Attempted to manipulate nonexistent swapchain");
+        if (auto slot = _swapchains.get(id)) {
+            destroy_unchecked(id);
         }
     }
 
     override void resize(SwapchainId id, ushort width, ushort height) {
-        if (auto slot = get_swapchain_from_id(id)) {
-            //*************** TODO ***************//
-        }
-        else {
-            assert(false, "Attempted to manipulate nonexistent swapchain");
+        if (auto slot = _swapchains.get(id)) {
+            // if (slot.handle is null)
+                flare.vulkan.api.recreate_swapchain(_device, graphics_command_pool, slot.surface, slot.swapchain);
         }
     }
 
     override void swap_buffers(SwapchainId id) {
-        if (auto slot = get_swapchain_from_id(id)) {
-            slot.swap_buffers(_device);
-        }
-        else {
-                assert(false, "Attempted to manipulate nonexistent swapchain");
+        if (auto slot = _swapchains.get(id)) {
+            flare.vulkan.api.swap_buffers(_device, &slot.swapchain);
+
+            if (slot.state == VK_ERROR_OUT_OF_DATE_KHR || slot.state == VK_SUBOPTIMAL_KHR)
+                recreate_swapchain(_device, graphics_command_pool, slot.surface, slot.swapchain);
         }
     }
 
+    void submit(ref Frame frame) {
+        VkPipelineStageFlags wait_stages = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+        VkSubmitInfo si = {
+            waitSemaphoreCount: 1,
+            pWaitSemaphores: &frame.image_acquire,
+            pWaitDstStageMask: &wait_stages,
+            commandBufferCount: 1,
+            pCommandBuffers: &frame.graphics_commands,
+            signalSemaphoreCount: 1,
+            pSignalSemaphores: &frame.render_complete
+        };
+
+        graphics_command_pool.submit(_device.graphics, frame.frame_complete_fence, si);
+    }
+
     Frame get_frame(SwapchainId id) {
-        if (auto slot = get_swapchain_from_id(id)) {
-            return slot.get_frame(_device);
+        if (auto slot = _swapchains.get(id)) {
+            assert(slot.swapchain.handle, "Cannot get swapchain frame from hidden window!");
+
+            SwapchainImage image;
+            acquire_next_image(_device, &slot.swapchain, image);
+
+            while (slot.state == VK_ERROR_OUT_OF_DATE_KHR) {
+                recreate_swapchain(_device, graphics_command_pool, slot.surface, slot.swapchain);
+                acquire_next_image(_device, &slot.swapchain, image);
+            }
+
+            return Frame(
+                image.index,
+                image.framebuffer,
+                slot.swapchain.image_size,
+                image.frame_fence,
+                image.image_acquire,
+                image.render_complete,
+                slot.swapchain.render_pass,
+                image.command_buffer
+            );
         }
-        else {
-            assert(false, "Attempted to manipulate nonexistent swapchain");
-        }
+
+        assert(0, "Cannot get frame from invalid swapchain id");
     }
 
 nothrow private:
     void init_renderer(VkSurfaceKHR surface) {
-        _device = () nothrow {
+        {
             VulkanDeviceCriteria reqs = {
                 graphics_queue: true,
                 required_extensions: required_device_extensions,
@@ -116,56 +148,36 @@ nothrow private:
 
             VulkanGpuInfo gpu;
             _instance.select_gpu(reqs, gpu);
-            return _instance.create_device(gpu);
-        } ();
+            _device = _instance.create_device(gpu);
+        }
+
+        graphics_command_pool = create_graphics_command_pool(_device);
     }
 
-    SwapchainInfo* get_swapchain_from_id(SwapchainId id) {
-        auto swap_id = SwapchainIdImpl(id);
-        const slot_id = _swapchains[swap_id.index].id;
+    void destroy_unchecked(SwapchainId handle) {
+        auto slot = _swapchains.get(handle);
 
-        if (id == slot_id.value)
-            return &_swapchains[swap_id.index];
-
-        return null;
-    }
-
-    void destroy_unchecked(SwapchainInfo* slot) {
-        slot.id.generation++;
-
-        flare.vulkan.api.destroy_swapchain(_device, slot.swapchain);
+        if (slot.handle) {
+            flare.vulkan.api.destroy_swapchain(_device, graphics_command_pool, slot.swapchain);
+        }
         vkDestroySurfaceKHR(_instance.instance, slot.surface, null);
+        _swapchains.free(handle);
     }
 
     VulkanContext _instance;
     VulkanDevice _device;
+    CommandPool graphics_command_pool;
 
-    SwapchainInfo[max_swapchains] _swapchains;
+    ObjectPool!(SwapchainInfo, 64) _swapchains;
 }
 
 private:
 
-struct SwapchainIdImpl {
-    union {
-        SwapchainId value;
-
-        struct {
-            ubyte index;
-            ubyte[1] pad0;
-            ushort generation;
-            ubyte[4] pad1;
-        }
-    }
-}
-
 struct SwapchainInfo {
-    import flare.vulkan.h: VkSurfaceKHR;
-    import flare.vulkan.swapchain: Swapchain;
+    import flare.vulkan.api: VkSurfaceKHR, Swapchain;
 
-    SwapchainIdImpl id;
     Swapchain swapchain;
+    alias swapchain this;
 
     VkSurfaceKHR surface;
-
-    alias swapchain this;
 }

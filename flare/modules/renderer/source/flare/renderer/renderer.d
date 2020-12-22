@@ -1,8 +1,6 @@
 module flare.renderer.renderer;
 
-struct SwapchainId {
-    ulong value;
-}
+public import flare.core.memory.object_pool: SwapchainId = Handle;
 
 interface Renderer {
     import flare.core.os.types: OsWindow;
@@ -11,8 +9,9 @@ interface Renderer {
 
 nothrow:
     /**
-     * Creates a new swapchain associated with a window. The window is expected
-     * to outlive the swapchain.
+     * Creates a new swapchain associated with a window. If the window is not
+     * visible, actual swapchain creation may be deferred to the first
+     * `resize()` with nonzero width and height.
      */
     SwapchainId create_swapchain(OsWindow);
 

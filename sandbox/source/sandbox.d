@@ -2,7 +2,8 @@ module sandbox;
 
 import flare.application;
 // import flare.display.window;
-import flare.display.display_manager;
+// import flare.display.display_manager;
+import flare.display.manager;
 import flare.renderer.vulkan_renderer;
 import flare.vulkan.api;
 import flare.core.memory.api;
@@ -40,60 +41,20 @@ final class Sandbox : FlareApp {
                 title: app_settings.name,
                 width: app_settings.main_window_width,
                 height: app_settings.main_window_height,
+                is_resizable: true,
                 renderer: renderer
             };
 
-            DisplayCallbacks callbacks;
-
-            const result = display_manager.make_display(settings, callbacks, display);
-            assert(result == DisplayResult.NoError);
+            display = display_manager.create(settings);
         }
 
         auto device = renderer.get_logical_device();
         auto swap_chain = renderer.get_swapchain(display_manager.get_swapchain(display));
-        command_pool = device.create_graphics_command_pool();
-        command_buffers = vulkan.memory.alloc_array!VkCommandBuffer(swap_chain.num_frames);
-        command_pool.allocate(command_buffers);
 
         shaders[0] = device.load_shader("shaders/vert.spv");
         shaders[1] = device.load_shader("shaders/frag.spv");
         pipeline_layout = device.create_pipeline_layout();
         pipeline = device.create_pipeline(swap_chain.image_size, shaders[0], shaders[1], swap_chain.render_pass, pipeline_layout);
-
-        foreach (i, frame; swap_chain.frames) {
-            command_pool.cmd_begin_primary_buffer(command_buffers[i]);
-
-            {
-                VkViewport viewport = {
-                    x: 0,
-                    y: 0,
-                    width: swap_chain.image_size.width,
-                    height: swap_chain.image_size.height,
-                    minDepth: 0.0f,
-                    maxDepth: 1.0f
-                };
-                command_pool.cmd_set_viewport(command_buffers[i], viewport);
-            }
-
-            {
-                VkClearValue clear_color;
-                clear_color.color.float32 = [0, 0, 0, 1.0];
-
-                VkRenderPassBeginInfo render_pass_info = {
-                    renderPass: swap_chain.render_pass,
-                    framebuffer: frame.framebuffer,
-                    renderArea: VkRect2D(VkOffset2D(0, 0), swap_chain.image_size),
-                    clearValueCount: 1,
-                    pClearValues: &clear_color
-                };
-                command_pool.cmd_begin_render_pass(command_buffers[i], render_pass_info);
-            }
-
-            command_pool.cmd_bind_pipeline(command_buffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline);
-            command_pool.cmd_draw(command_buffers[i], 3, 1, 0, 0);
-            command_pool.cmd_end_render_pass(command_buffers[i]);
-            command_pool.cmd_end_buffer(command_buffers[i]);
-        }
     }
 
     override void on_shutdown() {
@@ -102,10 +63,6 @@ final class Sandbox : FlareApp {
 
         foreach (shader; shaders)
             device.d_destroy_shader_module(shader);
-
-        command_pool.free(command_buffers);
-        vulkan.memory.free(command_buffers);
-        destroy(command_pool);
 
         device.d_destroy_pipeline(pipeline);
         device.d_destroy_pipeline_layout(pipeline_layout);
@@ -116,33 +73,58 @@ final class Sandbox : FlareApp {
 
     override void run() {
         while (display_manager.num_active_displays > 0) {
-            display_manager.process_events(true);
+            display_manager.process_events(false);
 
-            if (display_manager.is_live(display)) {
-                if (auto frame = renderer.get_frame(display_manager.get_swapchain(display))) {
+            if (display_manager.is_close_requested(display))
+                display_manager.destroy(display);
+            else if (display_manager.is_visible(display)) {
+                auto frame = renderer.get_frame(display_manager.get_swapchain(display));
+                auto vk = renderer.get_logical_device().dispatch_table;
 
-                    {
-                        VkPipelineStageFlags wait_stages = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
-                        VkSubmitInfo si = {
-                            waitSemaphoreCount: 1,
-                            pWaitSemaphores: &frame.image_acquire,
-                            pWaitDstStageMask: &wait_stages,
-                            commandBufferCount: 1,
-                            pCommandBuffers: &command_buffers[frame.index],
-                            signalSemaphoreCount: 1,
-                            pSignalSemaphores: &frame.render_complete
-                        };
-
-                        command_pool.submit(renderer.get_logical_device().graphics, frame.frame_complete_fence, si);
-                    }
+                {
+                    VkCommandBufferBeginInfo info;
+                    vk.BeginCommandBuffer(frame.graphics_commands, &info);
                 }
 
-                display_manager.swap_buffers(display);
+                {
+                    VkViewport viewport = {
+                        x: 0,
+                        y: 0,
+                        width: frame.image_size.width,
+                        height: frame.image_size.height,
+                        minDepth: 0.0f,
+                        maxDepth: 1.0f
+                    };
+                    vk.CmdSetViewport(frame.graphics_commands, 0, 1, &viewport);
+                }
+
+                {
+                    VkClearValue clear_color;
+                    clear_color.color.float32 = [0, 0, 0, 1.0];
+
+                    VkRenderPassBeginInfo render_pass_info = {
+                        renderPass: frame.render_pass,
+                        framebuffer: frame.framebuffer,
+                        renderArea: VkRect2D(VkOffset2D(0, 0), frame.image_size),
+                        clearValueCount: 1,
+                        pClearValues: &clear_color
+                    };
+                    vk.CmdBeginRenderPass(frame.graphics_commands, &render_pass_info, VK_SUBPASS_CONTENTS_INLINE);
+                }
+
+                vk.CmdBindPipeline(frame.graphics_commands, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline);
+                vk.CmdDraw(frame.graphics_commands, 3, 1, 0, 0);
+                vk.CmdEndRenderPass(frame.graphics_commands);
+                vk.EndCommandBuffer(frame.graphics_commands);
+
+                renderer.submit(frame);
+                renderer.swap_buffers(display_manager.get_swapchain(display));
             }
         }
     }
 
-    DisplayId display;
+    Handle display;
+    DisplayManager display_manager;
 
     VulkanContext vulkan;
     VulkanRenderer renderer;
@@ -150,7 +132,4 @@ final class Sandbox : FlareApp {
     VkShaderModule[2] shaders;
     VkPipeline pipeline;
     VkPipelineLayout pipeline_layout;
-
-    CommandPool command_pool;
-    VkCommandBuffer[] command_buffers;
 }
