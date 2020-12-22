@@ -1,5 +1,5 @@
 name "display"
-targetPath "../..//build"
+targetPath "../../build"
 
 dependency "flare:core" version="*"
 dependency "flare:renderer" version="*"

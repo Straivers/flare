@@ -224,6 +224,8 @@ nothrow:
 }
 
 immutable keycode_table = () {
+    import flare.display.input: KeyCode;
+
     KeyCode[256] table;
 
     with (KeyCode) {

@@ -2,4 +2,3 @@ name "ui"
 targetPath "../../build"
 
 dependency "flare:core" version="*"
-dependency "flare:input" version="*"
