@@ -65,6 +65,8 @@ struct LogEvent {
     /// timestamp and other metadata.
     enum max_message_length = event_size - Header.sizeof;
 
+    enum max_log_length = max_message_length + 128; /* 128 chars for timestamp, level, module, line*/
+
     /// Message header
     Header header;
     /// The message provided by the creator of the log event.
@@ -284,9 +286,7 @@ public:
         import flare.core.buffer_writer : Writer;
         import core.stdc.stdio : printf;
 
-        enum n_metadata_chars = 64;
-
-        char[LogEvent.max_message_length + n_metadata_chars] out_buffer;
+        char[LogEvent.max_log_length] out_buffer;
         TimeStamp.StringBuffer ts_buffer;
 
         auto writer = Writer!char(out_buffer);

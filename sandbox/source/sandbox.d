@@ -1,18 +1,53 @@
 module sandbox;
 
 import flare.application;
-// import flare.display.window;
-// import flare.display.display_manager;
+import flare.core.math.vector;
+import flare.core.memory.api;
+import flare.core.memory.buddy_allocator;
 import flare.display.manager;
 import flare.renderer.vulkan_renderer;
 import flare.vulkan.api;
-import flare.core.memory.api;
-import flare.core.memory.buddy_allocator;
 import pipeline;
 import std.stdio;
 
-immutable vulkan_extensions = [
-    VK_KHR_SWAPCHAIN_EXTENSION_NAME
+struct Vertex {
+    float2 position;
+    float3 colour;
+
+    static VkVertexInputBindingDescription binding_description() {
+        VkVertexInputBindingDescription desc = {
+            binding: 0,
+            stride: Vertex.sizeof,
+            inputRate: VK_VERTEX_INPUT_RATE_VERTEX
+        };
+
+        return desc;
+    }
+
+    static VkVertexInputAttributeDescription[2] attrib_description() {
+        VkVertexInputAttributeDescription[2] descs = [
+            {
+                binding: 0,
+                location: 0,
+                format: VK_FORMAT_R32G32_SFLOAT,
+                offset: Vertex.position.offsetof,
+            },
+            {
+                binding: 0,
+                location: 1,
+                format: VK_FORMAT_R32G32B32_SFLOAT,
+                offset: Vertex.colour.offsetof,
+            }
+        ];
+
+        return descs;
+    }
+}
+
+immutable Vertex[] vertices = [
+    Vertex(float2(0, -0.5), float3(1.0, 0, 0)),
+    Vertex(float2(0.5, 0.5), float3(0, 1.0, 0)),
+    Vertex(float2(-0.5, 0.5), float3(0, 0, 1.0)),
 ];
 
 final class Sandbox : FlareApp {
@@ -54,7 +89,15 @@ final class Sandbox : FlareApp {
         shaders[0] = device.load_shader("shaders/vert.spv");
         shaders[1] = device.load_shader("shaders/frag.spv");
         pipeline_layout = device.create_pipeline_layout();
-        pipeline = device.create_pipeline(swap_chain.image_size, shaders[0], shaders[1], swap_chain.render_pass, pipeline_layout);
+
+        VkVertexInputBindingDescription[1] binding_descriptions = [Vertex.binding_description];
+        VkVertexInputAttributeDescription[2] attrib_descriptions = Vertex.attrib_description;
+
+        pipeline = device.create_graphics_pipeline(*swap_chain, shaders[0], shaders[1], binding_descriptions[], attrib_descriptions[], pipeline_layout);
+
+        vertex_buffer = create_buffer(device, vertices.length * Vertex.sizeof, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT);
+        alloc_buffer(device, vertex_buffer);
+        copy_host_visible_buffer(device, vertex_buffer, vertices);
     }
 
     override void on_shutdown() {
@@ -66,6 +109,9 @@ final class Sandbox : FlareApp {
 
         device.d_destroy_pipeline(pipeline);
         device.d_destroy_pipeline_layout(pipeline_layout);
+
+        device.dispatch_table.DestroyBuffer(vertex_buffer.handle);
+        device.dispatch_table.FreeMemory(vertex_buffer.backing_store);
 
         destroy(renderer);
         destroy(vulkan);
@@ -83,7 +129,7 @@ final class Sandbox : FlareApp {
 
                 {
                     VkCommandBufferBeginInfo info;
-                    vk.BeginCommandBuffer(frame.graphics_commands, &info);
+                    vk.BeginCommandBuffer(frame.graphics_commands, info);
                 }
 
                 {
@@ -95,7 +141,7 @@ final class Sandbox : FlareApp {
                         minDepth: 0.0f,
                         maxDepth: 1.0f
                     };
-                    vk.CmdSetViewport(frame.graphics_commands, 0, 1, &viewport);
+                    vk.CmdSetViewport(frame.graphics_commands, viewport);
                 }
 
                 {
@@ -109,11 +155,16 @@ final class Sandbox : FlareApp {
                         clearValueCount: 1,
                         pClearValues: &clear_color
                     };
-                    vk.CmdBeginRenderPass(frame.graphics_commands, &render_pass_info, VK_SUBPASS_CONTENTS_INLINE);
+                    vk.CmdBeginRenderPass(frame.graphics_commands, render_pass_info, VK_SUBPASS_CONTENTS_INLINE);
                 }
 
                 vk.CmdBindPipeline(frame.graphics_commands, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline);
-                vk.CmdDraw(frame.graphics_commands, 3, 1, 0, 0);
+
+                VkBuffer[1] vert_buffers = [vertex_buffer.handle];
+                VkDeviceSize[1] offsets = [0];
+                vk.CmdBindVertexBuffers(frame.graphics_commands, vert_buffers, offsets);
+
+                vk.CmdDraw(frame.graphics_commands, cast(uint) vertices.length, 1, 0, 0);
                 vk.CmdEndRenderPass(frame.graphics_commands);
                 vk.EndCommandBuffer(frame.graphics_commands);
 
@@ -132,4 +183,5 @@ final class Sandbox : FlareApp {
     VkShaderModule[2] shaders;
     VkPipeline pipeline;
     VkPipelineLayout pipeline_layout;
+    Buffer vertex_buffer;
 }

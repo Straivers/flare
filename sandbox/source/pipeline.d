@@ -5,7 +5,14 @@ import flare.core.memory.buddy_allocator;
 import flare.core.os.file;
 import flare.vulkan.api;
 
-VkPipeline create_pipeline(VulkanDevice device, VkExtent2D viewport_size, VkShaderModule vert, VkShaderModule frag, VkRenderPass render_pass, VkPipelineLayout layout) {
+VkPipeline create_graphics_pipeline(
+    VulkanDevice device,
+    ref Swapchain swapchain,
+    VkShaderModule vert,
+    VkShaderModule frag,
+    VkVertexInputBindingDescription[] binding_descs,
+    VkVertexInputAttributeDescription[] attrib_descs,
+    VkPipelineLayout layout) {
     VkPipelineShaderStageCreateInfo[2] pipeline_stages = [{
         stage: VK_SHADER_STAGE_VERTEX_BIT,
         module_: vert,
@@ -16,7 +23,12 @@ VkPipeline create_pipeline(VulkanDevice device, VkExtent2D viewport_size, VkShad
         pName: "main",
     }];
 
-    VkPipelineVertexInputStateCreateInfo vertex_input;
+    VkPipelineVertexInputStateCreateInfo vertex_input = {
+        vertexBindingDescriptionCount: 1,
+        pVertexBindingDescriptions: binding_descs.ptr,
+        vertexAttributeDescriptionCount: cast(uint) attrib_descs.length,
+        pVertexAttributeDescriptions: attrib_descs.ptr
+    };
 
     VkPipelineInputAssemblyStateCreateInfo input_assembly_info = {
         topology: VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,
@@ -26,14 +38,14 @@ VkPipeline create_pipeline(VulkanDevice device, VkExtent2D viewport_size, VkShad
     VkViewport viewport = {
         x: 0,
         y: 0,
-        width: viewport_size.width,
-        height: viewport_size.height,
+        width: swapchain.image_size.width,
+        height: swapchain.image_size.height,
         minDepth: 0.0f,
         maxDepth: 1.0f,
     };
 
     VkRect2D scissor = {
-        extent: viewport_size
+        extent: swapchain.image_size
     };
 
     VkPipelineViewportStateCreateInfo viewport_state = {
@@ -90,7 +102,7 @@ VkPipeline create_pipeline(VulkanDevice device, VkExtent2D viewport_size, VkShad
         pColorBlendState: &color_blending,
         pDynamicState: &dynamic_state,
         layout: layout,
-        renderPass: render_pass,
+        renderPass: swapchain.render_pass,
         subpass: 0,
         basePipelineHandle: VK_NULL_HANDLE,
         basePipelineIndex: -1,
@@ -107,7 +119,7 @@ VkPipelineLayout create_pipeline_layout(VulkanDevice device) {
     };
 
     VkPipelineLayout result;
-    device.d_create_pipeline_layout(&ci, &result);
+    device.d_create_pipeline_layout(ci, result);
     return result;
 }
 
@@ -118,7 +130,7 @@ VkShaderModule create_shader(VulkanDevice device, ubyte[] data) {
     };
 
     VkShaderModule shader;
-    device.d_create_shader_module(&sci, &shader);
+    device.d_create_shader_module(sci, shader);
     return shader;
 }
 

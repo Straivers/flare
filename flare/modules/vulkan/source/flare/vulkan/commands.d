@@ -111,7 +111,7 @@ CommandPool create_graphics_command_pool(VulkanDevice device) nothrow {
             flags: VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT
         };
 
-        device.d_create_command_pool(&ci, &handle);
+        device.d_create_command_pool(ci, handle);
     }
 
     return new CommandPool(device, handle);

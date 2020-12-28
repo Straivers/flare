@@ -7,6 +7,12 @@ import flare.vulkan.h;
 
 nothrow:
 
+/*
+ * TODO: Separate out framebuffers, command bufffers, fences, and semaphores
+ * because we only need max 3 of them. Swapchains may have more than 3, and we
+ * don't need the extra objects.
+ */
+
 version (Windows) {
     import core.sys.windows.windows : GetModuleHandle, HWND, NULL;
 
@@ -162,7 +168,7 @@ void destroy_swapchain(VulkanDevice device, CommandPool command_pool, ref Swapch
 
 void acquire_next_image(VulkanDevice device, Swapchain* swapchain, out SwapchainImage image) {
     uint index;
-    const err = device.d_acquire_next_image(swapchain.handle, ulong.max, swapchain.image_acquire_semaphores[swapchain.current_sync_index], null, &index);
+    const err = device.d_acquire_next_image(swapchain.handle, ulong.max, swapchain.image_acquire_semaphores[swapchain.current_sync_index], null, index);
     swapchain.state = err;
 
     swapchain.current_frame_index = cast(ushort) index;
@@ -191,7 +197,7 @@ void swap_buffers(VulkanDevice device, Swapchain* swapchain) {
         pResults: null,
     };
 
-    const err = device.d_queue_present(device.graphics, &pi);
+    const err = device.d_queue_present(device.graphics, pi);
     swapchain.state = err;
 
     swapchain.current_sync_index = cast(ushort) ((swapchain.current_sync_index + 1) % swapchain.images.length);
@@ -224,7 +230,7 @@ VkSwapchainKHR _create_swapchain(VulkanDevice device, ref SwapchainProperties pr
         ci.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;
 
     VkSwapchainKHR swapchain;
-    device.d_create_swapchain(&ci, &swapchain);
+    device.d_create_swapchain(ci, swapchain);
     return swapchain;
 }
 
@@ -270,15 +276,15 @@ VkRenderPass _create_render_pass(VulkanDevice device, VkFormat format) {
     };
 
     VkRenderPass render_pass;
-    device.d_create_render_pass(&ci, &render_pass);
+    device.d_create_render_pass(ci, render_pass);
     return render_pass;
 }
 
 void _get_frame_objects(VulkanDevice device, CommandPool command_pool, ref Swapchain swapchain) {
     uint count;
-    device.d_get_swapchain_images(swapchain.handle, &count, null);
+    device.d_get_swapchain_images(swapchain.handle, count, null);
     swapchain.images = device.context.memory.alloc_array!VkImage(count);
-    device.d_get_swapchain_images(swapchain.handle, &count, swapchain.images.ptr);
+    device.d_get_swapchain_images(swapchain.handle, count, swapchain.images.ptr);
 
     swapchain.command_buffers = device.context.memory.alloc_array!VkCommandBuffer(count);
     command_pool.allocate(swapchain.command_buffers);
@@ -300,7 +306,7 @@ void _get_frame_objects(VulkanDevice device, CommandPool command_pool, ref Swapc
             }
         };
 
-        device.d_create_image_view(&vci, &swapchain.views[i]);
+        device.d_create_image_view(vci, swapchain.views[i]);
 
         VkFramebufferCreateInfo fci = {
             renderPass: swapchain.render_pass,
@@ -311,7 +317,7 @@ void _get_frame_objects(VulkanDevice device, CommandPool command_pool, ref Swapc
             layers: 1
         };
 
-        device.d_create_framebuffer(&fci, &swapchain.framebuffers[i]);
+        device.d_create_framebuffer(fci, swapchain.framebuffers[i]);
     }
 }
 

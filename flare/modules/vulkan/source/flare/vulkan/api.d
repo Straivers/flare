@@ -55,6 +55,11 @@ public import flare.vulkan.commands;
 public import flare.vulkan.gpu;
 
 /**
+
+ */
+public import flare.vulkan.memory;
+
+/**
  Functions:
    create_surface
    create_swapchain
