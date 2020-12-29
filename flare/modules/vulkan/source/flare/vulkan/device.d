@@ -203,7 +203,7 @@ VulkanDevice create_device(ref VulkanContext ctx, ref VulkanGpuInfo gpu) {
 
     // dfmt off
     VkDeviceCreateInfo dci = {
-        pQueueCreateInfos: queues.ptr,
+        pQueueCreateInfos: queues.length ? queues.ptr : null,
         queueCreateInfoCount: cast(uint) queues.length,
         ppEnabledExtensionNames: extensions.ptr,
         enabledExtensionCount: cast(uint) extensions.length,
@@ -232,8 +232,8 @@ VulkanDevice create_device(ref VulkanContext ctx, ref VulkanGpuInfo gpu) {
 
 private:
 
-auto create_queue_create_infos(in VulkanGpuInfo device_info, ref TempAllocator mem) {
-    import std.algorithm: filter, uniq;
+VkDeviceQueueCreateInfo[] create_queue_create_infos(in VulkanGpuInfo device_info, ref TempAllocator mem) {
+    import std.algorithm: swap, uniq, count, filter;
 
     uint[4] all_families = [
         device_info.compute_family,
@@ -242,22 +242,25 @@ auto create_queue_create_infos(in VulkanGpuInfo device_info, ref TempAllocator m
         device_info.present_family,
     ];
 
-    auto families = all_families[].filter!(f => f != uint.max).uniq();
-    const n_families = () {
-        uint count;
-        foreach (fam; families.save())
-            count++;
-        return count;
-    } ();
+    bool sorted;
+    while (!sorted) {
+        sorted = true;
+        for (int i = 0; i + 1 < all_families.length; i++) {
+            if (all_families[i] > all_families[i + 1]) {
+                swap(all_families[i], all_families[i + 1]);
+                sorted = false;
+            }
+        }
+    }
 
-    auto dwcis = mem.alloc_array!VkDeviceQueueCreateInfo(n_families);
+    auto families = all_families[].filter!(i => i != uint.max).uniq();
+    auto dwcis = mem.alloc_array!VkDeviceQueueCreateInfo(families.save().count());
     auto priority = mem.alloc_object!float(1.0);
 
     foreach (i, ref ci; dwcis) {
         ci.queueFamilyIndex = families.front;
         ci.queueCount = 1;
         ci.pQueuePriorities = priority;
-
         families.popFront();
     }
 

@@ -91,6 +91,7 @@ bool select_queue_families(ref VulkanGpuInfo gpu, in VulkanDeviceCriteria criter
 
     bool found_compute_only_queue;
     bool found_graphics_present_queue;
+    bool found_transfer_only_queue;
 
     // This algorithm starts from the end and works its way to the front. I.e.
     // if there are multiple graphics queues, the first one will be selected.
@@ -113,9 +114,12 @@ bool select_queue_families(ref VulkanGpuInfo gpu, in VulkanDeviceCriteria criter
         }
 
         // If we require transfer-only queues and haven't found any
-        if (criteria.transfer_queue && gpu.transfer_family == uint.max) {
-            if (queue.queueFlags == VK_QUEUE_TRANSFER_BIT)
+        if (criteria.transfer_queue && !(gpu.transfer_family != uint.max || found_transfer_only_queue)) {
+            if ((queue.queueFlags & VK_QUEUE_TRANSFER_BIT) != 0) {
                 gpu.transfer_family = cast(uint) index;
+
+                found_transfer_only_queue = (queue.queueFlags & (VK_QUEUE_GRAPHICS_BIT | VK_QUEUE_COMPUTE_BIT)) == 0;
+            }
         }
 
         // If we require a display queue that is also a graphics queue
@@ -128,6 +132,13 @@ bool select_queue_families(ref VulkanGpuInfo gpu, in VulkanDeviceCriteria criter
             }
         }
     }
+
+    if (criteria.transfer_queue && gpu.transfer_family == uint.max) {
+        if (gpu.graphics_family != uint.max)
+            gpu.transfer_family = gpu.graphics_family;
+        else if (gpu.compute_family != uint.max)
+            gpu.transfer_family = gpu.compute_family;
+    } 
 
     const compute_ok = criteria.compute_queue == 0 || gpu.compute_family != uint.max;
     const graphics_ok = criteria.graphics_queue == 0 || gpu.graphics_family != uint.max;

@@ -142,13 +142,16 @@ nothrow private:
         {
             VulkanDeviceCriteria reqs = {
                 graphics_queue: true,
+                transfer_queue: true,
                 required_extensions: required_device_extensions,
                 display_target: surface
             };
 
             VulkanGpuInfo gpu;
-            _instance.select_gpu(reqs, gpu);
-            _device = _instance.create_device(gpu);
+            if (_instance.select_gpu(reqs, gpu))
+                _device = _instance.create_device(gpu);
+            else
+                assert(0, "No suitable GPU was detected.");
         }
 
         graphics_command_pool = create_graphics_command_pool(_device);
