@@ -34,7 +34,6 @@ void copy_host_visible_buffer(T)(VulkanDevice device, ref Buffer buffer, T[] dat
     void* map_start;
     device.dispatch_table.MapMemory(buffer.backing_store, buffer.offset, buffer.size, 0, map_start);
     (cast(Unqual!T*) map_start)[0 .. data.length] = data;
-    // device.dispatch_table.UnmapMemory(buffer.backing_store);
 
     VkMappedMemoryRange flush_range = {
         memory: buffer.backing_store,
