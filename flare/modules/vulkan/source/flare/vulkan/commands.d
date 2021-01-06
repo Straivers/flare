@@ -125,3 +125,17 @@ CommandPool create_graphics_command_pool(VulkanDevice device) nothrow {
 
     return new CommandPool(device, handle);
 }
+
+CommandPool create_transfer_command_pool(VulkanDevice device) nothrow {
+    VkCommandPool handle;
+    {
+        VkCommandPoolCreateInfo ci = {
+            queueFamilyIndex: device.transfer_family,
+            flags: VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT | VK_COMMAND_POOL_CREATE_TRANSIENT_BIT
+        };
+
+        device.d_create_command_pool(ci, handle);
+    }
+
+    return new CommandPool(device, handle);
+}

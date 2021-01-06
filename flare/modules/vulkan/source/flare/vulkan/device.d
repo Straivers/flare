@@ -185,7 +185,7 @@ VulkanDevice create_device(ref VulkanContext ctx, ref VulkanGpuInfo gpu) {
 
     VkPhysicalDeviceFeatures default_features;
 
-    auto extensions = to_cstr_array(gpu.enabled_extensions, mem);
+    auto extensions = to_cstr_array(gpu.extensions, mem);
 
     // dfmt off
     VkDeviceCreateInfo dci = {
@@ -206,7 +206,7 @@ VulkanDevice create_device(ref VulkanContext ctx, ref VulkanGpuInfo gpu) {
     }
 
     ctx.logger.info("Vulkan device created with:\n\tExtensions:%-( %s%)\n\tCompute family:  %s\n\tPresent family:  %s\n\tGraphics family: %s\n\tTransfer family: %s",
-            gpu.enabled_extensions,
+            gpu.extensions,
             gpu.compute_family,
             gpu.present_family,
             gpu.graphics_family,
