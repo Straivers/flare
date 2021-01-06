@@ -122,16 +122,8 @@ nothrow public:
        _dispatch.CreateShaderModule(ci, result);
     }
 
-    void d_destroy_shader_module(VkShaderModule shader) {
-        _dispatch.DestroyShaderModule(shader);
-    }
-
     void d_create_pipeline_layout(in VkPipelineLayoutCreateInfo ci, out VkPipelineLayout result) {
         _dispatch.CreatePipelineLayout(ci, result);
-    }
-
-    void d_destroy_pipeline_layout(VkPipelineLayout pipeline) {
-        _dispatch.DestroyPipelineLayout(pipeline);
     }
 
     void d_create_render_pass(in VkRenderPassCreateInfo ci, out VkRenderPass result) {
@@ -145,10 +137,6 @@ nothrow public:
     void d_create_graphics_pipelines(VkPipelineCache cache, VkGraphicsPipelineCreateInfo[] infos, VkPipeline[] result) {
         assert(infos.length == result.length);
         _dispatch.CreateGraphicsPipelines(cache, infos, result);
-    }
-
-    void d_destroy_pipeline(VkPipeline pipeline) {
-        _dispatch.DestroyPipeline(pipeline);
     }
 
     void d_create_framebuffer(in VkFramebufferCreateInfo ci, out VkFramebuffer result) {
@@ -172,13 +160,11 @@ nothrow public:
     }
 
 nothrow private:
-    const VkDevice _handle;
     VulkanContext _context;
     DispatchTable _dispatch;
 
     this(VulkanContext ctx, VkDevice device, ref VulkanGpuInfo device_info) {
         _context = ctx;
-        _handle = device;
         this.gpu = device_info;
         _dispatch = DispatchTable(device, null);
     }

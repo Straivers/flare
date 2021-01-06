@@ -95,9 +95,36 @@ final class Sandbox : FlareApp {
 
         pipeline = device.create_graphics_pipeline(*swap_chain, shaders[0], shaders[1], binding_descriptions[], attrib_descriptions[], pipeline_layout);
 
-        vertex_buffer = create_buffer(device, vertices.length * Vertex.sizeof, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT);
-        alloc_buffer(device, vertex_buffer);
-        copy_host_visible_buffer(device, vertex_buffer, vertices);
+        transfer_command_pool = create_transfer_command_pool(device);
+        
+        device_memory = DeviceMemory(device.dispatch_table, device.gpu.handle, vulkan.memory, vulkan.logger);
+        staging_buffer = device_memory.alloc(4.kib, ResourceType.StagingSource, MemUsage.transfer);
+        vertex_buffer = device_memory.alloc(vertices.length * Vertex.sizeof, ResourceType.VertexBuffer, MemUsage.write_static);
+
+        auto mem = device_memory.map!Vertex(staging_buffer);
+        mem[0 .. vertices.length] = vertices;
+        device_memory.unmap(staging_buffer);
+
+        auto transfer_command_buffer = transfer_command_pool.allocate();
+        {
+            begin_transfer(device.dispatch_table, transfer_command_buffer);
+
+            auto transfer_op = BufferTransferOp(
+                staging_buffer,
+                vertex_buffer,
+                device.transfer_family,
+                device.graphics_family,
+                VK_ACCESS_MEMORY_WRITE_BIT,
+                VK_ACCESS_VERTEX_ATTRIBUTE_READ_BIT
+            );
+            record_transfer(device.dispatch_table, device_memory, transfer_command_buffer, transfer_op);
+
+            submit_transfer(device.dispatch_table, transfer_command_buffer, device.transfer);
+        }
+
+        device.wait_idle(device.transfer);
+
+        transfer_command_pool.free(transfer_command_buffer);
     }
 
     override void on_shutdown() {
@@ -105,13 +132,14 @@ final class Sandbox : FlareApp {
         device.wait_idle();
 
         foreach (shader; shaders)
-            device.d_destroy_shader_module(shader);
+            device.dispatch_table.DestroyShaderModule(shader);
 
-        device.d_destroy_pipeline(pipeline);
-        device.d_destroy_pipeline_layout(pipeline_layout);
+        device.dispatch_table.DestroyPipeline(pipeline);
+        device.dispatch_table.DestroyPipelineLayout(pipeline_layout);
 
-        device.dispatch_table.DestroyBuffer(vertex_buffer.handle);
-        device.dispatch_table.FreeMemory(vertex_buffer.backing_store);
+        device_memory.destroy(staging_buffer);
+        device_memory.destroy(vertex_buffer);
+        destroy(transfer_command_pool);
 
         destroy(renderer);
         destroy(vulkan);
@@ -160,7 +188,7 @@ final class Sandbox : FlareApp {
 
                 vk.CmdBindPipeline(frame.graphics_commands, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline);
 
-                VkBuffer[1] vert_buffers = [vertex_buffer.handle];
+                VkBuffer[1] vert_buffers = [device_memory.get_buffer(vertex_buffer)];
                 VkDeviceSize[1] offsets = [0];
                 vk.CmdBindVertexBuffers(frame.graphics_commands, vert_buffers, offsets);
 
@@ -183,5 +211,9 @@ final class Sandbox : FlareApp {
     VkShaderModule[2] shaders;
     VkPipeline pipeline;
     VkPipelineLayout pipeline_layout;
-    Buffer vertex_buffer;
+    DeviceAlloc vertex_buffer;
+    DeviceAlloc staging_buffer;
+    DeviceMemory device_memory;
+
+    CommandPool transfer_command_pool;
 }

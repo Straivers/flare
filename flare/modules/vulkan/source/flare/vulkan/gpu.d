@@ -10,7 +10,6 @@ struct VulkanGpuInfo {
     // device properties
     VkPhysicalDevice handle;
     VkPhysicalDeviceProperties properties;
-    VkPhysicalDeviceMemoryProperties memory_properties;
     VkExtensionProperties[] available_extensions;
     VkQueueFamilyProperties[] queue_families;
 
@@ -45,7 +44,6 @@ void load_gpu_info(
 ) {
     result.handle = device;
     vkGetPhysicalDeviceProperties(device, &result.properties);
-    vkGetPhysicalDeviceMemoryProperties(device, &result.memory_properties);
 
     uint n_queues;
     vkGetPhysicalDeviceQueueFamilyProperties(device, &n_queues, null);
@@ -76,6 +74,7 @@ bool select_gpu(VulkanContext ctx, ref VulkanDeviceCriteria criteria, out Vulkan
         const extensions_ok = has_extensions(gpu, criteria, mem);
 
         if (queues_ok && extensions_ok) {
+            // ERROR! Extensions are not preserved! They are allocated from TempAllocator and lost when the function returns!
             result = gpu;
             return true;
         }

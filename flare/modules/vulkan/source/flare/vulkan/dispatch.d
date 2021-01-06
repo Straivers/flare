@@ -29,7 +29,7 @@ struct DispatchTable {
     VkResult WaitForFences(VkFence[] fences, bool wait_all, ulong timeout) { return check!vkWaitForFences(_device, cast(uint) fences.length, fences.ptr, wait_all ? VK_TRUE : VK_FALSE, timeout); }
 
     void GetDeviceQueue(uint queue_family_index, uint queue_index, out VkQueue p_queue) { vkGetDeviceQueue(_device, queue_family_index, queue_index, &p_queue); }
-    VkResult QueueSubmit(VkQueue queue, VkSubmitInfo[] submits, VkFence fence) { return check!vkQueueSubmit(queue, cast(uint) submits.length, submits.ptr, fence); }
+    VkResult QueueSubmit(VkQueue queue, VkFence fence, VkSubmitInfo[] submits...) { return check!vkQueueSubmit(queue, cast(uint) submits.length, submits.ptr, fence); }
     VkResult QueueWaitIdle(VkQueue queue) { return check!vkQueueWaitIdle(queue); }
 
     VkResult CreateImageView(in VkImageViewCreateInfo create_info, out VkImageView view) { return check!vkCreateImageView(_device, &create_info, _allocator, &view); }
@@ -56,15 +56,17 @@ struct DispatchTable {
 
     VkResult AllocateCommandBuffers(in VkCommandBufferAllocateInfo alloc_info, VkCommandBuffer[] buffers) { return check!vkAllocateCommandBuffers(_device, &alloc_info, buffers.ptr); }
     void FreeCommandBuffers(VkCommandPool pool, VkCommandBuffer[] buffers...) { vkFreeCommandBuffers(_device, pool, cast(uint) buffers.length, buffers.ptr); }
-    VkResult BeginCommandBuffer(VkCommandBuffer buffer, in VkCommandBufferBeginInfo begin_info) { return check!vkBeginCommandBuffer(buffer, &begin_info); }
-    VkResult EndCommandBuffer(VkCommandBuffer buffer) { return check!vkEndCommandBuffer(buffer); } 
+    VkResult BeginCommandBuffer(VkCommandBuffer cmds, in VkCommandBufferBeginInfo begin_info) { return check!vkBeginCommandBuffer(cmds, &begin_info); }
+    VkResult EndCommandBuffer(VkCommandBuffer cmds) { return check!vkEndCommandBuffer(cmds); } 
 
-    void CmdSetViewport(VkCommandBuffer buffer, in VkViewport[] viewports...) { vkCmdSetViewport(buffer, 0, cast(uint) viewports.length, viewports.ptr); }
-    void CmdBeginRenderPass(VkCommandBuffer buffer, in VkRenderPassBeginInfo begin_info, VkSubpassContents contents) { vkCmdBeginRenderPass(buffer, &begin_info, contents); }
-    void CmdEndRenderPass(VkCommandBuffer buffer) { vkCmdEndRenderPass(buffer); }
-    void CmdBindPipeline(VkCommandBuffer buffer, VkPipelineBindPoint bind_point, VkPipeline pipeline) { vkCmdBindPipeline(buffer, bind_point, pipeline); }
-    void CmdBindVertexBuffers(VkCommandBuffer buffer, in VkBuffer[] buffers, in VkDeviceSize[] offsets) { vkCmdBindVertexBuffers(buffer, 0, cast(uint) buffers.length, buffers.ptr, offsets.ptr); }
-    void CmdDraw(VkCommandBuffer buffer, uint n_vertices, uint n_instances, uint first_vertex, uint first_instance) { vkCmdDraw(buffer, n_vertices, n_instances, first_vertex, first_instance); }
+    void CmdSetViewport(VkCommandBuffer cmds, in VkViewport[] viewports...) { vkCmdSetViewport(cmds, 0, cast(uint) viewports.length, viewports.ptr); }
+    void CmdBeginRenderPass(VkCommandBuffer cmds, in VkRenderPassBeginInfo begin_info, VkSubpassContents contents) { vkCmdBeginRenderPass(cmds, &begin_info, contents); }
+    void CmdEndRenderPass(VkCommandBuffer cmds) { vkCmdEndRenderPass(cmds); }
+    void CmdPipelineBarrier(VkCommandBuffer cmds, VkPipelineStageFlags src_flags, VkPipelineStageFlags dst_flags, VkDependencyFlags dependencies, VkMemoryBarrier[] memory_barriers, VkBufferMemoryBarrier[] buffer_barriers, VkImageMemoryBarrier[] image_barriers) { vkCmdPipelineBarrier(cmds, src_flags, dst_flags, dependencies, cast(uint) memory_barriers.length, memory_barriers.ptr, cast(uint) buffer_barriers.length, buffer_barriers.ptr, cast(uint) image_barriers.length, image_barriers.ptr); }
+    void CmdBindPipeline(VkCommandBuffer cmds, VkPipelineBindPoint bind_point, VkPipeline pipeline) { vkCmdBindPipeline(cmds, bind_point, pipeline); }
+    void CmdBindVertexBuffers(VkCommandBuffer cmds, in VkBuffer[] buffers, in VkDeviceSize[] offsets) { vkCmdBindVertexBuffers(cmds, 0, cast(uint) buffers.length, buffers.ptr, offsets.ptr); }
+    void CmdDraw(VkCommandBuffer cmds, uint n_vertices, uint n_instances, uint first_vertex, uint first_instance) { vkCmdDraw(cmds, n_vertices, n_instances, first_vertex, first_instance); }
+    void CmdCopyBuffer(VkCommandBuffer cmds, VkBuffer src, VkBuffer dst, VkBufferCopy[] regions...) { vkCmdCopyBuffer(cmds, src, dst, cast(uint) regions.length, regions.ptr); }
 
     VkResult CreateBuffer(in VkBufferCreateInfo create_info, out VkBuffer buffer) { return check!vkCreateBuffer(_device, &create_info, _allocator, &buffer); }
     void DestroyBuffer(VkBuffer buffer) { vkDestroyBuffer(_device, buffer, _allocator); }
@@ -126,13 +128,15 @@ private:
         "vkFreeCommandBuffers",
         "vkBeginCommandBuffer",
         "vkEndCommandBuffer",
-        
+
         "vkCmdSetViewport",
         "vkCmdBeginRenderPass",
         "vkCmdEndRenderPass",
         "vkCmdBindPipeline",
         "vkCmdBindVertexBuffers",
+        "vkCmdPipelineBarrier",
         "vkCmdDraw",
+        "vkCmdCopyBuffer",
         
         "vkCreateBuffer",
         "vkDestroyBuffer",

@@ -2,6 +2,7 @@ module flare.vulkan.commands;
 
 import flare.vulkan.device;
 import flare.vulkan.h;
+import flare.vulkan.memory;
 
 final class CommandPool {
 nothrow:
@@ -13,6 +14,18 @@ nothrow:
         return _handle;
     }
 
+    VkCommandBuffer allocate(VkCommandBufferLevel level = VK_COMMAND_BUFFER_LEVEL_PRIMARY) {
+        VkCommandBufferAllocateInfo ai = {
+            commandPool: handle,
+            level: level,
+            commandBufferCount: 1
+        };
+
+        VkCommandBuffer buffer;
+        vkAllocateCommandBuffers(_device.handle, &ai, &buffer);
+        return buffer;
+    }
+
     void allocate(VkCommandBuffer[] buffers, VkCommandBufferLevel level = VK_COMMAND_BUFFER_LEVEL_PRIMARY) {
         VkCommandBufferAllocateInfo ai = {
             commandPool: handle,
@@ -20,11 +33,7 @@ nothrow:
             commandBufferCount: cast(uint) buffers.length
         };
 
-        auto err = vkAllocateCommandBuffers(_device.handle, &ai, buffers.ptr);
-        if (err != VK_SUCCESS) {
-            _device.context.logger.fatal("Unable to allocate %s command buffers: %s", buffers.length, err);
-            assert(0, "Unable to allocate command buffers.");
-        }
+        vkAllocateCommandBuffers(_device.handle, &ai, buffers.ptr);
     }
 
     void free(VkCommandBuffer[] buffers...) {
@@ -39,9 +48,9 @@ nothrow:
         }
     }
 
-    void cmd_begin_primary_buffer(VkCommandBuffer buffer) {
+    void cmd_begin_primary_buffer(VkCommandBuffer buffer, VkCommandBufferUsageFlags flags = 0) {
         VkCommandBufferBeginInfo info = {
-            flags: 0,
+            flags: flags,
             pInheritanceInfo: null
         };
         vkBeginCommandBuffer(buffer, &info);

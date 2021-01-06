@@ -3,6 +3,10 @@ module flare.core.memory.object_pool;
 /// An opaque handle to an object allocated from an `ObjectPool`.
 struct Handle {
     ulong value;
+
+    bool opCast(T: bool)() const pure nothrow {
+        return value != 0;
+    }
 }
 
 /**
@@ -30,8 +34,6 @@ struct ObjectPool(T, size_t size) {
     }
 
 public:
-    @disable this();
-
     /// Initialize this object pool with a default value. All objects allocated
     /// from this pool will also be initialized to this value.
     this(T init_value) {
