@@ -44,10 +44,19 @@ struct Vertex {
     }
 }
 
+// 0 ----- 1
+// |       |
+// 2 ----- 3
 immutable Vertex[] vertices = [
-    Vertex(float2(0, -0.5), float3(1.0, 0, 0)),
-    Vertex(float2(0.5, 0.5), float3(0, 1.0, 0)),
-    Vertex(float2(-0.5, 0.5), float3(0, 0, 1.0)),
+    Vertex(float2(-0.5, -0.5), float3(1, 0, 0)),
+    Vertex(float2(0.5, -0.5), float3(0, 1, 0)),
+    Vertex(float2(-0.5, 0.5), float3(0, 0, 1)),
+    Vertex(float2(0.5, 0.5), float3(1, 1, 1))
+];
+
+ushort[] indices = [
+    0, 1, 2,
+    2, 1, 3
 ];
 
 final class Sandbox : FlareApp {
@@ -100,24 +109,36 @@ final class Sandbox : FlareApp {
         device_memory = DeviceMemory(device.dispatch_table, device.gpu.handle, vulkan.memory, vulkan.logger);
         staging_buffer = device_memory.alloc(4.kib, ResourceType.StagingSource, MemUsage.transfer);
         vertex_buffer = device_memory.alloc(vertices.length * Vertex.sizeof, ResourceType.VertexBuffer, MemUsage.write_static);
+        index_buffer = device_memory.alloc(indices.length * indices[0].sizeof, ResourceType.IndexBuffer, MemUsage.write_static);
 
-        auto mem = device_memory.map!Vertex(staging_buffer);
-        mem[0 .. vertices.length] = vertices;
-        device_memory.unmap(staging_buffer);
+        auto staging_mem = MappedBuffer(staging_buffer, device_memory);
+        auto vertex_range = staging_mem.put(vertices, ResourceType.VertexBuffer);
+        auto index_range = staging_mem.put(indices, ResourceType.IndexBuffer);
+        staging_mem.flush();
 
         auto transfer_command_buffer = transfer_command_pool.allocate();
         {
             begin_transfer(device.dispatch_table, transfer_command_buffer);
 
-            auto transfer_op = BufferTransferOp(
-                staging_buffer,
-                vertex_buffer,
+            auto vertex_op = BufferTransferOp(
+                vertex_range,
+                BufferRange(vertex_buffer, 0, vertices.length * Vertex.sizeof),
                 device.transfer_family,
                 device.graphics_family,
                 VK_ACCESS_MEMORY_WRITE_BIT,
                 VK_ACCESS_VERTEX_ATTRIBUTE_READ_BIT
             );
-            record_transfer(device.dispatch_table, device_memory, transfer_command_buffer, transfer_op);
+            record_transfer(device.dispatch_table, device_memory, transfer_command_buffer, vertex_op);
+
+            auto index_op = BufferTransferOp(
+                index_range,
+                BufferRange(index_buffer, 0, indices.length * indices[0].sizeof),
+                device.transfer_family,
+                device.graphics_family,
+                VK_ACCESS_MEMORY_WRITE_BIT,
+                VK_ACCESS_VERTEX_ATTRIBUTE_READ_BIT
+            );
+            record_transfer(device.dispatch_table, device_memory, transfer_command_buffer, index_op);
 
             submit_transfer(device.dispatch_table, transfer_command_buffer, device.transfer);
         }
@@ -139,6 +160,7 @@ final class Sandbox : FlareApp {
 
         device_memory.destroy(staging_buffer);
         device_memory.destroy(vertex_buffer);
+        device_memory.destroy(index_buffer);
         destroy(transfer_command_pool);
 
         destroy(renderer);
@@ -191,8 +213,9 @@ final class Sandbox : FlareApp {
                 VkBuffer[1] vert_buffers = [device_memory.get_buffer(vertex_buffer)];
                 VkDeviceSize[1] offsets = [0];
                 vk.CmdBindVertexBuffers(frame.graphics_commands, vert_buffers, offsets);
+                vk.CmdBindIndexBuffer(frame.graphics_commands, device_memory.get_buffer(index_buffer), 0, VK_INDEX_TYPE_UINT16);
 
-                vk.CmdDraw(frame.graphics_commands, cast(uint) vertices.length, 1, 0, 0);
+                vk.CmdDrawIndexed(frame.graphics_commands, cast(uint) indices.length, 1, 0, 0, 0);
                 vk.CmdEndRenderPass(frame.graphics_commands);
                 vk.EndCommandBuffer(frame.graphics_commands);
 
@@ -211,7 +234,10 @@ final class Sandbox : FlareApp {
     VkShaderModule[2] shaders;
     VkPipeline pipeline;
     VkPipelineLayout pipeline_layout;
+
+    DeviceAlloc index_buffer;
     DeviceAlloc vertex_buffer;
+
     DeviceAlloc staging_buffer;
     DeviceMemory device_memory;
 

@@ -206,12 +206,12 @@ int translate(DisplayMode mode) nothrow {
 }
 
 struct WCharBuffer {
-    import flare.core.buffer_writer: Writer;
+    import flare.core.buffer_writer: TypedWriter;
     import std.utf : byWchar;
 
 nothrow:
     this(in char[] original) {
-        auto writer = Writer!wchar(buffer);
+        auto writer = TypedWriter!wchar(buffer);
         writer.put(original.byWchar());
         writer.put('\0');
     }

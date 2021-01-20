@@ -76,3 +76,8 @@ void* align_pointer(void* ptr, size_t alignment) {
     auto rem = (cast(size_t) ptr) % alignment;
     return ptr + (alignment - rem);
 }
+
+size_t align_offset(size_t offset, size_t alignment) {
+    const rem = offset % alignment;
+    return rem ? offset + (alignment - rem) : offset;
+}

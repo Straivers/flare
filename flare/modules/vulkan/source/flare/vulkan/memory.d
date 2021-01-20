@@ -17,6 +17,7 @@ enum MemUsage {
 enum ResourceType {
     StagingSource,
     VertexBuffer,
+    IndexBuffer,
 }
 
 alias DeviceAlloc = Handle;
@@ -32,6 +33,15 @@ struct DeviceMemory {
     }
 
     @disable this(this);
+
+    VkDeviceSize alignment_requirements(ResourceType resource_type) {
+        final switch (resource_type) with (ResourceType) {
+        case StagingSource:
+        case VertexBuffer:
+        case IndexBuffer:
+            return 1;
+        }
+    }
 
     VkBuffer get_buffer(DeviceAlloc alloc) {
         if (auto allocation = _allocations.get(alloc)) {
@@ -50,11 +60,15 @@ struct DeviceMemory {
             case StagingSource:
                 object_type = Allocation.Type.Buffer;
                 return VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
-            
+
             case VertexBuffer:
                 object_type = Allocation.Type.Buffer;
                 return VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT;
-            
+
+            case IndexBuffer:
+                object_type = Allocation.Type.Buffer;
+                return VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT;
+
             default:
                 assert(0, "Not implemented");
             }
@@ -85,7 +99,8 @@ struct DeviceMemory {
         VkMemoryRequirements requirements;
         _vk.GetBufferMemoryRequirements(buffer, requirements);
 
-        const memory_type = _get_memory_type_idx(usage, requirements.memoryTypeBits);
+        bool is_host_visible;
+        const memory_type = _get_memory_type_idx(usage, requirements.memoryTypeBits, is_host_visible);
 
         if (memory_type >= 0) {
             VkMemoryAllocateInfo alloc_i = {
@@ -98,9 +113,9 @@ struct DeviceMemory {
             _vk.BindBufferMemory(buffer, memory, 0);
 
             auto slot = _allocations.alloc();
-            *slot.content = Allocation(memory, 0, size, requirements.size, buffer);
+            *slot.content = Allocation(memory, 0, size, requirements.size, is_host_visible, buffer);
 
-            _log.trace("%s bytes allocated from memory pool %s for %s byte buffer.", requirements.size, memory_type, size);
+            _log.trace("%s bytes allocated from %s memory pool %s for %s byte buffer.", requirements.size, is_host_visible ? "host visible" : "", memory_type, size);
 
             return slot.handle;
         }
@@ -132,28 +147,47 @@ struct DeviceMemory {
         import std.traits: Unqual;
 
         if (auto slot = _allocations.get(alloc)) {
-            void* ptr;
-            _vk.MapMemory(slot.handle, 0, slot.size, 0, ptr);
-            return cast(T[]) ptr[0 .. slot.size - (slot.size % T.sizeof)];
+            assert(slot.is_host_visible);
+
+            scope (exit)
+                slot.num_mapped++;
+
+            if (!slot.num_mapped) {
+                void* ptr;
+                _vk.MapMemory(slot.handle, 0, slot.size, 0, ptr);
+                return cast(T[]) ptr[0 .. slot.size - (slot.size % T.sizeof)];
+            }
         }
         return [];
     }
 
     void unmap(DeviceAlloc alloc) {
         if (auto slot = _allocations.get(alloc)) {
+            slot.num_mapped--;
+
+            if (slot.num_mapped == 0) {
+                flush(alloc, 0, slot.size);
+
+                _vk.UnmapMemory(slot.handle);
+                slot.num_mapped--;
+            }
+        }
+    }
+
+    void flush(DeviceAlloc alloc, VkDeviceSize offset = 0, VkDeviceSize size = VkDeviceSize.max) {
+        if (auto slot = _allocations.get(alloc)) {
             VkMappedMemoryRange flush_range = {
                 memory: slot.handle,
-                offset: 0,
-                size: slot.size
+                offset: offset,
+                size: size < VkDeviceSize.max ? size : slot.size
             };
 
             _vk.FlushMappedMemoryRanges(flush_range);
-            _vk.UnmapMemory(slot.handle);
         }
     }
 
 private:
-    size_t _get_memory_type_idx(MemUsage type, uint memory_type_bits) {
+    size_t _get_memory_type_idx(MemUsage type, uint memory_type_bits, out bool is_host_visible) {
         int find(VkMemoryPropertyFlags required_properties) {
             foreach (i, memory_type; _memory_properties.memoryTypes[0 .. _memory_properties.memoryTypeCount]) {
                 const type_bits = (1 << i);
@@ -171,19 +205,22 @@ private:
         case write_static:
             required |= VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
             break;
-        
+
         case write_dynamic:
             required |= VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT;
             optional |= VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
+            is_host_visible = true;
             break;
-        
+
         case transfer:
             required |= (VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+            is_host_visible = true;
             break;
-        
+
         case readback:
             required |= VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT;
             optional |= VK_MEMORY_PROPERTY_HOST_CACHED_BIT;
+            is_host_visible = true;
             break;
 
         default:
@@ -191,7 +228,12 @@ private:
         }
 
         auto index = find(required | optional);
-        return cast(size_t) (index >= 0 ? index : find(required));
+        
+        if (index < 0 && (required | optional) != required)
+            index = find(required);
+
+        assert(index >= 0);
+        return cast(size_t) index;
     }
 
     Allocation* get_alloc(DeviceAlloc alloc) {
@@ -208,14 +250,60 @@ private:
     ObjectPool!(Allocation, 64 /* TODO: increate ObjectPool size limits */ ) _allocations;
 }
 
+struct MappedBuffer {
+    import flare.core.memory.base: align_offset;
+
+public:
+    this(DeviceAlloc allocation, ref DeviceMemory memory) {
+        _allocation = allocation;
+        _memory = &memory;
+        _mapped_memory = _memory.map!void(_allocation);
+    }
+
+    ~this() {
+        _memory.unmap(_allocation);
+    }
+
+    void flush() {
+        _memory.flush(_allocation);
+    }
+
+    BufferRange put(T)(const auto ref T[] data, ResourceType resource_type) {
+        auto alignment = _memory.alignment_requirements(resource_type);
+        _size = align_offset(_size, alignment);
+
+        // make sure data fits in memory
+        auto data_mem = cast(void[]) data;
+        assert(_mapped_memory.length - _size >= data_mem.length);
+
+        _mapped_memory[_size .. _size + data_mem.length] = data_mem;
+
+        scope (exit) _size += data_mem.length;
+        return BufferRange(_allocation, _size, data_mem.length);
+    }
+
+private:
+    DeviceAlloc _allocation;
+    DeviceMemory* _memory;
+
+    size_t _size;
+    void[] _mapped_memory;
+}
+
 struct BufferTransferOp {
     // Note: a VkBufferSlice { VkDeviceMemory, VkBuffer, VkDeviceSize offset, VkDeviceSize size } would be nice here
-    DeviceAlloc src;
-    DeviceAlloc dst;
+    BufferRange src_range;
+    BufferRange dst_range;
     uint src_queue_family;
     uint dst_queue_family;
     VkAccessFlags src_flags;
     VkAccessFlags dst_flags;
+}
+
+struct BufferRange {
+    DeviceAlloc allocation;
+    VkDeviceSize offset;
+    VkDeviceSize size;
 }
 
 void begin_transfer(DispatchTable* _vk, VkCommandBuffer commands) {
@@ -228,16 +316,17 @@ void begin_transfer(DispatchTable* _vk, VkCommandBuffer commands) {
 }
 
 void record_transfer(DispatchTable* _vk, ref DeviceMemory memory, VkCommandBuffer commands, ref BufferTransferOp op) {
-    auto src = memory.get_alloc(op.src);
-    auto dst = memory.get_alloc(op.dst);
+    auto src = memory.get_alloc(op.src_range.allocation);
+    auto dst = memory.get_alloc(op.dst_range.allocation);
     assert(src.type == Allocation.Type.Buffer && dst.type == Allocation.Type.Buffer);
+    assert(op.src_range.size == op.dst_range.size);
 
     assert(src.offset + dst.size <= src.size, "Source buffer size must be greater or equal to its offset plus copy size.");
 
     VkBufferCopy copy_i = {
-        srcOffset: src.offset,
-        dstOffset: dst.offset,
-        size: dst.size,
+        srcOffset: src.offset + op.src_range.offset,
+        dstOffset: dst.offset + op.dst_range.offset,
+        size: op.dst_range.size,
     };
 
     _vk.CmdCopyBuffer(commands, src.buffer_handle, dst.buffer_handle, copy_i);
@@ -248,9 +337,11 @@ void record_transfer(DispatchTable* _vk, ref DeviceMemory memory, VkCommandBuffe
         srcQueueFamilyIndex: op.src_queue_family,
         dstQueueFamilyIndex: op.dst_queue_family,
         buffer: dst.buffer_handle,
-        offset: dst.offset,
+        offset: dst.offset + op.dst_range.offset,
         size: dst.size
     }];
+
+    // trace: recording transfer op <top> to <commands>
 
     _vk.CmdPipelineBarrier(commands, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_VERTEX_INPUT_BIT, 0, [], barrier, []);
 }
@@ -278,8 +369,8 @@ struct Allocation {
     VkDeviceSize offset;
     VkDeviceSize size;
     VkDeviceSize block_size;
+    bool is_host_visible;
     Type type;
-    private ubyte[1] _padding;
     ushort num_mapped;
 
     union {
@@ -287,20 +378,22 @@ struct Allocation {
         VkBuffer buffer_handle;
     }
 
-    this(VkDeviceMemory memory, VkDeviceSize mem_offset, VkDeviceSize alloc_size, VkDeviceSize block_size, VkImage image) {
+    this(VkDeviceMemory memory, VkDeviceSize mem_offset, VkDeviceSize alloc_size, VkDeviceSize block_size, bool is_host_visible, VkImage image) {
         handle = memory;
         offset = mem_offset;
         size = alloc_size;
-        block_size = block_size;
+        this.block_size = block_size;
+        this.is_host_visible = is_host_visible;
         type = Type.Image;
         image_handle = image;
     }
 
-    this(VkDeviceMemory memory, VkDeviceSize mem_offset, VkDeviceSize alloc_size, VkDeviceSize block_size, VkBuffer buffer) {
+    this(VkDeviceMemory memory, VkDeviceSize mem_offset, VkDeviceSize alloc_size, VkDeviceSize block_size, bool is_host_visible, VkBuffer buffer) {
         handle = memory;
         offset = mem_offset;
         size = alloc_size;
-        block_size = block_size;
+        this.block_size = block_size;
+        this.is_host_visible = is_host_visible;
         type = Type.Buffer;
         buffer_handle = buffer;
     }

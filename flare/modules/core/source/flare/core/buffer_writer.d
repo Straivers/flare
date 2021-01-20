@@ -3,7 +3,7 @@ module flare.core.buffer_writer;
 /**
  A basic writer to a buffer of elements.
  */
-struct Writer(ElementType) {
+struct TypedWriter(ElementType) {
     import std.range: isInputRange;
     import flare.core.memory.base: PtrType;
 

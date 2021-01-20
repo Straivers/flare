@@ -65,7 +65,9 @@ struct DispatchTable {
     void CmdPipelineBarrier(VkCommandBuffer cmds, VkPipelineStageFlags src_flags, VkPipelineStageFlags dst_flags, VkDependencyFlags dependencies, VkMemoryBarrier[] memory_barriers, VkBufferMemoryBarrier[] buffer_barriers, VkImageMemoryBarrier[] image_barriers) { vkCmdPipelineBarrier(cmds, src_flags, dst_flags, dependencies, cast(uint) memory_barriers.length, memory_barriers.ptr, cast(uint) buffer_barriers.length, buffer_barriers.ptr, cast(uint) image_barriers.length, image_barriers.ptr); }
     void CmdBindPipeline(VkCommandBuffer cmds, VkPipelineBindPoint bind_point, VkPipeline pipeline) { vkCmdBindPipeline(cmds, bind_point, pipeline); }
     void CmdBindVertexBuffers(VkCommandBuffer cmds, in VkBuffer[] buffers, in VkDeviceSize[] offsets) { vkCmdBindVertexBuffers(cmds, 0, cast(uint) buffers.length, buffers.ptr, offsets.ptr); }
+    void CmdBindIndexBuffer(VkCommandBuffer cmds, VkBuffer buffer, VkDeviceSize offset, VkIndexType index_type) { vkCmdBindIndexBuffer(cmds, buffer, offset, index_type); }
     void CmdDraw(VkCommandBuffer cmds, uint n_vertices, uint n_instances, uint first_vertex, uint first_instance) { vkCmdDraw(cmds, n_vertices, n_instances, first_vertex, first_instance); }
+    void CmdDrawIndexed(VkCommandBuffer cmds, uint n_indices, uint n_instances, uint first_index, uint vertex_offset, uint first_instance) { vkCmdDrawIndexed(cmds, n_indices, n_instances, first_index, vertex_offset, first_instance); }
     void CmdCopyBuffer(VkCommandBuffer cmds, VkBuffer src, VkBuffer dst, VkBufferCopy[] regions...) { vkCmdCopyBuffer(cmds, src, dst, cast(uint) regions.length, regions.ptr); }
 
     VkResult CreateBuffer(in VkBufferCreateInfo create_info, out VkBuffer buffer) { return check!vkCreateBuffer(_device, &create_info, _allocator, &buffer); }
@@ -134,8 +136,10 @@ private:
         "vkCmdEndRenderPass",
         "vkCmdBindPipeline",
         "vkCmdBindVertexBuffers",
+        "vkCmdBindIndexBuffer",
         "vkCmdPipelineBarrier",
         "vkCmdDraw",
+        "vkCmdDrawIndexed",
         "vkCmdCopyBuffer",
         
         "vkCreateBuffer",

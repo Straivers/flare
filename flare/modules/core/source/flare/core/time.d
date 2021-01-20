@@ -64,10 +64,10 @@ struct TimeStamp {
     /// Returns: The portion of the buffer that was written to.
     char[] write_string(char[] buffer) const {
         // We use our own conversion to chars to ensure @nogc compatibility.
-        import flare.core.buffer_writer : Writer;
+        import flare.core.buffer_writer : TypedWriter;
         import flare.core.conv : to_chars;
 
-        auto writer = Writer!char(buffer);
+        auto writer = TypedWriter!char(buffer);
 
         char[20] scratch_space;
 

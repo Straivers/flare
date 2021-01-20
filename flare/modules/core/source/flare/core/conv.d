@@ -1,6 +1,6 @@
 module flare.core.conv;
 
-import flare.core.buffer_writer: Writer;
+import flare.core.buffer_writer: TypedWriter;
 
 char[] to_chars(long value, char[] out_buffer) @safe @nogc pure nothrow {
     import std.math : abs;

@@ -283,13 +283,13 @@ public:
 
     override void log_event(in LogEvent event) {
         import std.format : formattedWrite;
-        import flare.core.buffer_writer : Writer;
+        import flare.core.buffer_writer : TypedWriter;
         import core.stdc.stdio : printf;
 
         char[LogEvent.max_log_length] out_buffer;
         TimeStamp.StringBuffer ts_buffer;
 
-        auto writer = Writer!char(out_buffer);
+        auto writer = TypedWriter!char(out_buffer);
         auto ts = event.time.write_string(ts_buffer);
 
         try {
