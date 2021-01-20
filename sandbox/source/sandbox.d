@@ -10,6 +10,23 @@ import flare.vulkan.api;
 import pipeline;
 import std.stdio;
 
+struct Mesh {
+    Vertex[] vertices;
+    ushort[] indices;
+
+    size_t vertices_size() const {
+        return Vertex.sizeof * vertices.length;
+    }
+
+    size_t indices_size() const {
+        return ushort.sizeof * indices.length;
+    }
+
+    size_t size() const {
+        return Vertex.sizeof * vertices.length + ushort.sizeof * indices.length;
+    }
+}
+
 struct Vertex {
     float2 position;
     float3 colour;
@@ -44,20 +61,21 @@ struct Vertex {
     }
 }
 
-// 0 ----- 1
-// |       |
-// 2 ----- 3
-immutable Vertex[] vertices = [
-    Vertex(float2(-0.5, -0.5), float3(1, 0, 0)),
-    Vertex(float2(0.5, -0.5), float3(0, 1, 0)),
-    Vertex(float2(-0.5, 0.5), float3(0, 0, 1)),
-    Vertex(float2(0.5, 0.5), float3(1, 1, 1))
-];
-
-ushort[] indices = [
+immutable mesh = Mesh(
+    [
+        // 0 ----- 1
+        // |       |
+        // 2 ----- 3
+        Vertex(float2(-0.5, -0.5), float3(1, 0, 0)),
+        Vertex(float2(0.5, -0.5), float3(0, 1, 0)),
+        Vertex(float2(-0.5, 0.5), float3(0, 0, 1)),
+        Vertex(float2(0.5, 0.5), float3(1, 1, 1))
+    ],
+    [
     0, 1, 2,
     2, 1, 3
-];
+    ]
+);
 
 final class Sandbox : FlareApp {
     this(ref FlareAppSettings settings) {
@@ -106,15 +124,18 @@ final class Sandbox : FlareApp {
 
         transfer_command_pool = create_transfer_command_pool(device);
         
-        device_memory = DeviceMemory(device.dispatch_table, device.gpu.handle, vulkan.memory, vulkan.logger);
-        staging_buffer = device_memory.alloc(4.kib, ResourceType.StagingSource, MemUsage.transfer);
-        vertex_buffer = device_memory.alloc(vertices.length * Vertex.sizeof, ResourceType.VertexBuffer, MemUsage.write_static);
-        index_buffer = device_memory.alloc(indices.length * indices[0].sizeof, ResourceType.IndexBuffer, MemUsage.write_static);
+        device_memory = DeviceMemory(device.dispatch_table, device.gpu.handle);
 
-        auto staging_mem = MappedBuffer(staging_buffer, device_memory);
-        auto vertex_range = staging_mem.put(vertices, ResourceType.VertexBuffer);
-        auto index_range = staging_mem.put(indices, ResourceType.IndexBuffer);
-        staging_mem.flush();
+        staging_allocator = VulkanStackAllocator(device_memory);
+        auto staging_buffer = staging_allocator.create_buffer(VK_BUFFER_USAGE_TRANSFER_SRC_BIT, ResourceUsage.transfer, 32.mib);
+
+        mesh_allocator = VulkanStackAllocator(device_memory);
+        mesh_buffer = mesh_allocator.create_buffer(VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, ResourceUsage.write_static, mesh.size);
+
+        auto staging_mem = MappedMemory(device_memory, staging_buffer);
+        auto vertex_range = staging_mem.put(mesh.vertices);
+        auto index_range = staging_mem.put(mesh.indices);
+        destroy(staging_mem);
 
         auto transfer_command_buffer = transfer_command_pool.allocate();
         {
@@ -122,7 +143,7 @@ final class Sandbox : FlareApp {
 
             auto vertex_op = BufferTransferOp(
                 vertex_range,
-                BufferRange(vertex_buffer, 0, vertices.length * Vertex.sizeof),
+                mesh_buffer[0 .. mesh.vertices_size],
                 device.transfer_family,
                 device.graphics_family,
                 VK_ACCESS_MEMORY_WRITE_BIT,
@@ -132,7 +153,7 @@ final class Sandbox : FlareApp {
 
             auto index_op = BufferTransferOp(
                 index_range,
-                BufferRange(index_buffer, 0, indices.length * indices[0].sizeof),
+                mesh_buffer[mesh.vertices_size .. $],
                 device.transfer_family,
                 device.graphics_family,
                 VK_ACCESS_MEMORY_WRITE_BIT,
@@ -144,6 +165,7 @@ final class Sandbox : FlareApp {
         }
 
         device.wait_idle(device.transfer);
+        staging_allocator.destroy_buffer(staging_buffer);
 
         transfer_command_pool.free(transfer_command_buffer);
     }
@@ -158,10 +180,11 @@ final class Sandbox : FlareApp {
         device.dispatch_table.DestroyPipeline(pipeline);
         device.dispatch_table.DestroyPipelineLayout(pipeline_layout);
 
-        device_memory.destroy(staging_buffer);
-        device_memory.destroy(vertex_buffer);
-        device_memory.destroy(index_buffer);
+        destroy(staging_allocator);
         destroy(transfer_command_pool);
+
+        mesh_allocator.destroy_buffer(mesh_buffer);
+        destroy(mesh_allocator);
 
         destroy(renderer);
         destroy(vulkan);
@@ -210,12 +233,12 @@ final class Sandbox : FlareApp {
 
                 vk.CmdBindPipeline(frame.graphics_commands, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline);
 
-                VkBuffer[1] vert_buffers = [device_memory.get_buffer(vertex_buffer)];
+                VkBuffer[1] vert_buffers = [mesh_buffer.handle];
                 VkDeviceSize[1] offsets = [0];
                 vk.CmdBindVertexBuffers(frame.graphics_commands, vert_buffers, offsets);
-                vk.CmdBindIndexBuffer(frame.graphics_commands, device_memory.get_buffer(index_buffer), 0, VK_INDEX_TYPE_UINT16);
+                vk.CmdBindIndexBuffer(frame.graphics_commands, mesh_buffer.handle, mesh.vertices_size, VK_INDEX_TYPE_UINT16);
 
-                vk.CmdDrawIndexed(frame.graphics_commands, cast(uint) indices.length, 1, 0, 0, 0);
+                vk.CmdDrawIndexed(frame.graphics_commands, cast(uint) mesh.indices.length, 1, 0, 0, 0);
                 vk.CmdEndRenderPass(frame.graphics_commands);
                 vk.EndCommandBuffer(frame.graphics_commands);
 
@@ -235,11 +258,11 @@ final class Sandbox : FlareApp {
     VkPipeline pipeline;
     VkPipelineLayout pipeline_layout;
 
-    DeviceAlloc index_buffer;
-    DeviceAlloc vertex_buffer;
-
-    DeviceAlloc staging_buffer;
     DeviceMemory device_memory;
+    VulkanStackAllocator mesh_allocator;
+    VulkanStackAllocator staging_allocator;
+
+    Buffer mesh_buffer;
 
     CommandPool transfer_command_pool;
 }

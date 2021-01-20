@@ -77,7 +77,7 @@ void* align_pointer(void* ptr, size_t alignment) {
     return ptr + (alignment - rem);
 }
 
-size_t align_offset(size_t offset, size_t alignment) {
+size_t round_to_multiple_of(size_t offset, size_t alignment) {
     const rem = offset % alignment;
     return rem ? offset + (alignment - rem) : offset;
 }
