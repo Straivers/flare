@@ -181,7 +181,7 @@ VulkanDevice create_device(ref VulkanContext ctx, ref VulkanGpuInfo gpu) {
     import flare.vulkan.compat: to_cstr_array;
 
     auto mem = TempAllocator(ctx.memory);
-    auto queues = create_queue_create_infos(gpu, mem);
+    const queues = create_queue_create_infos(gpu, mem);
 
     VkPhysicalDeviceFeatures default_features;
 
@@ -241,7 +241,7 @@ VkDeviceQueueCreateInfo[] create_queue_create_infos(in VulkanGpuInfo device_info
 
     auto families = all_families[].filter!(i => i != uint.max).uniq();
     auto dwcis = mem.alloc_array!VkDeviceQueueCreateInfo(families.save().count());
-    auto priority = mem.alloc_object!float(1.0);
+    const priority = mem.alloc_object!float(1.0);
 
     foreach (i, ref ci; dwcis) {
         ci.queueFamilyIndex = families.front;
