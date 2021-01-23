@@ -80,7 +80,7 @@ struct DeviceMemory {
     enum minimum_allocation_size = 32.mib;
 
 public:
-    this(DispatchTable* dispatch_table, VkPhysicalDevice gpu) {
+    this(DispatchTable* dispatch_table, VkPhysicalDevice gpu) nothrow {
         _vk = dispatch_table;
 
         VkPhysicalDeviceProperties properties;
@@ -172,8 +172,8 @@ private:
 }
 
 struct MappedMemory {
-    this(ref DeviceMemory device_memory, Buffer buffer) {
-        _device_memory = &device_memory;
+    this(DeviceMemory* device_memory, Buffer buffer) {
+        _device_memory = device_memory;
         _memory = buffer;
 
         void* ptr;
@@ -213,8 +213,8 @@ struct VulkanStackAllocator {
     enum default_block_size = DeviceMemory.minimum_allocation_size * 2;
 
 public:
-    this(ref DeviceMemory device_memory, VkDeviceSize block_size = default_block_size) {
-        _device_memory = &device_memory;
+    this(DeviceMemory* device_memory, VkDeviceSize block_size = default_block_size) {
+        _device_memory = device_memory;
         _block_size = default_block_size;
     }
 
@@ -319,7 +319,7 @@ void begin_transfer(DispatchTable* _vk, VkCommandBuffer commands) {
     _vk.BeginCommandBuffer(commands, begin_i);
 }
 
-void record_transfer(DispatchTable* _vk, ref DeviceMemory memory, VkCommandBuffer commands, ref BufferTransferOp op) {
+void record_transfer(DispatchTable* _vk, VkCommandBuffer commands, ref BufferTransferOp op) {
     assert(op.src.size <= op.dst.size);
 
     VkBufferCopy copy_i = {

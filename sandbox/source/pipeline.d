@@ -3,7 +3,7 @@ module pipeline;
 import flare.core.memory.api;
 import flare.core.memory.buddy_allocator;
 import flare.core.os.file;
-import flare.vulkan.api;
+import flare.vulkan;
 
 VkPipeline create_graphics_pipeline(
     VulkanDevice device,
@@ -109,7 +109,7 @@ VkPipeline create_graphics_pipeline(
     }];
 
     VkPipeline[1] pipeline;
-    device.d_create_graphics_pipelines(VK_NULL_HANDLE, pipeline_info, pipeline);
+    device.dispatch_table.CreateGraphicsPipelines(VK_NULL_HANDLE, pipeline_info, pipeline);
     return pipeline[0];
 }
 
@@ -119,7 +119,7 @@ VkPipelineLayout create_pipeline_layout(VulkanDevice device) {
     };
 
     VkPipelineLayout result;
-    device.d_create_pipeline_layout(ci, result);
+    device.dispatch_table.CreatePipelineLayout(ci, result);
     return result;
 }
 
@@ -130,7 +130,7 @@ VkShaderModule create_shader(VulkanDevice device, ubyte[] data) {
     };
 
     VkShaderModule shader;
-    device.d_create_shader_module(sci, shader);
+    device.dispatch_table.CreateShaderModule(sci, shader);
     return shader;
 }
 

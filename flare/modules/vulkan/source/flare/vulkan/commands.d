@@ -7,7 +7,7 @@ import flare.vulkan.memory;
 final class CommandPool {
 nothrow:
     ~this() {
-        _device.d_destroy_command_pool(handle);
+        _device.dispatch_table.DestroyCommandPool(handle);
     }
 
     VkCommandPool handle() {
@@ -21,9 +21,9 @@ nothrow:
             commandBufferCount: 1
         };
 
-        VkCommandBuffer buffer;
-        vkAllocateCommandBuffers(_device.handle, &ai, &buffer);
-        return buffer;
+        VkCommandBuffer[1] buffer;
+        _device.dispatch_table.AllocateCommandBuffers(ai, buffer);
+        return buffer[0];
     }
 
     void allocate(VkCommandBuffer[] buffers, VkCommandBufferLevel level = VK_COMMAND_BUFFER_LEVEL_PRIMARY) {
@@ -33,15 +33,15 @@ nothrow:
             commandBufferCount: cast(uint) buffers.length
         };
 
-        vkAllocateCommandBuffers(_device.handle, &ai, buffers.ptr);
+        _device.dispatch_table.AllocateCommandBuffers(ai, buffers);
     }
 
     void free(VkCommandBuffer[] buffers...) {
-        vkFreeCommandBuffers(_device.handle, handle, cast(uint) buffers.length, buffers.ptr);
+        _device.dispatch_table.FreeCommandBuffers(handle, buffers);
     }
 
     void submit(VkQueue queue, VkFence fence_on_complete, VkSubmitInfo[] submissions...) {
-        const err = vkQueueSubmit(queue, cast(uint) submissions.length, submissions.ptr, fence_on_complete);
+        const err = _device.dispatch_table.QueueSubmit(queue, fence_on_complete, submissions);
         if (err != VK_SUCCESS) {
             _device.context.logger.fatal("Failed call to vkQueueSubmit: %s", err);
             assert(0, "Failed call to vkQueueSubmit");
@@ -53,62 +53,40 @@ nothrow:
             flags: flags,
             pInheritanceInfo: null
         };
-        vkBeginCommandBuffer(buffer, &info);
+        _device.dispatch_table.BeginCommandBuffer(buffer, info);
     }
 
     VkResult cmd_end_buffer(VkCommandBuffer buffer) {
-        return vkEndCommandBuffer(buffer);
+        return _device.dispatch_table.EndCommandBuffer(buffer);
     }
 
     void cmd_set_viewport(VkCommandBuffer buffer, VkViewport[] viewports...) {
-        vkCmdSetViewport(buffer, 0, cast(uint) viewports.length, viewports.ptr);
+        _device.dispatch_table.CmdSetViewport(buffer, viewports);
     }
 
     void cmd_begin_render_pass(VkCommandBuffer buffer, ref VkRenderPassBeginInfo render_pass_info) {
-        vkCmdBeginRenderPass(buffer, &render_pass_info, VK_SUBPASS_CONTENTS_INLINE);
+        _device.dispatch_table.CmdBeginRenderPass(buffer, render_pass_info, VK_SUBPASS_CONTENTS_INLINE);
     }
 
     void cmd_end_render_pass(VkCommandBuffer buffer) {
-        vkCmdEndRenderPass(buffer);
+        _device.dispatch_table.CmdEndRenderPass(buffer);
     }
 
     void cmd_bind_pipeline(VkCommandBuffer buffer, VkPipelineBindPoint bind_point, VkPipeline pipeline) {
-        vkCmdBindPipeline(buffer, bind_point, pipeline);
+        _device.dispatch_table.CmdBindPipeline(buffer, bind_point, pipeline);
     }
 
     void cmd_draw(VkCommandBuffer buffer, uint n_verts, uint n_instances, uint first_vert, uint first_instance) {
-        vkCmdDraw(buffer, n_verts, n_instances, first_vert, first_instance);
+        _device.dispatch_table.CmdDraw(buffer, n_verts, n_instances, first_vert, first_instance);
     }
 
 private:
     VulkanDevice _device;
     VkCommandPool _handle;
 
-    static immutable command_pool_functions = [
-        "vkQueueSubmit",
-        "vkAllocateCommandBuffers",
-        "vkFreeCommandBuffers",
-        "vkBeginCommandBuffer",
-        "vkEndCommandBuffer",
-        "vkCmdSetViewport",
-        "vkCmdBeginRenderPass",
-        "vkCmdEndRenderPass",
-        "vkCmdBindPipeline",
-        "vkCmdDraw",
-    ];
-
-    static foreach (func; command_pool_functions)
-        mixin("PFN_" ~ func ~ " " ~ func ~ ";");
-
     this(VulkanDevice host, VkCommandPool handle) {
         _device = host;
         _handle = handle;
-        load_functions();
-    }
-
-    void load_functions() {
-        static foreach (func; command_pool_functions)
-            mixin(func ~ " = cast(PFN_" ~ func ~ ") vkGetDeviceProcAddr(_device.handle, \"" ~ func ~ "\");");
     }
 }
 
@@ -120,7 +98,7 @@ CommandPool create_graphics_command_pool(VulkanDevice device) nothrow {
             flags: VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT
         };
 
-        device.d_create_command_pool(ci, handle);
+        device.dispatch_table.CreateCommandPool(ci, handle);
     }
 
     return new CommandPool(device, handle);
@@ -134,7 +112,7 @@ CommandPool create_transfer_command_pool(VulkanDevice device) nothrow {
             flags: VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT | VK_COMMAND_POOL_CREATE_TRANSIENT_BIT
         };
 
-        device.d_create_command_pool(ci, handle);
+        device.dispatch_table.CreateCommandPool(ci, handle);
     }
 
     return new CommandPool(device, handle);

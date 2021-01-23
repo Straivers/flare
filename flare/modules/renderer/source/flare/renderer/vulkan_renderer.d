@@ -1,7 +1,7 @@
 module flare.renderer.vulkan_renderer;
 
 public import flare.renderer.renderer;
-import flare.vulkan.api;
+import flare.vulkan;
 
 struct Frame {
     uint index;
@@ -68,7 +68,7 @@ nothrow public:
 
         auto slot = _swapchains.alloc();
         slot.surface = surface;
-        flare.vulkan.api.create_swapchain(_device, graphics_command_pool, surface, slot.swapchain);
+        flare.vulkan.create_swapchain(_device, graphics_command_pool, surface, slot.swapchain);
 
         return slot.handle;
     }
@@ -82,13 +82,13 @@ nothrow public:
     override void resize(SwapchainId id, ushort width, ushort height) {
         if (auto slot = _swapchains.get(id)) {
             // if (slot.handle is null)
-                flare.vulkan.api.recreate_swapchain(_device, graphics_command_pool, slot.surface, slot.swapchain);
+                flare.vulkan.recreate_swapchain(_device, graphics_command_pool, slot.surface, slot.swapchain);
         }
     }
 
     override void swap_buffers(SwapchainId id) {
         if (auto slot = _swapchains.get(id)) {
-            flare.vulkan.api.swap_buffers(_device, &slot.swapchain);
+            flare.vulkan.swap_buffers(_device, &slot.swapchain);
 
             if (slot.state == VK_ERROR_OUT_OF_DATE_KHR || slot.state == VK_SUBOPTIMAL_KHR)
                 recreate_swapchain(_device, graphics_command_pool, slot.surface, slot.swapchain);
@@ -161,7 +161,7 @@ nothrow private:
         auto slot = _swapchains.get(handle);
 
         if (slot.handle) {
-            flare.vulkan.api.destroy_swapchain(_device, graphics_command_pool, slot.swapchain);
+            flare.vulkan.destroy_swapchain(_device, graphics_command_pool, slot.swapchain);
         }
         vkDestroySurfaceKHR(_instance.instance, slot.surface, null);
         _swapchains.free(handle);
@@ -177,7 +177,7 @@ nothrow private:
 private:
 
 struct SwapchainInfo {
-    import flare.vulkan.api: VkSurfaceKHR, Swapchain;
+    import flare.vulkan: VkSurfaceKHR, Swapchain;
 
     Swapchain swapchain;
     alias swapchain this;

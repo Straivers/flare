@@ -6,7 +6,7 @@ import flare.core.memory.api;
 import flare.core.memory.buddy_allocator;
 import flare.display.manager;
 import flare.renderer.vulkan_renderer;
-import flare.vulkan.api;
+import flare.vulkan;
 import pipeline;
 import std.stdio;
 
@@ -123,16 +123,14 @@ final class Sandbox : FlareApp {
         pipeline = device.create_graphics_pipeline(*swap_chain, shaders[0], shaders[1], binding_descriptions[], attrib_descriptions[], pipeline_layout);
 
         transfer_command_pool = create_transfer_command_pool(device);
-        
-        device_memory = DeviceMemory(device.dispatch_table, device.gpu.handle);
 
-        staging_allocator = VulkanStackAllocator(device_memory);
+        staging_allocator = VulkanStackAllocator(device.memory);
         auto staging_buffer = staging_allocator.create_buffer(VK_BUFFER_USAGE_TRANSFER_SRC_BIT, ResourceUsage.transfer, 32.mib);
 
-        mesh_allocator = VulkanStackAllocator(device_memory);
+        mesh_allocator = VulkanStackAllocator(device.memory);
         mesh_buffer = mesh_allocator.create_buffer(VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, ResourceUsage.write_static, mesh.size);
 
-        auto staging_mem = MappedMemory(device_memory, staging_buffer);
+        auto staging_mem = MappedMemory(device.memory, staging_buffer);
         auto vertex_range = staging_mem.put(mesh.vertices);
         auto index_range = staging_mem.put(mesh.indices);
         destroy(staging_mem);
@@ -149,7 +147,7 @@ final class Sandbox : FlareApp {
                 VK_ACCESS_MEMORY_WRITE_BIT,
                 VK_ACCESS_VERTEX_ATTRIBUTE_READ_BIT
             );
-            record_transfer(device.dispatch_table, device_memory, transfer_command_buffer, vertex_op);
+            record_transfer(device.dispatch_table, transfer_command_buffer, vertex_op);
 
             auto index_op = BufferTransferOp(
                 index_range,
@@ -159,7 +157,7 @@ final class Sandbox : FlareApp {
                 VK_ACCESS_MEMORY_WRITE_BIT,
                 VK_ACCESS_VERTEX_ATTRIBUTE_READ_BIT
             );
-            record_transfer(device.dispatch_table, device_memory, transfer_command_buffer, index_op);
+            record_transfer(device.dispatch_table, transfer_command_buffer, index_op);
 
             submit_transfer(device.dispatch_table, transfer_command_buffer, device.transfer);
         }
@@ -258,7 +256,6 @@ final class Sandbox : FlareApp {
     VkPipeline pipeline;
     VkPipelineLayout pipeline_layout;
 
-    DeviceMemory device_memory;
     VulkanStackAllocator mesh_allocator;
     VulkanStackAllocator staging_allocator;
 
