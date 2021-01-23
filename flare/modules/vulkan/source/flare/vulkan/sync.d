@@ -17,7 +17,7 @@ void destroy_semaphore(VulkanDevice device, VkSemaphore semaphore) {
     device.dispatch_table.DestroySemaphore(semaphore);
 }
 
-VkFence create_fence(VulkanDevice device, bool start_signalled) {
+VkFence create_fence(VulkanDevice device, bool start_signalled = false) {
     VkFenceCreateInfo ci;
 
     if (start_signalled)

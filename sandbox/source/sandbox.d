@@ -5,7 +5,7 @@ import flare.core.math.vector;
 import flare.core.memory.api;
 import flare.core.memory.buddy_allocator;
 import flare.display.manager;
-import flare.renderer.vulkan_renderer;
+import flare.vulkan_renderer;
 import flare.vulkan;
 import pipeline;
 import std.stdio;

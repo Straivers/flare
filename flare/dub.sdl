@@ -10,5 +10,6 @@ subPackage "./modules/display"
 subPackage "./modules/renderer"
 subPackage "./modules/ui"
 subPackage "./modules/vulkan"
+subPackage "./modules/vulkan_renderer"
 
 targetType "none"
