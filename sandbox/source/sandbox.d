@@ -85,7 +85,7 @@ final class Sandbox : FlareApp {
         {
             ContextOptions options = {
                 api_version: VkVersion(1, 2, 0),
-                memory: new AllocatorApi!BuddyAllocator(512.kib),
+                memory: new AllocatorApi!BuddyAllocator(new void[](16.mib)),
                 parent_logger: &log,
                 layers: [VK_LAYER_KHRONOS_VALIDATION_NAME],
                 extensions: VulkanRenderer.required_instance_extensions

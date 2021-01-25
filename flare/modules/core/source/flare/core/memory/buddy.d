@@ -1,5 +1,6 @@
 module flare.core.memory.buddy;
 
+import flare.core.memory.allocator;
 import flare.core.memory.common;
 import flare.core.bitarray;
 
@@ -10,19 +11,20 @@ enum min_allocator_size = 2 * min_chunk_size;
 // TODO: Allow for extra large virtual allocations with progressive page commit
 
 struct BuddyAllocator {
-    import flare.core.memory.virtual: vm_alloc, vm_free, vm_commit;
-
 public nothrow:
-    this(size_t size) {
-        assert(is_power_of_two(size) && size >= min_allocator_size);
+    this(Allocator base_allocator, size_t size) {
+        _base_allocator = base_allocator;
+        this(_base_allocator.allocate(size));
+    }
 
-        auto memory = vm_alloc(size);
-        vm_commit(memory);
+    this(void[] memory) {
+        assert(is_power_of_two(memory.length) && memory.length >= min_allocator_size);
+        assert((cast(size_t) memory.ptr) % alignment == 0);
 
         _memory_start = memory.ptr;
         _memory_end = memory.ptr + memory.length;
 
-        _max_order = Order.of(size);
+        _max_order = Order.of(memory.length);
 
         _bitmap = BitArray(cast(ubyte[]) memory[0 .. BitArray.required_size_for(_max_order.tree_size / 2)]);
 
@@ -35,11 +37,14 @@ public nothrow:
     @disable this(this);
 
     ~this() {
-        vm_free(_memory_start[0 .. _memory_end - _memory_start]);
+        if (_base_allocator) {
+            auto mem = _memory_start[0 .. _memory_end - _memory_start];
+            _base_allocator.deallocate(mem);
+        }
     }
 
     size_t alignment() const {
-        return min_chunk_size;
+        return default_alignment;
     }
 
     Ternary owns(void[] memory) const {
@@ -228,6 +233,8 @@ private:
         return true;
     }
 
+    Allocator _base_allocator;
+
     void* _memory_start, _memory_end;
     BitArray _bitmap;
 
@@ -308,7 +315,7 @@ unittest {
     //  4    5     6     7
     // 8 9 10 11 12 13 14 15
     // 8 reserved for bitmap
-    auto mem = BuddyAllocator(1024);
+    auto mem = BuddyAllocator(new void[](1024));
 
     const a1 = mem.allocate(1);
     assert(a1.length == 1);
@@ -353,7 +360,7 @@ unittest {
 unittest {
     import flare.core.memory.measures: kib, mib;
 
-    auto mem = BuddyAllocator(256.mib);
+    auto mem = BuddyAllocator(new void[](256.mib));
 
     const a1 = mem.allocate(12.kib);
     assert(a1.length == 12.kib);
@@ -372,10 +379,10 @@ unittest {
     // Failure to do so will cause a problem when the bitmap requires an even
     // number of chunks (the first free chunk is not of Order(0)) where the free
     // lists for Order(0) has the same values as Order(1).
-    auto mem1 = BuddyAllocator(256.kib);
+    auto mem1 = BuddyAllocator(new void[](256.kib));
     assert(mem1.allocate(1) !is mem1.allocate(1));
 
-    auto mem2 = BuddyAllocator(512.kib);
+    auto mem2 = BuddyAllocator(new void[](512.kib));
     assert(mem2.allocate(1) !is mem2.allocate(1));
     assert(mem2.allocate(300) !is mem2.allocate(300));
 }
@@ -383,10 +390,9 @@ unittest {
 unittest {
     import flare.core.memory.allocator;
 
-    auto allocator = BuddyAllocator(4.kib);
+    auto allocator = BuddyAllocator(new void[](4.kib));
 
-    assert(allocator.alignment == min_chunk_size);
-    assert(allocator.get_optimal_alloc_size(1) == allocator.alignment);
+    assert(allocator.alignment == default_alignment);
 
     test_allocate_api(allocator);
     test_reallocate_api(allocator);

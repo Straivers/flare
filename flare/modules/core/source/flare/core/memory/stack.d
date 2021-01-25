@@ -164,7 +164,7 @@ struct VirtualStackAllocator {
 
     enum max_free_commited_pages = 4;
 
-public:
+public nothrow:
     this(size_t size, size_t alignment = default_alignment) {
         _allocator = StackAllocator(vm_alloc(size), alignment);
         _first_uncomitted_page = _allocator._start;
