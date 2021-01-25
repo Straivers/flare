@@ -2,8 +2,7 @@ module sandbox;
 
 import flare.application;
 import flare.core.math.vector;
-import flare.core.memory.api;
-import flare.core.memory.buddy_allocator;
+import flare.core.memory;
 import flare.display.manager;
 import flare.vulkan_renderer;
 import flare.vulkan;
@@ -86,7 +85,7 @@ final class Sandbox : FlareApp {
         {
             ContextOptions options = {
                 api_version: VkVersion(1, 2, 0),
-                memory: new as_api!BuddyAllocator(512.kib),
+                memory: new AllocatorApi!BuddyAllocator(512.kib),
                 parent_logger: &log,
                 layers: [VK_LAYER_KHRONOS_VALIDATION_NAME],
                 extensions: VulkanRenderer.required_instance_extensions
@@ -96,7 +95,7 @@ final class Sandbox : FlareApp {
         }
 
         renderer = new VulkanRenderer(vulkan);
-        display_manager = new DisplayManager();
+        display_manager = new DisplayManager(vulkan.memory);
 
         {
             DisplayProperties settings = {
@@ -246,7 +245,7 @@ final class Sandbox : FlareApp {
         }
     }
 
-    Handle display;
+    DisplayId display;
     DisplayManager display_manager;
 
     VulkanContext vulkan;

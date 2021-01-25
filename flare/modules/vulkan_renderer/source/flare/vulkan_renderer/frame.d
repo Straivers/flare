@@ -1,6 +1,7 @@
 module flare.vulkan_renderer.frame;
 
-import flare.core.memory.temp;
+// import flare.core.memory.temp;
+import flare.core.memory;
 import flare.vulkan;
 
 struct FramebufferAttachmentSpec {
@@ -30,7 +31,7 @@ struct Frame {
 
     this(VulkanDevice device, FrameSpec spec) nothrow {
         // get attachment info
-        framebuffer_attachments = device.context.memory.alloc_array!VkImageView(spec.framebuffer_attachments.length);
+        framebuffer_attachments = device.context.memory.make_array!VkImageView(spec.framebuffer_attachments.length);
         
         foreach (i, ref attachment; spec.framebuffer_attachments)
             framebuffer_attachments[i] = attachment.image_view;
@@ -68,7 +69,7 @@ struct Frame {
 
         device.dispatch_table.DestroyFramebuffer(framebuffer);
 
-        device.context.memory.free(framebuffer_attachments);
+        device.context.memory.dispose(framebuffer_attachments);
     }
 
     void resize(VulkanDevice device, VkExtent2D new_size) nothrow {

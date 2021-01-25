@@ -1,11 +1,11 @@
 module flare.core.memory.measures;
 
-nothrow:
+enum default_alignment = 8;
 
 // dfmt off
-size_t kib(size_t n) { return n * 1024; }
-size_t mib(size_t n) { return n * (1024 ^^ 2); }
-size_t gib(size_t n) { return n * (1024 ^^ 3); }
+size_t kib(size_t n) nothrow { return n * 1024; }
+size_t mib(size_t n) nothrow { return n * (1024 ^^ 2); }
+size_t gib(size_t n) nothrow { return n * (1024 ^^ 3); }
 // dfmt on
 
 template object_size(T) {

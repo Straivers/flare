@@ -5,7 +5,6 @@ module flare.core.buffer_writer;
  */
 struct TypedWriter(ElementType) {
     import std.range: isInputRange;
-    import flare.core.memory.base: PtrType;
 
 public @safe @nogc pure nothrow:
     /// Constructs a writer with a preallocated buffer. The lifetime of the
@@ -28,10 +27,6 @@ public @safe @nogc pure nothrow:
 
     void clear() {
         _length = 0;
-    }
-
-    inout(PtrType!ElementType) position() inout {
-        return &_buffer[_length];
     }
 
     /// Writes a new element to the buffer. If the buffer is at capacity, this

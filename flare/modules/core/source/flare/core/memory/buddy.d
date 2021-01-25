@@ -1,19 +1,24 @@
-module flare.core.memory.buddy_allocator;
+module flare.core.memory.buddy;
 
-import flare.core.memory.base : is_power_of_two, ilog2, emplace_obj;
-import flare.core.bitarray : BitArray;
+import flare.core.memory.common;
+import flare.core.bitarray;
 
 enum min_chunk_size = 128;
 enum min_allocator_size = 2 * min_chunk_size;
 
-struct BuddyAllocator {
-    import flare.core.memory.virtual: vm_alloc, vm_free;
+// TODO: Allow for variable min_chunk_sizes depending on size of managed region
+// TODO: Allow for extra large virtual allocations with progressive page commit
 
-nothrow:
+struct BuddyAllocator {
+    import flare.core.memory.virtual: vm_alloc, vm_free, vm_commit;
+
+public nothrow:
     this(size_t size) {
         assert(is_power_of_two(size) && size >= min_allocator_size);
 
         auto memory = vm_alloc(size);
+        vm_commit(memory);
+
         _memory_start = memory.ptr;
         _memory_end = memory.ptr + memory.length;
 
@@ -33,42 +38,99 @@ nothrow:
         vm_free(_memory_start[0 .. _memory_end - _memory_start]);
     }
 
-    void[] alloc(size_t size, size_t alignment = 8) {
+    size_t alignment() const {
+        return min_chunk_size;
+    }
+
+    Ternary owns(void[] memory) const {
+        if (memory == null || (_memory_start <= memory.ptr && memory.ptr + memory.length <= _memory_end))
+            return Ternary.yes;
+        return Ternary.no;
+    }
+
+    size_t get_optimal_alloc_size(size_t size) const {
+        return size == 0 ? 0 : Order.of(size).chunk_size;
+    }
+
+    void[] allocate(size_t size) {
         assert(_max_order.chunk_size > size);
-        assert(min_chunk_size % alignment == 0);
 
-        if (size == 0) {
+        if (size == 0)
             return [];
-        }
 
-        if (auto chunk = get_chunk(Order.of(size))) {
+        if (auto chunk = get_chunk(Order.of(size)))
             return chunk[0 .. size];
-        }
 
         return [];
     }
 
-    void free(void[] bytes) {
-        assert(bytes == [] || (_memory_start <= bytes.ptr && bytes.ptr + bytes.length <= _memory_end));
-        import std.algorithm: min;
+    bool deallocate(ref void[] bytes) {
+        auto value = _deallocate(bytes);
+        bytes = null;
+        return value;
+    }
 
-        if (bytes == [])
-            return;
+    bool resize(ref void[] memory, size_t new_size) {
+        if (memory == null || new_size == 0)
+            return false;
 
-        const order = Order.of(bytes.length);
+        assert(owns(memory) == Ternary.yes);
 
+        const order = Order.of(memory.length);
+        assert(order.is_aligned(memory.ptr - _memory_start));
 
-        assert(order.is_aligned(bytes.ptr - _memory_start));
-        const index = order.index_of(bytes.ptr - _memory_start);
+        if (new_size <= order.chunk_size) {
+            const new_order = Order.of(new_size);
 
-        if (toggle_bit(order, bytes.ptr)) {
-            add_chunk(order, bytes.ptr);
+            auto chunk = memory.ptr[0 .. order.chunk_size];
+
+            if (new_order < order) {
+                /*
+                From:
+                2 [       x       ]
+                1 [   _   |   _   ]
+                0 [ _ | _ | _ | _ ]
+
+                To:
+                2 [       x       ]
+                1 [   x   |   _   ]
+                0 [ x | _ | _ | _ ]
+                */
+
+                for (auto o = Order(order - 1); o >= new_order; o = Order(o - 1)) {
+                    auto left = chunk[0 .. o.chunk_size];
+                    auto right = chunk[o.chunk_size .. $];
+
+                    toggle_bit(o, chunk.ptr);
+                    add_chunk(o, right.ptr);
+                    chunk = left;
+                }
+            }
+
+            memory = memory.ptr[0 .. new_size];
+            return true;
         }
-        else {
-            auto buddy = bytes.ptr + (index % 2 ? -order.chunk_size : order.chunk_size);
-            remove_chunk(order, buddy);
-            free(min(buddy, bytes.ptr)[0 .. Order(order + 1).chunk_size]);
+
+        return false;
+    }
+
+    bool reallocate(ref void[] memory, size_t new_size) {
+        if (resize(memory, new_size))
+            return true;
+        
+        if (new_size == 0) {
+            deallocate(memory);
+            memory = null;
+            return true;
         }
+
+        if (auto new_memory = allocate(new_size)) {
+            new_memory[0 .. memory.length] = memory;
+            memory = new_memory;
+            return true;
+        }
+
+        return false;
     }
 
 private:
@@ -83,7 +145,7 @@ private:
             for (; p < first_free_byte; p += order.chunk_size)
                 toggle_bit(order, p);
 
-            // add last chunk to free list for that order if it is not the start of a larger block
+            // add last chunk to deallocate list for that order if it is not the start of a larger block
             if (p < _memory_end && !Order(order + 1).is_aligned(p - _memory_start))
                 add_chunk(order, p);
         }
@@ -98,8 +160,10 @@ private:
     }
 
     /**
-     Retrieves a chunk of `order` size, splitting larger chunks if necessary. If
-     no larger chunks are available, returns the empty array.
+    Retrieves a chunk of `order` size, splitting larger chunks if necessary. If
+    no larger chunks are available, returns the empty array.
+
+    Larger orders means larger chunk sizes.
      */
     void[] get_chunk(Order order) {
         // Add 1 to the order during the test to avoid checking the root. It is
@@ -128,6 +192,7 @@ private:
      */
     void[] remove_chunk(Order order, void* chunk_ptr) {
         auto chunk = cast(Chunk*) chunk_ptr;
+
         assert(order.is_aligned(chunk_ptr - _memory_start));
         assert(_free_lists[order].owns_chunk(chunk));
 
@@ -137,6 +202,30 @@ private:
     bool toggle_bit(Order order, void* chunk_ptr) {
         assert(order.is_aligned(chunk_ptr - _memory_start));
         return ~_bitmap[order.tree_index(_max_order, chunk_ptr - _memory_start) / 2];
+    }
+    
+    bool _deallocate(void[] bytes) {
+        assert(bytes == [] || owns(bytes) == Ternary.yes);
+        import std.algorithm: min;
+
+        if (bytes == [])
+            return true;
+
+        const order = Order.of(bytes.length);
+
+        assert(order.is_aligned(bytes.ptr - _memory_start));
+        const index = order.index_of(bytes.ptr - _memory_start);
+
+        if (toggle_bit(order, bytes.ptr)) {
+            add_chunk(order, bytes.ptr);
+        }
+        else {
+            auto buddy = bytes.ptr + (index % 2 ? -order.chunk_size : order.chunk_size);
+            remove_chunk(order, buddy);
+            _deallocate(min(buddy, bytes.ptr)[0 .. Order(order + 1).chunk_size]);
+        }
+
+        return true;
     }
 
     void* _memory_start, _memory_end;
@@ -221,42 +310,42 @@ unittest {
     // 8 reserved for bitmap
     auto mem = BuddyAllocator(1024);
 
-    const a1 = mem.alloc(1);
+    const a1 = mem.allocate(1);
     assert(a1.length == 1);
     assert(Order.of(a1.length).tree_index(mem._max_order, a1.ptr - mem._memory_start) == 9);
 
-    const a2 = mem.alloc(128);
+    const a2 = mem.allocate(128);
     assert(a2.length == 128);
     assert(Order.of(a2.length).tree_index(mem._max_order, a2.ptr - mem._memory_start) == 10);
 
-    const a3 = mem.alloc(16);
+    auto a3 = mem.allocate(16);
     assert(a3.length == 16);
     assert(Order.of(a3.length).tree_index(mem._max_order, a3.ptr - mem._memory_start) == 11);
 
-    const a4 = mem.alloc(128);
+    auto a4 = mem.allocate(128);
     assert(a4.length == 128);
     assert(Order.of(a4.length).tree_index(mem._max_order, a4.ptr - mem._memory_start) == 12);
 
-    const a5 = mem.alloc(200);
+    const a5 = mem.allocate(200);
     assert(a5.length == 200);
     assert(Order.of(a5.length).tree_index(mem._max_order, a5.ptr - mem._memory_start) == 7);
 
-    const f1 = mem.alloc(512);
+    const f1 = mem.allocate(512);
     assert(f1.length == 0);
 
-    const a6 = mem.alloc(128);
+    auto a6 = mem.allocate(128);
     assert(a6.length == 128);
     assert(Order.of(a6.length).tree_index(mem._max_order, a6.ptr - mem._memory_start) == 13);
 
-    const f2 = mem.alloc(0);
+    const f2 = mem.allocate(0);
     assert(f2.length == 0);
 
-    mem.free(cast(void[]) a3); // 11
-    mem.free(cast(void[]) a4); // 12
-    assert(mem.alloc(256) == []);
+    mem.deallocate(a3); // 11
+    mem.deallocate(a4); // 12
+    assert(mem.allocate(256) == []);
 
-    mem.free(cast(void[]) a6); // 13
-    const a7 = mem.alloc(129);
+    mem.deallocate(a6); // 13
+    const a7 = mem.allocate(129);
     assert(a7.length == 129);
     assert(Order.of(a7.length).tree_index(mem._max_order, a7.ptr - mem._memory_start) == 6);
 }
@@ -266,29 +355,73 @@ unittest {
 
     auto mem = BuddyAllocator(256.mib);
 
-    const a1 = mem.alloc(12.kib);
+    const a1 = mem.allocate(12.kib);
     assert(a1.length == 12.kib);
 
-    const a2 = mem.alloc(300);
+    const a2 = mem.allocate(300);
     assert(a2.length == 300);
 
-    const a3 = mem.alloc(30.mib);
+    const a3 = mem.allocate(30.mib);
     assert(a3.length == 30.mib);
 }
 
 unittest {
-    import flare.core.memory.measures: kib;
-
-    //    Test that chunks are correctly added to free lists when allocator is
+    // Test that chunks are correctly added to free lists when allocator is
     // initialized. If a chunk's start could also start a chunk of the order
     // above it, it should be added to the parent's free list and not this one.
     // Failure to do so will cause a problem when the bitmap requires an even
     // number of chunks (the first free chunk is not of Order(0)) where the free
     // lists for Order(0) has the same values as Order(1).
     auto mem1 = BuddyAllocator(256.kib);
-    assert(mem1.alloc(1) !is mem1.alloc(1));
+    assert(mem1.allocate(1) !is mem1.allocate(1));
 
     auto mem2 = BuddyAllocator(512.kib);
-    assert(mem2.alloc(1) !is mem2.alloc(1));
-    assert(mem2.alloc(300) !is mem2.alloc(300));
+    assert(mem2.allocate(1) !is mem2.allocate(1));
+    assert(mem2.allocate(300) !is mem2.allocate(300));
+}
+
+unittest {
+    import flare.core.memory.allocator;
+
+    auto allocator = BuddyAllocator(4.kib);
+
+    assert(allocator.alignment == min_chunk_size);
+    assert(allocator.get_optimal_alloc_size(1) == allocator.alignment);
+
+    test_allocate_api(allocator);
+    test_reallocate_api(allocator);
+    test_resize_api(allocator);
+
+    {
+        // Resize test when new size is less than half of a block
+
+        // Allocate all 512-byte aligned blocks except for a 1024-byte block
+        auto p1 = allocator.allocate(2048);
+        assert(p1);
+        auto p2 = allocator.allocate(512);
+        assert(p2);
+
+        // Allocate testing block
+        auto m1 = allocator.allocate(1024);
+        assert(m1);
+
+        // Check that no 512-aligned blocks are free
+        assert(!allocator.allocate(1024));
+        assert(!allocator.allocate(512));
+
+        // Shrink 1024-byte block to 512 bytes
+        allocator.resize(m1, m1.length / 2);
+
+        // Ensure that the released 512-bytes are available for allocation
+        auto m2 = allocator.allocate(512);
+        assert(m2);
+    }
+    {
+        // Allocation/deallocation/allocation produces the same block
+        auto m1 = allocator.allocate(1);
+        const s = m1;
+        allocator.deallocate(m1);
+        const m2 = allocator.allocate(1);
+        assert(s == m2);
+    }
 }

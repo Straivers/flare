@@ -1,6 +1,6 @@
 module flare.core.memory.virtual;
 
-import core.memory : pageSize;
+public import core.memory : page_size = pageSize;
 
 version (Windows) {
     import core.sys.windows.winbase : VirtualAlloc, VirtualFree;
@@ -13,8 +13,14 @@ nothrow:
 void[] vm_alloc(size_t size) {
     const actual_size = round_to_page(size);
     version (Windows) {
-        auto start = VirtualAlloc(null, actual_size, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE);
+        auto start = VirtualAlloc(null, actual_size, MEM_RESERVE, PAGE_NOACCESS);
         return start[0 .. actual_size];
+    }
+}
+
+void vm_commit(void[] range) {
+    version (Windows) {
+        VirtualAlloc(range.ptr, range.length, MEM_COMMIT, PAGE_READWRITE);
     }
 }
 
@@ -27,5 +33,5 @@ void vm_free(void[] mem) {
 private:
 
 size_t round_to_page(size_t n) {
-    return n + ((pageSize - n) % pageSize);
+    return n + ((page_size - n) % page_size);
 }

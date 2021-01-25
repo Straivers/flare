@@ -1,6 +1,8 @@
 module flare.renderer.renderer;
 
-public import flare.core.memory.object_pool: SwapchainId = Handle;
+struct SwapchainId {
+    ulong value;
+}
 
 interface Renderer {
     import flare.core.os.types: OsWindow;

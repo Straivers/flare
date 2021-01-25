@@ -1,6 +1,6 @@
 module flare.vulkan.gpu;
 
-import flare.core.memory.temp;
+import flare.core.memory;
 import flare.vulkan.context;
 import flare.vulkan.h;
 
@@ -38,19 +38,19 @@ struct VulkanDeviceCriteria {
 bool select_gpu(VulkanContext ctx, ref VulkanDeviceCriteria criteria, out VulkanGpuInfo result) {
     uint n_devices;
     vkEnumeratePhysicalDevices(ctx.instance, &n_devices, null);
-    auto devices = ctx.memory.alloc_array!VkPhysicalDevice(n_devices);
-    scope (exit) ctx.memory.free(devices);
+    auto devices = ctx.memory.make_array!VkPhysicalDevice(n_devices);
+    scope (exit) ctx.memory.dispose(devices);
     vkEnumeratePhysicalDevices(ctx.instance, &n_devices, devices.ptr);
 
     foreach (device; devices) {
-        auto mem = TempAllocator(ctx.memory, 64.kib);
+        auto mem = temp_arena(ctx.memory, 64.kib);
 
         QueueFamilies selection;
         const queues_ok = select_queue_families(device, mem, criteria, selection);
         const extensions_ok = has_extensions(device, mem, criteria);
 
         if (queues_ok && extensions_ok) {
-            auto extensions = ctx.memory.alloc_array!string(criteria.required_extensions.length);
+            auto extensions = ctx.memory.make_array!string(criteria.required_extensions.length);
             extensions[] = criteria.required_extensions;
 
             result = VulkanGpuInfo(
@@ -67,13 +67,13 @@ bool select_gpu(VulkanContext ctx, ref VulkanDeviceCriteria criteria, out Vulkan
 
 private:
 
-bool select_queue_families(VkPhysicalDevice device, ref TempAllocator mem, in VulkanDeviceCriteria criteria, out QueueFamilies selection) {
+bool select_queue_families(VkPhysicalDevice device, ref ScopedArena mem, in VulkanDeviceCriteria criteria, out QueueFamilies selection) {
     import std.algorithm : min;
 
     auto queue_families = () {
         uint count;
         vkGetPhysicalDeviceQueueFamilyProperties(device, &count, null);
-        auto array = mem.alloc_array!VkQueueFamilyProperties(count);
+        auto array = mem.make_array!VkQueueFamilyProperties(count);
         vkGetPhysicalDeviceQueueFamilyProperties(device, &count, array.ptr);
         return array;
     } ();
@@ -136,19 +136,19 @@ bool select_queue_families(VkPhysicalDevice device, ref TempAllocator mem, in Vu
     return compute_ok && graphics_ok && transfer_ok && present_ok;
 }
 
-bool has_extensions(VkPhysicalDevice device, ref TempAllocator mem, in VulkanDeviceCriteria criteria) {
+bool has_extensions(VkPhysicalDevice device, ref ScopedArena mem, in VulkanDeviceCriteria criteria) {
     import flare.core.hash: hash_of, Hash;
 
     const available_extensions = () {
         uint count;
         vkEnumerateDeviceExtensionProperties(device, null, &count, null);
-        auto array = mem.alloc_array!VkExtensionProperties(count);
+        auto array = mem.make_array!VkExtensionProperties(count);
         vkEnumerateDeviceExtensionProperties(device, null, &count, array.ptr);
         return array;
     } ();
 
     const available_hashes = () nothrow {
-        auto array = mem.alloc_array!Hash(available_extensions.length);
+        auto array = mem.make_array!Hash(available_extensions.length);
         foreach (i, ref slot; array) {
             import core.stdc.string : strlen;
 
@@ -159,7 +159,7 @@ bool has_extensions(VkPhysicalDevice device, ref TempAllocator mem, in VulkanDev
     } ();
 
     const required_hashes = () nothrow {
-        auto array = mem.alloc_array!Hash(criteria.required_extensions.length);
+        auto array = mem.make_array!Hash(criteria.required_extensions.length);
         foreach (i, ref slot; array)
             slot = hash_of(criteria.required_extensions[i]);
         return array;

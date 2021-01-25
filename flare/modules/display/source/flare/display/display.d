@@ -27,16 +27,16 @@ enum CursorIcon : ubyte {
     UserDefined4
 }
 
-struct DisplayId {
-    ulong value;
-}
-
 enum DisplayMode : ubyte {
     Windowed,
     Hidden,
     Maximized,
     Minimized,
     // Fullscreen,
+}
+
+struct DisplayId {
+    ulong value;
 }
 
 struct DisplayProperties {

@@ -1,5 +1,6 @@
 module flare.vulkan.swapchain;
 
+import flare.core.memory;
 import flare.vulkan.commands;
 import flare.vulkan.context;
 import flare.vulkan.device;
@@ -262,10 +263,10 @@ VkRenderPass _create_render_pass(VulkanDevice device, VkFormat format) {
 void _get_frame_objects(VulkanDevice device, CommandPool command_pool, ref Swapchain swapchain) {
     uint count;
     device.dispatch_table.GetSwapchainImagesKHR(swapchain.handle, count, null);
-    swapchain.images = device.context.memory.alloc_array!VkImage(count);
+    swapchain.images = device.context.memory.make_array!VkImage(count);
     device.dispatch_table.GetSwapchainImagesKHR(swapchain.handle, count, swapchain.images.ptr);
 
-    swapchain.views = device.context.memory.alloc_array!VkImageView(count);
+    swapchain.views = device.context.memory.make_array!VkImageView(count);
     foreach (i, ref image; swapchain.images) {
         VkImageViewCreateInfo vci = {
             image: image,
@@ -289,26 +290,24 @@ void _free_frame_objects(VulkanDevice device, CommandPool command_pool, ref Swap
     foreach (i; 0 .. swapchain.images.length)
         device.dispatch_table.DestroyImageView(swapchain.views[i]);
 
-    device.context.memory.free(swapchain.views);
-    device.context.memory.free(swapchain.images);
+    device.context.memory.dispose(swapchain.views);
+    device.context.memory.dispose(swapchain.images);
 }
 
 SwapchainProperties _get_swapchain_properties(VulkanDevice device, VkSurfaceKHR surface) {
-    import flare.core.memory.temp: TempAllocator;
-
-    auto mem = TempAllocator(device.context.memory);
+    auto mem = temp_arena(device.context.memory);
 
     VkSurfaceCapabilitiesKHR capabilities;
     vkGetPhysicalDeviceSurfaceCapabilitiesKHR(device.gpu.handle, surface, &capabilities);
 
     uint n_formats;
     vkGetPhysicalDeviceSurfaceFormatsKHR(device.gpu.handle, surface, &n_formats, null);
-    auto formats = mem.alloc_array!VkSurfaceFormatKHR(n_formats);
+    auto formats = mem.make_array!VkSurfaceFormatKHR(n_formats);
     vkGetPhysicalDeviceSurfaceFormatsKHR(device.gpu.handle, surface, &n_formats, formats.ptr);
 
     uint n_modes;
     vkGetPhysicalDeviceSurfacePresentModesKHR(device.gpu.handle, surface, &n_modes, null);
-    auto modes = mem.alloc_array!VkPresentModeKHR(n_modes);
+    auto modes = mem.make_array!VkPresentModeKHR(n_modes);
     vkGetPhysicalDeviceSurfacePresentModesKHR(device.gpu.handle, surface, &n_modes, modes.ptr);
 
     return SwapchainProperties(

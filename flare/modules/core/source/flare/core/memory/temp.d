@@ -1,60 +1,84 @@
 module flare.core.memory.temp;
 
-public import flare.core.memory.api: kib, mib, gib;
+import flare.core.memory.allocator;
+import flare.core.memory.common;
 
-struct TempAllocator {
-    import flare.core.memory.slab_allocator : SlabAllocator;
-    import flare.core.memory.api: Allocator;
+enum default_temp_arena_size = 16.kib;
+
+auto temp_arena(Allocator allocator, size_t size = default_temp_arena_size) nothrow {
+    return ScopedArena(allocator, size);
+}
+
+struct ScopedArena {
+    import flare.core.memory.stack : StackAllocator;
     import std.typecons : scoped;
 
-    enum default_size = 16.kib;
+    final class Impl : Allocator {
+        StackAllocator stack;
+
+        this(void[] memory) nothrow {
+            stack = StackAllocator(memory);
+        }
+
+        ~this() nothrow {
+            destroy(stack);
+        }
+
+        override size_t alignment() const {
+            return stack.alignment();
+        }
+
+        override Ternary owns(void[] memory) const {
+            return stack.owns(memory);
+        }
+
+        override size_t get_optimal_alloc_size(size_t size) const {
+            return stack.get_optimal_alloc_size(size);
+        }
+
+        override void[] allocate(size_t size) {
+            return stack.allocate(size);
+        }
+
+        override bool deallocate(ref void[] memory) {
+            return stack.deallocate(memory);
+        }
+
+        override bool reallocate(ref void[] memory, size_t new_size) {
+            return stack.reallocate(memory, new_size);
+        }
+
+        override bool resize(ref void[] memory, size_t new_size) {
+            return stack.resize(memory, new_size);
+        }
+
+    }
 
 nothrow public:
+    Allocator source;
     typeof(scoped!Impl([])) base;
     alias base this;
 
-    Allocator source;
-
-    this(Allocator source, size_t size = default_size) {
+    this(Allocator source, size_t size) {
         this.source = source;
-        this(source.alloc(size, 8));
-    }
-
-    this(void[] memory) {
-        try
-            base = scoped!Impl(memory);
-        catch (Exception e)
-            assert(0, "Nothrow violation");
+        base = scoped!Impl(source.allocate(size));
     }
 
     @disable this(this);
 
     ~this() {
-        if (source)
-            source.free(base.slab.range);
+        auto mem = stack.managed_memory;
+        source.deallocate(mem);
     }
+}
 
-    size_t bytes_free() {
-        return base.slab.bytes_free();
-    }
+unittest {
+    import flare.core.memory.stack: VirtualStackAllocator;
 
-private:
-    final class Impl : Allocator {
-        SlabAllocator slab;
+    auto base = new AllocatorApi!VirtualStackAllocator(32.kib);
+    auto temp = temp_arena(base);
 
-        this(void[] memory) {
-            slab = SlabAllocator(memory);
-        }
-
-        override void[] alloc(size_t size, size_t alignment) {
-            auto result = slab.alloc(size, alignment);
-            if (result.length != size)
-                assert(0, "Temporary memory exhausted.");
-            return result;
-        }
-
-        override void free(void[] memory) {
-            slab.free(memory);
-        }
-    }
+    test_allocate_api(temp);
+    test_reallocate_api(temp);
+    test_resize_api(temp);
 }

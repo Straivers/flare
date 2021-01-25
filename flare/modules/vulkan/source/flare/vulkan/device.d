@@ -1,6 +1,6 @@
 module flare.vulkan.device;
 
-import flare.core.memory.temp;
+import flare.core.memory;
 import flare.vulkan.context;
 import flare.vulkan.dispatch;
 import flare.vulkan.gpu;
@@ -88,7 +88,7 @@ nothrow private:
 VulkanDevice create_device(ref VulkanContext ctx, ref VulkanGpuInfo gpu) {
     import flare.vulkan.compat: to_cstr_array;
 
-    auto mem = TempAllocator(ctx.memory);
+    auto mem = temp_arena(ctx.memory);
     const queues = create_queue_create_infos(gpu, mem);
 
     VkPhysicalDeviceFeatures default_features;
@@ -126,7 +126,7 @@ VulkanDevice create_device(ref VulkanContext ctx, ref VulkanGpuInfo gpu) {
 
 private:
 
-VkDeviceQueueCreateInfo[] create_queue_create_infos(in VulkanGpuInfo device_info, ref TempAllocator mem) {
+VkDeviceQueueCreateInfo[] create_queue_create_infos(in VulkanGpuInfo device_info, ref ScopedArena mem) {
     import std.algorithm: swap, uniq, count, filter;
 
     uint[4] all_families = [
@@ -148,13 +148,14 @@ VkDeviceQueueCreateInfo[] create_queue_create_infos(in VulkanGpuInfo device_info
     }
 
     auto families = all_families[].filter!(i => i != uint.max).uniq();
-    auto dwcis = mem.alloc_array!VkDeviceQueueCreateInfo(families.save().count());
-    const priority = mem.alloc_object!float(1.0);
+    auto dwcis = mem.make_array!VkDeviceQueueCreateInfo(families.save().count());
+    auto priority = mem.make_array!float(1);
+    priority[0] = 1;
 
     foreach (i, ref ci; dwcis) {
         ci.queueFamilyIndex = families.front;
         ci.queueCount = 1;
-        ci.pQueuePriorities = priority;
+        ci.pQueuePriorities = priority.ptr;
         families.popFront();
     }
 

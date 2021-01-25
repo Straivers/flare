@@ -1,7 +1,7 @@
 module flare.vulkan.context;
 
 import flare.core.logger : Logger;
-import flare.core.memory.api : Allocator;
+import flare.core.memory;
 import flare.vulkan.h;
 
 enum VK_LAYER_LUNARG_API_DUMP_NAME = "VK_LAYER_LUNARG_api_dump";
@@ -51,7 +51,6 @@ void load_vulkan() {
 
 VkInstance create_instance(ref ContextOptions options) {
     import flare.vulkan.compat: to_cstr_array;
-    import flare.core.memory.temp: TempAllocator, kib;
 
     VkApplicationInfo ai = {
         sType: VK_STRUCTURE_TYPE_APPLICATION_INFO,
@@ -62,7 +61,7 @@ VkInstance create_instance(ref ContextOptions options) {
         apiVersion: options.api_version
     };
 
-    auto mem = TempAllocator(options.memory);
+    auto mem = temp_arena(options.memory);
     auto layers = options.layers.to_cstr_array(mem);
     auto extensions = options.extensions.to_cstr_array(mem);
 

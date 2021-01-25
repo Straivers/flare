@@ -1,13 +1,12 @@
 module flare.vulkan_renderer.renderer;
 
 public import flare.renderer.renderer;
-import flare.core.memory.temp;
+import flare.core.memory;
 import flare.vulkan;
 import flare.vulkan_renderer.frame;
 
 final class VulkanRenderer : Renderer {
     import flare.core.os.types : OsWindow;
-    import flare.core.memory.object_pool: ObjectPool;
 
     /// Vulkan instance extensions required by the renderer.
     static immutable required_instance_extensions = [
@@ -25,15 +24,11 @@ final class VulkanRenderer : Renderer {
 nothrow public:
     this(VulkanContext context) {
         _instance = context;
-        _swapchains = ObjectPool!(SwapchainInfo, 64)(SwapchainInfo.init);
+        _swapchains = WeakObjectPool!SwapchainInfo(_instance.memory, 64);
     }
 
     ~this() {
         _device.wait_idle();
-
-        foreach (slot; _swapchains.get_all_allocated()) {
-            destroy_unchecked(slot.handle);
-        }
 
         object.destroy(graphics_command_pool);
         object.destroy(_device);
@@ -44,9 +39,7 @@ nothrow public:
     }
 
     Swapchain* get_swapchain(SwapchainId id) {
-        if (auto slot = _swapchains.get(id))
-            return &slot.swapchain;
-        return null;
+        return &_swapchains.get(SwapchainHandle.from!SwapchainId(id)).swapchain;
     }
 
     override SwapchainId create_swapchain(OsWindow window) {
@@ -55,7 +48,8 @@ nothrow public:
         if (!_device)
             init_renderer(surface);
 
-        auto slot = _swapchains.alloc();
+        auto handle = _swapchains.allocate();
+        auto slot = _swapchains.get(handle);
         slot.surface = surface;
         flare.vulkan.create_swapchain(_device, graphics_command_pool, surface, slot.swapchain);
 
@@ -74,38 +68,38 @@ nothrow public:
             frame = Frame(_device, spec);
         }
 
-        return slot.handle;
+        return handle.to!SwapchainId;
     }
 
     override void destroy(SwapchainId id) {
-        if (auto slot = _swapchains.get(id)) {
-            destroy_unchecked(id);
+        auto swapchain = _swapchains.get(SwapchainHandle.from!SwapchainId(id));
+        
+        flare.vulkan.destroy_swapchain(_device, graphics_command_pool, swapchain.swapchain);
+        vkDestroySurfaceKHR(_instance.instance, swapchain.surface, null);
+        _swapchains.deallocate(SwapchainHandle.from!SwapchainId(id));
 
-            foreach (ref frame; slot.frames)
-                frame.destroy(_device);
-        }
+        foreach (ref frame; swapchain.frames)
+            frame.destroy(_device);
     }
 
     override void resize(SwapchainId id, ushort width, ushort height) {
-        if (auto slot = _swapchains.get(id)) {
-            flare.vulkan.recreate_swapchain(_device, graphics_command_pool, slot.surface, slot.swapchain);
-            
-            foreach (ref frame; slot.frames)
-                frame.resize(_device, slot.swapchain.image_size);
-        }
+        auto slot = _swapchains.get(SwapchainHandle.from!SwapchainId(id));
+        flare.vulkan.recreate_swapchain(_device, graphics_command_pool, slot.surface, slot.swapchain);
+
+        foreach (ref frame; slot.frames)
+            frame.resize(_device, slot.swapchain.image_size);
     }
 
     override void swap_buffers(SwapchainId id) {
-        if (auto slot = _swapchains.get(id)) {
-            flare.vulkan.swap_buffers(_device, &slot.swapchain, slot.current_frame().render_complete);
-            slot.frame_counter = (slot.frame_counter + 1) % slot.frames.length;
+        auto slot = _swapchains.get(SwapchainHandle.from!SwapchainId(id));
+        flare.vulkan.swap_buffers(_device, &slot.swapchain, slot.current_frame().render_complete);
+        slot.frame_counter = (slot.frame_counter + 1) % slot.frames.length;
 
-            if (slot.state == VK_ERROR_OUT_OF_DATE_KHR || slot.state == VK_SUBOPTIMAL_KHR) {
-                recreate_swapchain(_device, graphics_command_pool, slot.surface, slot.swapchain);
-                
-                foreach (ref frame; slot.frames)
-                    frame.resize(_device, slot.swapchain.image_size);
-            }
+        if (slot.state == VK_ERROR_OUT_OF_DATE_KHR || slot.state == VK_SUBOPTIMAL_KHR) {
+            recreate_swapchain(_device, graphics_command_pool, slot.surface, slot.swapchain);
+            
+            foreach (ref frame; slot.frames)
+                frame.resize(_device, slot.swapchain.image_size);
         }
     }
 
@@ -125,25 +119,22 @@ nothrow public:
     }
 
     Frame* get_frame(SwapchainId id) {
-        if (auto slot = _swapchains.get(id)) {
-            assert(slot.swapchain.handle, "Cannot get swapchain frame from hidden window!");
-            auto current_frame = slot.current_frame();
+        auto slot = _swapchains.get(SwapchainHandle.from!SwapchainId(id));
+        assert(slot.swapchain.handle, "Cannot get swapchain frame from hidden window!");
+        auto current_frame = slot.current_frame();
 
-            SwapchainImage image;
+        SwapchainImage image;
+        acquire_next_image(_device, &slot.swapchain, current_frame.image_acquire, current_frame.frame_complete_fence, image);
+
+        while (slot.state == VK_ERROR_OUT_OF_DATE_KHR) {
+            recreate_swapchain(_device, graphics_command_pool, slot.surface, slot.swapchain);
             acquire_next_image(_device, &slot.swapchain, current_frame.image_acquire, current_frame.frame_complete_fence, image);
-
-            while (slot.state == VK_ERROR_OUT_OF_DATE_KHR) {
-                recreate_swapchain(_device, graphics_command_pool, slot.surface, slot.swapchain);
-                acquire_next_image(_device, &slot.swapchain, current_frame.image_acquire, current_frame.frame_complete_fence, image);
-                
-                foreach (ref frame; slot.frames)
-                    frame.resize(_device, slot.swapchain.image_size);
-            }
-
-            return current_frame;
+            
+            foreach (ref frame; slot.frames)
+                frame.resize(_device, slot.swapchain.image_size);
         }
 
-        assert(0, "Cannot get frame from invalid swapchain id");
+        return current_frame;
     }
 
 nothrow private:
@@ -166,24 +157,16 @@ nothrow private:
         graphics_command_pool = create_graphics_command_pool(_device);
     }
 
-    void destroy_unchecked(SwapchainId handle) {
-        auto slot = _swapchains.get(handle);
-
-        if (slot.handle) {
-            flare.vulkan.destroy_swapchain(_device, graphics_command_pool, slot.swapchain);
-        }
-        vkDestroySurfaceKHR(_instance.instance, slot.surface, null);
-        _swapchains.free(handle);
-    }
+    alias SwapchainHandle = _swapchains.Handle;
 
     VulkanContext _instance;
     VulkanDevice _device;
     CommandPool graphics_command_pool;
 
-    ObjectPool!(SwapchainInfo, 64) _swapchains;
+    WeakObjectPool!SwapchainInfo _swapchains;
 }
 
-private:
+private nothrow:
 
 struct SwapchainInfo {
     import flare.vulkan: VkSurfaceKHR, Swapchain;

@@ -75,7 +75,7 @@ Per-device memory manager. Allocates in chunks of multiples of 32 MiB (max 32
 chunks per GiB).
 */
 struct DeviceMemory {
-    import flare.core.memory.api: mib;
+    import flare.core.memory: mib;
 
     enum minimum_allocation_size = 32.mib;
 
@@ -208,7 +208,7 @@ private:
 }
 
 struct VulkanStackAllocator {
-    import flare.core.memory.base: round_to_multiple_of;
+    import flare.core.math.util: round_to_next;
 
     enum default_block_size = DeviceMemory.minimum_allocation_size * 2;
 
@@ -251,7 +251,7 @@ public:
     MemorySlice allocate(VkBuffer buffer, ResourceUsage usage) {
         VkMemoryRequirements requirements;
         _device_memory._vk.GetBufferMemoryRequirements(buffer, requirements);
-        const alloc_size = requirements.size.round_to_multiple_of(_device_memory.page_size);
+        const alloc_size = requirements.size.round_to_next(_device_memory.page_size);
 
         assert(alloc_size <= _block_size);
 
@@ -274,7 +274,7 @@ public:
         assert(_last_block);
         assert(memory.memory == _last_block.allocation.memory);
 
-        const alloc_size = (memory.offset + memory.size).round_to_multiple_of(_device_memory.page_size);
+        const alloc_size = (memory.offset + memory.size).round_to_next(_device_memory.page_size);
         assert(alloc_size == _last_block.first_free_byte);
 
         _last_block.first_free_byte -= alloc_size;

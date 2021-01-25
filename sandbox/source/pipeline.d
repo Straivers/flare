@@ -1,7 +1,6 @@
 module pipeline;
 
-import flare.core.memory.api;
-import flare.core.memory.buddy_allocator;
+import flare.core.memory;
 import flare.core.os.file;
 import flare.vulkan;
 
@@ -137,6 +136,6 @@ VkShaderModule create_shader(VulkanDevice device, ubyte[] data) {
 VkShaderModule load_shader(VulkanDevice device, string path) {
     auto bytes = read_file(path, device.context.memory);
     auto shader = device.create_shader(bytes);
-    device.context.memory.free(bytes);
+    device.context.memory.dispose(bytes);
     return shader;
 }

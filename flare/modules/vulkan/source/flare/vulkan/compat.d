@@ -1,8 +1,8 @@
 module flare.vulkan.compat;
 
-import flare.core.memory.api;
+import flare.core.memory;
 
-@safe nothrow:
+@safe:
 
 /**
  Converts an array of D-style strings to an array of C-style strings, using
@@ -11,25 +11,18 @@ import flare.core.memory.api;
  allocator runs out of memory midway through the operation, everything that has
  been allocated will be freed before the function returns.
  */
-@trusted char*[] to_cstr_array(in string[] strings, Allocator allocator) {
-    auto array = allocator.alloc_array!(char*)(strings.length);
+@trusted char*[] to_cstr_array(in string[] strings, ref ScopedArena allocator) nothrow {
+    auto array = allocator.make_array!(char*)(strings.length);
 
     foreach (i, ref str; strings) {
-        auto tmp = allocator.alloc_array!char(str.length + 1);
+        auto c_string = allocator.make_array!char(str.length + 1);
 
-        if (!tmp) {
-            // free all allocated strings
-            for (auto j = 0; j < array.length && array[j] !is null; j++)
-                allocator.dispose(array[j][0 .. strings[j].length + 1]);
-            // free array of strings
-            allocator.dispose(array);
-
+        if (!c_string)
             return [];
-        }
 
-        tmp[0 .. str.length] = str;
-        tmp[$ - 1] = '\0';
-        array[i] = tmp.ptr;
+        c_string[0 .. str.length] = str;
+        c_string[$ - 1] = '\0';
+        array[i] = c_string.ptr;
     }
 
     return array;
