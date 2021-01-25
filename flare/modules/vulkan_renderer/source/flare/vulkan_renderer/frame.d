@@ -29,49 +29,6 @@ struct Frame {
     VkRenderPass render_pass;
     VkCommandBuffer graphics_commands;
 
-    this(VulkanDevice device, FrameSpec spec) nothrow {
-        // get attachment info
-        framebuffer_attachments = device.context.memory.make_array!VkImageView(spec.framebuffer_attachments.length);
-        
-        foreach (i, ref attachment; spec.framebuffer_attachments)
-            framebuffer_attachments[i] = attachment.image_view;
-
-        assert(framebuffer_attachments.length == 1, "Handling multiple attachments not implemented");
-
-        // create framebuffer
-        VkFramebufferCreateInfo framebuffer_ci = {
-            renderPass: spec.render_pass,
-            attachmentCount: cast(uint) framebuffer_attachments.length,
-            pAttachments: framebuffer_attachments.ptr,
-            width: spec.framebuffer_size.width,
-            height: spec.framebuffer_size.height,
-            layers: 1
-        };
-
-        device.dispatch_table.CreateFramebuffer(framebuffer_ci, framebuffer);
-
-
-        // create sync objects
-        frame_complete_fence = device.create_fence();
-        image_acquire = device.create_semaphore();
-        render_complete = device.create_semaphore();
-
-        render_pass = spec.render_pass;
-        graphics_commands = spec.graphics_commands;
-    }
-
-    void destroy(VulkanDevice device) nothrow {
-        wait_fence(device, frame_complete_fence);
-
-        destroy_semaphore(device, image_acquire);
-        destroy_semaphore(device, render_complete);
-        destroy_fence(device, frame_complete_fence);
-
-        device.dispatch_table.DestroyFramebuffer(framebuffer);
-
-        device.context.memory.dispose(framebuffer_attachments);
-    }
-
     void resize(VulkanDevice device, VkExtent2D new_size) nothrow {
         device.dispatch_table.DestroyFramebuffer(framebuffer);
 
@@ -87,4 +44,58 @@ struct Frame {
         device.dispatch_table.CreateFramebuffer(framebuffer_ci, framebuffer);
         image_size = new_size;
     }
+}
+
+void init_frame(VulkanDevice device, ref FrameSpec spec, out Frame frame) nothrow {
+    // get attachment info
+    frame.framebuffer_attachments = device.context.memory.make_array!VkImageView(spec.framebuffer_attachments.length);
+    
+    foreach (i, ref attachment; spec.framebuffer_attachments)
+        frame.framebuffer_attachments[i] = attachment.image_view;
+
+    assert(frame.framebuffer_attachments.length == 1, "Handling multiple attachments not implemented");
+
+    // create framebuffer
+    VkFramebufferCreateInfo framebuffer_ci = {
+        renderPass: spec.render_pass,
+        attachmentCount: cast(uint) frame.framebuffer_attachments.length,
+        pAttachments: frame.framebuffer_attachments.ptr,
+        width: spec.framebuffer_size.width,
+        height: spec.framebuffer_size.height,
+        layers: 1
+    };
+
+    device.dispatch_table.CreateFramebuffer(framebuffer_ci, frame.framebuffer);
+
+    frame.frame_complete_fence = device.create_fence(true);
+    frame.image_acquire = device.create_semaphore();
+    frame.render_complete = device.create_semaphore();
+    frame.render_pass = spec.render_pass;
+    frame.graphics_commands = spec.graphics_commands;
+}
+
+void destroy_frame(VulkanDevice device, ref Frame frame) nothrow {
+    wait_fence(device, frame.frame_complete_fence);
+
+    destroy_semaphore(device, frame.image_acquire);
+    destroy_semaphore(device, frame.render_complete);
+    destroy_fence(device, frame.frame_complete_fence);
+    device.dispatch_table.DestroyFramebuffer(frame.framebuffer);
+    device.context.memory.dispose(frame.framebuffer_attachments);
+}
+
+void resize_frame(VulkanDevice device, ref Frame frame, VkExtent2D size) nothrow {
+    device.dispatch_table.DestroyFramebuffer(frame.framebuffer);
+
+    VkFramebufferCreateInfo framebuffer_ci = {
+        renderPass: frame.render_pass,
+        attachmentCount: cast(uint) frame.framebuffer_attachments.length,
+        pAttachments: frame.framebuffer_attachments.ptr,
+        width: size.width,
+        height: size.height,
+        layers: 1
+    };
+
+    device.dispatch_table.CreateFramebuffer(framebuffer_ci, frame.framebuffer);
+    frame.image_size = size;
 }

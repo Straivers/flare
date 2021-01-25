@@ -51,7 +51,8 @@ nothrow public:
         auto handle = _swapchains.allocate();
         auto slot = _swapchains.get(handle);
         slot.surface = surface;
-        flare.vulkan.create_swapchain(_device, graphics_command_pool, surface, slot.swapchain);
+
+        slot.frames = _instance.memory.make_array!Frame(slot.swapchain.views.length);
 
         foreach (i, ref frame; slot.frames) {
             FrameSpec spec = {
@@ -60,12 +61,10 @@ nothrow public:
                 graphics_commands: graphics_command_pool.allocate(),
             };
 
-            // auto tmp = TempAllocator(_device.context.memory);
-            // spec.framebuffer_attachments = tmp.alloc_array!FramebufferAttachmentSpec(1);
-            // spec.framebuffer_attachments[0] = FramebufferAttachmentSpec(slot.swapchain.views[i]);
-            spec.framebuffer_attachments = [FramebufferAttachmentSpec(slot.swapchain.views[i])];
+            FramebufferAttachmentSpec[1] attachments = [FramebufferAttachmentSpec(slot.swapchain.views[i])];
+            spec.framebuffer_attachments = attachments;
 
-            frame = Frame(_device, spec);
+            init_frame(_device, spec, frame);
         }
 
         return handle.to!SwapchainId;
@@ -74,20 +73,40 @@ nothrow public:
     override void destroy(SwapchainId id) {
         auto swapchain = _swapchains.get(SwapchainHandle.from!SwapchainId(id));
         
-        flare.vulkan.destroy_swapchain(_device, graphics_command_pool, swapchain.swapchain);
+        flare.vulkan.destroy_swapchain(_device, swapchain.swapchain);
         vkDestroySurfaceKHR(_instance.instance, swapchain.surface, null);
         _swapchains.deallocate(SwapchainHandle.from!SwapchainId(id));
 
         foreach (ref frame; swapchain.frames)
-            frame.destroy(_device);
+            destroy_frame(_device, frame);
     }
 
     override void resize(SwapchainId id, ushort width, ushort height) {
         auto slot = _swapchains.get(SwapchainHandle.from!SwapchainId(id));
-        flare.vulkan.recreate_swapchain(_device, graphics_command_pool, slot.surface, slot.swapchain);
+        flare.vulkan.recreate_swapchain(_device, slot.surface, slot.swapchain);
+
+        if (slot.frames.length != slot.swapchain.views.length) {
+            _instance.memory.dispose(slot.frames);
+            slot.frames = _instance.memory.make_array!Frame(slot.swapchain.views.length);
+
+            foreach (i, ref frame; slot.frames) {
+                FrameSpec spec = {
+                    render_pass: slot.swapchain.render_pass,
+                    framebuffer_size: slot.swapchain.image_size,
+                    graphics_commands: graphics_command_pool.allocate(),
+                };
+
+                // auto tmp = TempAllocator(_device.context.memory);
+                // spec.framebuffer_attachments = tmp.alloc_array!FramebufferAttachmentSpec(1);
+                // spec.framebuffer_attachments[0] = FramebufferAttachmentSpec(slot.swapchain.views[i]);
+                spec.framebuffer_attachments = [FramebufferAttachmentSpec(slot.swapchain.views[i])];
+
+                init_frame(_device, spec, frame);
+            }
+        }
 
         foreach (ref frame; slot.frames)
-            frame.resize(_device, slot.swapchain.image_size);
+            resize_frame(_device, frame, slot.swapchain.image_size);
     }
 
     override void swap_buffers(SwapchainId id) {
@@ -96,7 +115,7 @@ nothrow public:
         slot.frame_counter = (slot.frame_counter + 1) % slot.frames.length;
 
         if (slot.state == VK_ERROR_OUT_OF_DATE_KHR || slot.state == VK_SUBOPTIMAL_KHR) {
-            recreate_swapchain(_device, graphics_command_pool, slot.surface, slot.swapchain);
+            recreate_swapchain(_device, slot.surface, slot.swapchain);
             
             foreach (ref frame; slot.frames)
                 frame.resize(_device, slot.swapchain.image_size);
@@ -127,7 +146,7 @@ nothrow public:
         acquire_next_image(_device, &slot.swapchain, current_frame.image_acquire, current_frame.frame_complete_fence, image);
 
         while (slot.state == VK_ERROR_OUT_OF_DATE_KHR) {
-            recreate_swapchain(_device, graphics_command_pool, slot.surface, slot.swapchain);
+            recreate_swapchain(_device, slot.surface, slot.swapchain);
             acquire_next_image(_device, &slot.swapchain, current_frame.image_acquire, current_frame.frame_complete_fence, image);
             
             foreach (ref frame; slot.frames)
@@ -174,7 +193,7 @@ struct SwapchainInfo {
     Swapchain swapchain;
     alias swapchain this;
 
-    Frame[VulkanRenderer.max_frames_in_flight] frames;
+    Frame[] frames;
     size_t frame_counter;
 
     VkSurfaceKHR surface;

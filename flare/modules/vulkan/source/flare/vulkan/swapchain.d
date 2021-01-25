@@ -88,7 +88,7 @@ struct SwapchainImage {
  *
  * If a surface has no size (if the window is hidden), this function does nothing.
  */
-bool create_swapchain(VulkanDevice device, CommandPool command_pool, VkSurfaceKHR surface, out Swapchain swapchain) {
+bool create_swapchain(VulkanDevice device, VkSurfaceKHR surface, out Swapchain swapchain) {
     auto properties = _get_swapchain_properties(device, surface);
 
     if (properties.image_size == VkExtent2D()) {
@@ -100,7 +100,7 @@ bool create_swapchain(VulkanDevice device, CommandPool command_pool, VkSurfaceKH
 
     swapchain.handle = _create_swapchain(device, properties, null);
     swapchain.render_pass = _create_render_pass(device, properties.format);
-    _get_frame_objects(device, command_pool, swapchain);
+    _get_swapchain_images(device, swapchain);
 
     device.context.logger.trace("Created swapchain (%sw, %sh) ID %s for surface %s.", swapchain.image_size.width, swapchain.image_size.height, swapchain.handle, surface);
 
@@ -114,9 +114,9 @@ bool create_swapchain(VulkanDevice device, CommandPool command_pool, VkSurfaceKH
  * returned `false` due to a hidden window), `recreate_swapchain()` will create
  * a new swapchain.
  */
-void recreate_swapchain(VulkanDevice device, CommandPool command_pool, VkSurfaceKHR surface, ref Swapchain swapchain) {
+void recreate_swapchain(VulkanDevice device, VkSurfaceKHR surface, ref Swapchain swapchain) {
     if (!swapchain.handle) {
-        create_swapchain(device, command_pool, surface, swapchain);
+        create_swapchain(device, surface, swapchain);
         return;
     }
 
@@ -137,20 +137,20 @@ void recreate_swapchain(VulkanDevice device, CommandPool command_pool, VkSurface
         new_swapchain.render_pass = _create_render_pass(device, swapchain.format);
     }
 
-    _free_frame_objects(device, command_pool, swapchain);
-    _get_frame_objects(device, command_pool, new_swapchain);
+    _free_frame_objects(device, swapchain);
+    _get_swapchain_images(device, new_swapchain);
 
     device.context.logger.trace("Swapchain for surface %s has been recreated. It is now %s (%sw, %sh).", surface, new_swapchain.handle, properties.image_size.width, properties.image_size.height);
 
     swapchain = new_swapchain;
 }
 
-void destroy_swapchain(VulkanDevice device, CommandPool command_pool, ref Swapchain swapchain) {
+void destroy_swapchain(VulkanDevice device, ref Swapchain swapchain) {
     if (!swapchain.handle)
         return;
 
     device.wait_idle();
-    _free_frame_objects(device, command_pool, swapchain);
+    _free_frame_objects(device, swapchain);
     device.dispatch_table.DestroyRenderPass(swapchain.render_pass);
     device.dispatch_table.DestroySwapchainKHR(swapchain.handle);
     swapchain = Swapchain();
@@ -260,11 +260,13 @@ VkRenderPass _create_render_pass(VulkanDevice device, VkFormat format) {
     return render_pass;
 }
 
-void _get_frame_objects(VulkanDevice device, CommandPool command_pool, ref Swapchain swapchain) {
+void _get_swapchain_images(VulkanDevice device, ref Swapchain swapchain) {
     uint count;
     device.dispatch_table.GetSwapchainImagesKHR(swapchain.handle, count, null);
     swapchain.images = device.context.memory.make_array!VkImage(count);
     device.dispatch_table.GetSwapchainImagesKHR(swapchain.handle, count, swapchain.images.ptr);
+
+    assert(count > 0);
 
     swapchain.views = device.context.memory.make_array!VkImageView(count);
     foreach (i, ref image; swapchain.images) {
@@ -286,7 +288,7 @@ void _get_frame_objects(VulkanDevice device, CommandPool command_pool, ref Swapc
     }
 }
 
-void _free_frame_objects(VulkanDevice device, CommandPool command_pool, ref Swapchain swapchain) {
+void _free_frame_objects(VulkanDevice device, ref Swapchain swapchain) {
     foreach (i; 0 .. swapchain.images.length)
         device.dispatch_table.DestroyImageView(swapchain.views[i]);
 

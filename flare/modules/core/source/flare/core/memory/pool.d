@@ -3,6 +3,8 @@ module flare.core.memory.pool;
 import flare.core.memory.common;
 import flare.core.memory.allocator;
 
+import core.stdc.string: memset;
+
 struct MemoryPool {
 public:
     /**
@@ -71,7 +73,7 @@ public:
         auto block = cast(_Block*) (_start + _freelist_index * _block_size);
         _freelist_index = block.next_index;
 
-        return (cast(void*) block)[0 .. size];
+        return memset(cast(void*) block, 0, size)[0 .. size];
     }
 
     bool deallocate(ref void[] memory) {
@@ -442,6 +444,8 @@ public nothrow:
 
         static if (args.length > 0)
             emplace_obj(cast(PtrType!T) block.memory.ptr, args);
+        else
+            memset(block.memory.ptr, 0, _Block.sizeof);
 
         return Handle(index, block.generation);
     }
