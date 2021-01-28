@@ -44,7 +44,8 @@ public:
     }
 
     bool is_visible(DisplayId id) {
-        return _displays.get(Handle.from(id)).mode != DisplayMode.Hidden;
+        auto display = _displays.get(Handle.from(id));
+        return (display.mode & (DisplayMode.Hidden | DisplayMode.Minimized)) == 0;
     }
 
     bool is_close_requested(DisplayId id) {

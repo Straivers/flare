@@ -141,6 +141,18 @@ extern (Windows) LRESULT window_procedure(HWND hwnd, uint msg, WPARAM wp, LPARAM
 
     switch (msg) {
     case WM_SIZE: {
+            switch (wp) {
+            case SIZE_MINIMIZED:
+                display.mode = DisplayMode.Minimized;
+                break;
+            case SIZE_MAXIMIZED:
+                display.mode = DisplayMode.Maximized;
+                break;
+            default:
+                display.mode = DisplayMode.Windowed;
+                break;
+            }
+
             const width = LOWORD(lp);
             const height = HIWORD(lp);
             display.renderer.resize(display.swapchain, width, height);
