@@ -355,3 +355,12 @@ void submit_transfer(DispatchTable* _vk, VkCommandBuffer commands, VkQueue trans
 
     _vk.QueueSubmit(transfer_queue, complete_fence, submit_i);
 }
+
+void do_transfers(DispatchTable* vk, VkQueue queue, VkCommandBuffer buffer, BufferTransferOp[] ops, VkFence fence = null) {
+    begin_transfer(vk, buffer);
+
+    foreach (ref op; ops)
+        record_transfer(vk, buffer, op);
+
+    submit_transfer(vk, buffer, queue);
+}

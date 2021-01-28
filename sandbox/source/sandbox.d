@@ -155,36 +155,30 @@ final class Sandbox : FlareApp {
         auto index_range = staging_mem.put(mesh.indices);
         destroy(staging_mem);
 
+        BufferTransferOp[2] ops = [
+            {
+                src: vertex_range,
+                dst: mesh_buffer[0 .. mesh.vertices_size],
+                src_queue_family: device.transfer_family,
+                dst_queue_family: device.graphics_family,
+                src_flags: VK_ACCESS_MEMORY_WRITE_BIT,
+                dst_flags: VK_ACCESS_VERTEX_ATTRIBUTE_READ_BIT,
+            },
+            {
+                src: index_range,
+                dst: mesh_buffer[mesh.vertices_size .. $],
+                src_queue_family: device.transfer_family,
+                dst_queue_family: device.graphics_family,
+                src_flags: VK_ACCESS_MEMORY_WRITE_BIT,
+                dst_flags: VK_ACCESS_VERTEX_ATTRIBUTE_READ_BIT    
+            }
+        ];
+
         auto transfer_command_buffer = transfer_command_pool.allocate();
-        {
-            begin_transfer(device.dispatch_table, transfer_command_buffer);
-
-            auto vertex_op = BufferTransferOp(
-                vertex_range,
-                mesh_buffer[0 .. mesh.vertices_size],
-                device.transfer_family,
-                device.graphics_family,
-                VK_ACCESS_MEMORY_WRITE_BIT,
-                VK_ACCESS_VERTEX_ATTRIBUTE_READ_BIT
-            );
-            record_transfer(device.dispatch_table, transfer_command_buffer, vertex_op);
-
-            auto index_op = BufferTransferOp(
-                index_range,
-                mesh_buffer[mesh.vertices_size .. $],
-                device.transfer_family,
-                device.graphics_family,
-                VK_ACCESS_MEMORY_WRITE_BIT,
-                VK_ACCESS_VERTEX_ATTRIBUTE_READ_BIT
-            );
-            record_transfer(device.dispatch_table, transfer_command_buffer, index_op);
-
-            submit_transfer(device.dispatch_table, transfer_command_buffer, device.transfer);
-        }
+        do_transfers(device.dispatch_table, device.transfer, transfer_command_buffer, ops);
 
         device.wait_idle(device.transfer);
         staging_allocator.destroy_buffer(staging_buffer);
-
         transfer_command_pool.free(transfer_command_buffer);
     }
 
