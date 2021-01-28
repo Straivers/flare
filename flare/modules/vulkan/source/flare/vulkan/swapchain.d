@@ -182,7 +182,7 @@ size_t acquire_next_image(VulkanDevice device, Swapchain* swapchain) {
 
     swapchain.current_frame_index = cast(ushort) index;
 
-    wait_and_reset_fence(device, swapchain.render_fences[swapchain.sync_object_index]);
+    // wait_and_reset_fence(device, swapchain.render_fences[swapchain.sync_object_index]);
     return index;
 }
 

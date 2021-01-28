@@ -217,11 +217,12 @@ final class Sandbox : FlareApp {
             else if (display_manager.is_visible(display)) {
                 auto swapchain = display_manager.get_swapchain(display);
                 auto frame = renderer.get_frame(swapchain);
+                auto cmd = renderer.get_graphics_command_buffer();
                 auto vk = renderer.get_logical_device().dispatch_table;
 
                 {
                     VkCommandBufferBeginInfo info;
-                    vk.BeginCommandBuffer(frame.graphics_commands, info);
+                    vk.BeginCommandBuffer(cmd, info);
                 }
 
                 {
@@ -233,7 +234,7 @@ final class Sandbox : FlareApp {
                         minDepth: 0.0f,
                         maxDepth: 1.0f
                     };
-                    vk.CmdSetViewport(frame.graphics_commands, viewport);
+                    vk.CmdSetViewport(cmd, viewport);
                 }
 
                 {
@@ -247,21 +248,21 @@ final class Sandbox : FlareApp {
                         clearValueCount: 1,
                         pClearValues: &clear_color
                     };
-                    vk.CmdBeginRenderPass(frame.graphics_commands, render_pass_info, VK_SUBPASS_CONTENTS_INLINE);
+                    vk.CmdBeginRenderPass(cmd, render_pass_info, VK_SUBPASS_CONTENTS_INLINE);
                 }
 
-                vk.CmdBindPipeline(frame.graphics_commands, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline);
+                vk.CmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline);
 
                 VkBuffer[1] vert_buffers = [mesh_buffer.handle];
                 VkDeviceSize[1] offsets = [0];
-                vk.CmdBindVertexBuffers(frame.graphics_commands, vert_buffers, offsets);
-                vk.CmdBindIndexBuffer(frame.graphics_commands, mesh_buffer.handle, mesh.vertices_size, VK_INDEX_TYPE_UINT16);
+                vk.CmdBindVertexBuffers(cmd, vert_buffers, offsets);
+                vk.CmdBindIndexBuffer(cmd, mesh_buffer.handle, mesh.vertices_size, VK_INDEX_TYPE_UINT16);
 
-                vk.CmdDrawIndexed(frame.graphics_commands, cast(uint) mesh.indices.length, 1, 0, 0, 0);
-                vk.CmdEndRenderPass(frame.graphics_commands);
-                vk.EndCommandBuffer(frame.graphics_commands);
+                vk.CmdDrawIndexed(cmd, cast(uint) mesh.indices.length, 1, 0, 0, 0);
+                vk.CmdEndRenderPass(cmd);
+                vk.EndCommandBuffer(cmd);
 
-                renderer.submit(swapchain, frame);
+                renderer.submit(swapchain, frame, cmd);
                 renderer.swap_buffers(swapchain);
             }
         }

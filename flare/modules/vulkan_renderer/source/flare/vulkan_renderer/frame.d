@@ -12,8 +12,6 @@ struct FrameSpec {
     VkRenderPass render_pass;
     VkExtent2D framebuffer_size;
     FramebufferAttachmentSpec[] framebuffer_attachments;
-
-    VkCommandBuffer graphics_commands;
 }
 
 struct Frame {
@@ -23,7 +21,7 @@ struct Frame {
     VkFramebuffer framebuffer;
     VkImageView[] framebuffer_attachments;
 
-    VkCommandBuffer graphics_commands;
+    VkCommandBuffer pending_commands;
 }
 
 void init_frame(VulkanDevice device, size_t index, ref FrameSpec spec, out Frame frame) nothrow {
@@ -49,12 +47,12 @@ void init_frame(VulkanDevice device, size_t index, ref FrameSpec spec, out Frame
 
     frame.index = index;
     frame.image_size = spec.framebuffer_size;
-    frame.graphics_commands = spec.graphics_commands;
 }
 
 void destroy_frame(VulkanDevice device, ref Frame frame) nothrow {
     device.dispatch_table.DestroyFramebuffer(frame.framebuffer);
     device.context.memory.dispose(frame.framebuffer_attachments);
+    frame = Frame();
 }
 
 void resize_frame(VulkanDevice device, ref Frame frame, VkExtent2D size, FramebufferAttachmentSpec[] attachments, VkRenderPass render_pass) nothrow {

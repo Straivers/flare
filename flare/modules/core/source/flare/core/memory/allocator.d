@@ -252,7 +252,7 @@ bool resize_array(T, A)(
 
     const common_length = min(array.length, new_length);
 
-    if (new_length < common_length) {
+    if (new_length < array.length) {
         foreach (i, ref object; array[new_length .. $])
             clear_obj(i, object);
     }

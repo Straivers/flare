@@ -80,7 +80,6 @@ nothrow public:
 
         vkDestroySurfaceKHR(_instance.instance, slot.surface, null);
         _swapchains.deallocate(SwapchainHandle.from!SwapchainId(id));
-
     }
 
     override void resize(SwapchainId id, ushort width, ushort height) {
@@ -126,22 +125,29 @@ nothrow public:
             resize(id, 0, 0);
     }
 
-    void submit(SwapchainId id, Frame* frame) {
+    void submit(SwapchainId id, Frame* frame, VkCommandBuffer commands) {
         auto slot = _swapchains.get(SwapchainHandle.from(id));
 
         VkPipelineStageFlags wait_stages = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
 
         VkSubmitInfo si = {
             waitSemaphoreCount: 1,
-            pWaitSemaphores: &slot.swapchain.acquire_semaphores[frame.index],
+            pWaitSemaphores: &slot.swapchain.acquire_semaphores[slot.swapchain.sync_object_index],
             pWaitDstStageMask: &wait_stages,
             commandBufferCount: 1,
-            pCommandBuffers: &frame.graphics_commands,
+            pCommandBuffers: &commands,
             signalSemaphoreCount: 1,
-            pSignalSemaphores: &slot.swapchain.present_semaphores[frame.index]
+            pSignalSemaphores: &slot.swapchain.present_semaphores[slot.swapchain.sync_object_index]
         };
 
-        graphics_command_pool.submit(_device.graphics, slot.swapchain.render_fences[frame.index], si);
+        wait_and_reset_fence(_device, slot.render_fences[slot.swapchain.sync_object_index]);
+
+        if (frame.pending_commands)
+            graphics_command_pool.free(frame.pending_commands);
+
+        graphics_command_pool.submit(_device.graphics, slot.swapchain.render_fences[slot.swapchain.sync_object_index], si);
+
+        frame.pending_commands = commands;
     }
 
     Frame* get_frame(SwapchainId id) {
@@ -160,6 +166,10 @@ nothrow public:
 
     VkRenderPass get_renderpass(SwapchainId id) {
         return _swapchains.get(SwapchainHandle.from(id)).render_pass;
+    }
+
+    VkCommandBuffer get_graphics_command_buffer() {
+        return graphics_command_pool.allocate();
     }
 
 nothrow private:
@@ -220,7 +230,12 @@ struct SwapchainInfo {
             resize_frame(device, frame, swapchain.image_size, attachments, render_pass);
         }
 
-        wait_fences(device, true, ulong.max, swapchain.render_fences);
+        /**
+        We have to guard against an empty swapchain because init_or_resize_frames
+        can be called after swapchain destruction.
+        */
+        if (swapchain.handle)
+            wait_fences(device, true, ulong.max, swapchain.render_fences);
 
         // Add or remove frames
         resize_array(
@@ -234,15 +249,12 @@ struct SwapchainInfo {
                     render_pass: render_pass,
                     framebuffer_size: swapchain.image_size,
                     framebuffer_attachments: attachments,
-                    graphics_commands: command_pool.allocate(),
                 };
 
                 init_frame(device, i, spec, frame);
             },
             (size_t i, ref Frame frame) nothrow {
-                // There is likely a sync bug here, but I'm not sure how to identify or fix it properly rn.
-                // 28-Jan-2021
-                command_pool.free(frame.graphics_commands);
+                command_pool.free(frame.pending_commands);
                 destroy_frame(device, frame);
             }
         );
