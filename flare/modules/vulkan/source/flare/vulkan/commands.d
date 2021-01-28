@@ -48,38 +48,6 @@ nothrow:
         }
     }
 
-    void cmd_begin_primary_buffer(VkCommandBuffer buffer, VkCommandBufferUsageFlags flags = 0) {
-        VkCommandBufferBeginInfo info = {
-            flags: flags,
-            pInheritanceInfo: null
-        };
-        _device.dispatch_table.BeginCommandBuffer(buffer, info);
-    }
-
-    VkResult cmd_end_buffer(VkCommandBuffer buffer) {
-        return _device.dispatch_table.EndCommandBuffer(buffer);
-    }
-
-    void cmd_set_viewport(VkCommandBuffer buffer, VkViewport[] viewports...) {
-        _device.dispatch_table.CmdSetViewport(buffer, viewports);
-    }
-
-    void cmd_begin_render_pass(VkCommandBuffer buffer, ref VkRenderPassBeginInfo render_pass_info) {
-        _device.dispatch_table.CmdBeginRenderPass(buffer, render_pass_info, VK_SUBPASS_CONTENTS_INLINE);
-    }
-
-    void cmd_end_render_pass(VkCommandBuffer buffer) {
-        _device.dispatch_table.CmdEndRenderPass(buffer);
-    }
-
-    void cmd_bind_pipeline(VkCommandBuffer buffer, VkPipelineBindPoint bind_point, VkPipeline pipeline) {
-        _device.dispatch_table.CmdBindPipeline(buffer, bind_point, pipeline);
-    }
-
-    void cmd_draw(VkCommandBuffer buffer, uint n_verts, uint n_instances, uint first_vert, uint first_instance) {
-        _device.dispatch_table.CmdDraw(buffer, n_verts, n_instances, first_vert, first_instance);
-    }
-
 private:
     VulkanDevice _device;
     VkCommandPool _handle;

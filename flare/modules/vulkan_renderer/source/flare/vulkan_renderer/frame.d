@@ -17,18 +17,16 @@ struct FrameSpec {
 }
 
 struct Frame {
+    size_t index;
+
     VkExtent2D image_size;
     VkFramebuffer framebuffer;
     VkImageView[] framebuffer_attachments;
 
-    VkFence frame_complete_fence;
-    VkSemaphore image_acquire;
-    VkSemaphore render_complete;
-
     VkCommandBuffer graphics_commands;
 }
 
-void init_frame(VulkanDevice device, ref FrameSpec spec, out Frame frame) nothrow {
+void init_frame(VulkanDevice device, size_t index, ref FrameSpec spec, out Frame frame) nothrow {
     // get attachment info
     frame.framebuffer_attachments = device.context.memory.make_array!VkImageView(spec.framebuffer_attachments.length);
     
@@ -49,19 +47,12 @@ void init_frame(VulkanDevice device, ref FrameSpec spec, out Frame frame) nothro
 
     device.dispatch_table.CreateFramebuffer(framebuffer_ci, frame.framebuffer);
 
+    frame.index = index;
     frame.image_size = spec.framebuffer_size;
-    frame.frame_complete_fence = device.create_fence(true);
-    frame.image_acquire = device.create_semaphore();
-    frame.render_complete = device.create_semaphore();
     frame.graphics_commands = spec.graphics_commands;
 }
 
 void destroy_frame(VulkanDevice device, ref Frame frame) nothrow {
-    wait_fence(device, frame.frame_complete_fence);
-
-    destroy_semaphore(device, frame.image_acquire);
-    destroy_semaphore(device, frame.render_complete);
-    destroy_fence(device, frame.frame_complete_fence);
     device.dispatch_table.DestroyFramebuffer(frame.framebuffer);
     device.context.memory.dispose(frame.framebuffer_attachments);
 }

@@ -109,16 +109,16 @@ final class Sandbox : FlareApp {
                     on_key: (mgr, id, key, state, user) nothrow {
                         if (key == KeyCode.Escape)
                             mgr.close(id);
-                        
+
                         if (key == KeyCode.H)
                             mgr.change_window_mode(id, DisplayMode.Minimized);
-                        
+
                         if (key == KeyCode.S && !mgr.is_visible(id))
                             mgr.change_window_mode(id, DisplayMode.Windowed);
-                        
+
                         if (key == KeyCode.R)
                             mgr.resize(id, 1280, 720);
-                        
+
                         if (key == KeyCode.T)
                             mgr.resize(id, 1920, 1080);
                     }
@@ -215,7 +215,8 @@ final class Sandbox : FlareApp {
             if (display_manager.is_close_requested(display))
                 display_manager.destroy(display);
             else if (display_manager.is_visible(display)) {
-                auto frame = renderer.get_frame(display_manager.get_swapchain(display));
+                auto swapchain = display_manager.get_swapchain(display);
+                auto frame = renderer.get_frame(swapchain);
                 auto vk = renderer.get_logical_device().dispatch_table;
 
                 {
@@ -240,7 +241,7 @@ final class Sandbox : FlareApp {
                     clear_color.color.float32 = [0, 0, 0, 1.0];
 
                     VkRenderPassBeginInfo render_pass_info = {
-                        renderPass: renderer.get_renderpass(display_manager.get_swapchain(display)),
+                        renderPass: renderer.get_renderpass(swapchain),
                         framebuffer: frame.framebuffer,
                         renderArea: VkRect2D(VkOffset2D(0, 0), frame.image_size),
                         clearValueCount: 1,
@@ -260,8 +261,8 @@ final class Sandbox : FlareApp {
                 vk.CmdEndRenderPass(frame.graphics_commands);
                 vk.EndCommandBuffer(frame.graphics_commands);
 
-                renderer.submit(frame);
-                renderer.swap_buffers(display_manager.get_swapchain(display));
+                renderer.submit(swapchain, frame);
+                renderer.swap_buffers(swapchain);
             }
         }
     }

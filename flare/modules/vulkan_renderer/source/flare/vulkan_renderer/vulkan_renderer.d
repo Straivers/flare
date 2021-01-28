@@ -64,19 +64,21 @@ nothrow public:
     }
 
     override void destroy(SwapchainId id) {
-        auto swapchain = _swapchains.get(SwapchainHandle.from!SwapchainId(id));
+        auto slot = _swapchains.get(SwapchainHandle.from!SwapchainId(id));
         
-        if (swapchain.handle) {
-            foreach (ref frame; swapchain.frames)
+        if (slot.handle) {
+            wait_fences(_device, true, ulong.max, slot.swapchain.render_fences);
+
+            foreach (ref frame; slot.frames)
                 destroy_frame(_device, frame);
 
-            flare.vulkan.destroy_swapchain(_device, swapchain.swapchain);
-            _device.dispatch_table.DestroyRenderPass(swapchain.render_pass);
+            flare.vulkan.destroy_swapchain(_device, slot.swapchain);
+            _device.dispatch_table.DestroyRenderPass(slot.render_pass);
         }
         else
-            assert(!swapchain.frames);
+            assert(!slot.frames);
 
-        vkDestroySurfaceKHR(_instance.instance, swapchain.surface, null);
+        vkDestroySurfaceKHR(_instance.instance, slot.surface, null);
         _swapchains.deallocate(SwapchainHandle.from!SwapchainId(id));
 
     }
@@ -120,42 +122,40 @@ nothrow public:
 
     override void swap_buffers(SwapchainId id) {
         auto slot = _swapchains.get(SwapchainHandle.from!SwapchainId(id));
-        flare.vulkan.swap_buffers(_device, &slot.swapchain, slot.current_frame().render_complete);
-        slot.frame_counter = (slot.frame_counter + 1) % slot.frames.length;
-
-        if (slot.state == VK_ERROR_OUT_OF_DATE_KHR || slot.state == VK_SUBOPTIMAL_KHR) {
+        if (!flare.vulkan.swap_buffers(_device, &slot.swapchain))
             resize(id, 0, 0);
-        }
     }
 
-    void submit(Frame* frame) {
+    void submit(SwapchainId id, Frame* frame) {
+        auto slot = _swapchains.get(SwapchainHandle.from(id));
+
         VkPipelineStageFlags wait_stages = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+
         VkSubmitInfo si = {
             waitSemaphoreCount: 1,
-            pWaitSemaphores: &frame.image_acquire,
+            pWaitSemaphores: &slot.swapchain.acquire_semaphores[frame.index],
             pWaitDstStageMask: &wait_stages,
             commandBufferCount: 1,
             pCommandBuffers: &frame.graphics_commands,
             signalSemaphoreCount: 1,
-            pSignalSemaphores: &frame.render_complete
+            pSignalSemaphores: &slot.swapchain.present_semaphores[frame.index]
         };
 
-        graphics_command_pool.submit(_device.graphics, frame.frame_complete_fence, si);
+        graphics_command_pool.submit(_device.graphics, slot.swapchain.render_fences[frame.index], si);
     }
 
     Frame* get_frame(SwapchainId id) {
         auto slot = _swapchains.get(SwapchainHandle.from!SwapchainId(id));
         assert(slot.swapchain.handle, "Cannot get swapchain frame from hidden window!");
 
-        auto frame = &slot.frames[slot.frame_counter];
-        auto image_index = acquire_next_image(_device, &slot.swapchain, frame.image_acquire, frame.frame_complete_fence);
+        auto image_index = acquire_next_image(_device, &slot.swapchain);
 
         while (slot.swapchain.state == VK_ERROR_OUT_OF_DATE_KHR) {
             resize(id, 0, 0);
-            image_index = acquire_next_image(_device, &slot.swapchain, frame.image_acquire, frame.frame_complete_fence);
+            image_index = acquire_next_image(_device, &slot.swapchain);
         }
 
-        return frame;
+        return &slot.frames[image_index];
     }
 
     VkRenderPass get_renderpass(SwapchainId id) {
@@ -200,13 +200,12 @@ struct SwapchainInfo {
     alias swapchain this;
 
     Frame[] frames;
-    size_t frame_counter;
 
     VkSurfaceKHR surface;
     VkRenderPass render_pass;
 
     Frame* current_frame() nothrow return {
-        return &frames[frame_counter];
+        return &frames[swapchain.current_frame_index];
     }
 
     void init_or_resize_frames(VulkanDevice device, CommandPool command_pool) nothrow {
@@ -221,11 +220,14 @@ struct SwapchainInfo {
             resize_frame(device, frame, swapchain.image_size, attachments, render_pass);
         }
 
-        // Add more frames
-        if (num_frames > num_shared) {
-            device.context.memory.resize_array(frames, num_frames);
+        wait_fences(device, true, ulong.max, swapchain.render_fences);
 
-            foreach (i, ref frame; frames[num_shared .. $]) {
+        // Add or remove frames
+        resize_array(
+            device.context.memory,
+            frames,
+            num_frames,
+            (size_t i, ref Frame frame) nothrow {
                 FramebufferAttachmentSpec[1] attachments = [FramebufferAttachmentSpec(swapchain.views[i])];
 
                 FrameSpec spec = {
@@ -235,18 +237,15 @@ struct SwapchainInfo {
                     graphics_commands: command_pool.allocate(),
                 };
 
-                init_frame(device, spec, frame);
-            }
-        }
-        // Remove extra frames
-        else if (num_frames == 0 || num_frames < num_shared) {
-            foreach (ref frame; frames[num_shared .. $]) {
-                destroy_frame(device, frame);
+                init_frame(device, i, spec, frame);
+            },
+            (size_t i, ref Frame frame) nothrow {
+                // There is likely a sync bug here, but I'm not sure how to identify or fix it properly rn.
+                // 28-Jan-2021
                 command_pool.free(frame.graphics_commands);
+                destroy_frame(device, frame);
             }
-
-            device.context.memory.resize_array(frames, num_frames);
-        }
+        );
     }
 }
 

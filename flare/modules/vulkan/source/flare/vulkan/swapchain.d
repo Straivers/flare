@@ -9,11 +9,7 @@ import flare.vulkan.sync;
 
 nothrow:
 
-/*
- * TODO: Separate out framebuffers, command bufffers, fences, and semaphores
- * because we only need max 3 of them. Swapchains may have more than 3, and we
- * don't need the extra objects.
- */
+enum num_preferred_swap_buffers = 3;
 
 version (Windows) {
     import core.sys.windows.windows : GetModuleHandle, HWND, NULL;
@@ -58,15 +54,20 @@ struct Swapchain {
     VkImage[] images;
     VkImageView[] views;
 
+    /// Fences that are passed to vkQueueSubmit, and are signalled upon queue completion.
+    VkFence[num_preferred_swap_buffers] render_fences;
+
+    /// Semaphores that are signalled when a swapchain image is ready to be rendered to.
+    VkSemaphore[num_preferred_swap_buffers] acquire_semaphores;
+    
+    /// Semaphores that are signalled when a swapchain image is ready to be presented.
+    VkSemaphore[num_preferred_swap_buffers] present_semaphores;
+
     VkResult state;
 
+    ubyte sync_object_index;
     ushort current_frame_index;
 }
-
-struct SwapchainImage {
-    uint index;
-}
-
 
 void get_swapchain_properties(VulkanDevice device, VkSurfaceKHR surface, out SwapchainProperties result) {
     auto mem = temp_arena(device.context.memory);
@@ -104,6 +105,12 @@ void create_swapchain(VulkanDevice device, VkSurfaceKHR surface, in SwapchainPro
     swapchain.handle = _create_swapchain(device, surface, properties, null);
     _get_swapchain_images(device, swapchain);
 
+    foreach (i; 0 .. num_preferred_swap_buffers) {
+        swapchain.render_fences[i] = create_fence(device, true);
+        swapchain.acquire_semaphores[i] = create_semaphore(device);
+        swapchain.present_semaphores[i] = create_semaphore(device);
+    }
+
     device.context.logger.trace("Created swapchain (%sw, %sh) ID %s for surface %s.", swapchain.image_size.width, swapchain.image_size.height, swapchain.handle, surface);
 }
 
@@ -118,11 +125,14 @@ void resize_swapchain(VulkanDevice device, VkSurfaceKHR surface, in SwapchainPro
     assert(swapchain.handle);
     assert(properties.image_size != VkExtent2D(), "It is invalid to attempt to resize a swapchain to (0, 0)!");
 
-    device.wait_idle();
+    wait_fences(device, true, ulong.max, swapchain.render_fences);
 
     Swapchain new_swapchain = {
         handle: _create_swapchain(device, surface, properties, swapchain.handle),
         properties: properties,
+        render_fences: swapchain.render_fences,
+        acquire_semaphores: swapchain.acquire_semaphores,
+        present_semaphores: swapchain.present_semaphores
     };
 
     _free_swapchain_images(device, swapchain);
@@ -138,35 +148,60 @@ void resize_swapchain(VulkanDevice device, VkSurfaceKHR surface, in SwapchainPro
 void destroy_swapchain(VulkanDevice device, ref Swapchain swapchain) {
     assert(swapchain.handle);
 
-    device.wait_idle();
+    wait_fences(device, true, ulong.max, swapchain.render_fences);
+
+    foreach (i; 0 .. num_preferred_swap_buffers) {
+        destroy_fence(device, swapchain.render_fences[i]);
+        destroy_semaphore(device, swapchain.acquire_semaphores[i]);
+        destroy_semaphore(device, swapchain.present_semaphores[i]);
+    }
+
     _free_swapchain_images(device, swapchain);
     device.dispatch_table.DestroySwapchainKHR(swapchain.handle);
     swapchain = Swapchain();
 }
 
 /**
+Retrieves the index of the next swapchain image for rendering. If the frame is
+still in use, it will wait until the image is free. Because of this behavior,
+it is advisable to call this function as late as possible.
+
 Params:
-    device = The device the swapchain was created from.
-    swapchain = The swapchain that has the image to be retrieved.
-    acquire_semaphore = A semaphore to signal once the image has been required.
-    render_complete_fence = A fence indicating that previous operations on the image have completed.
+    device      = The device the swapchain was created from.
+    swapchain   = The swapchain that has the image to be retrieved.
+
+Returns:
+    The index of the next swapchain image.
 */
-size_t acquire_next_image(VulkanDevice device, Swapchain* swapchain, VkSemaphore acquire_semaphore, VkFence render_complete_fence) {
+size_t acquire_next_image(VulkanDevice device, Swapchain* swapchain) {
+    assert(swapchain.handle);
+
     uint index;
-    const err = device.dispatch_table.AcquireNextImageKHR(swapchain.handle, ulong.max, acquire_semaphore, null, index);
+    const err = device.dispatch_table.AcquireNextImageKHR(swapchain.handle, ulong.max, swapchain.acquire_semaphores[swapchain.sync_object_index], null, index);
     swapchain.state = err;
 
     swapchain.current_frame_index = cast(ushort) index;
 
-    wait_and_reset_fence(device, render_complete_fence);
+    wait_and_reset_fence(device, swapchain.render_fences[swapchain.sync_object_index]);
     return index;
 }
 
-void swap_buffers(VulkanDevice device, Swapchain* swapchain, VkSemaphore buffer_ready_semaphore) {
+/**
+Swaps the current image in the swapchain with a back buffer.
+
+Params:
+    device      = The device the swapchain was created from.
+    swapchain   = The swapchain to be updated.
+
+Returns:
+    `true` if the swapchain images were swapped, `false` if the buffer is out of
+    date.
+*/
+bool swap_buffers(VulkanDevice device, Swapchain* swapchain) {
     uint index = swapchain.current_frame_index;
     VkPresentInfoKHR pi = {
         waitSemaphoreCount: 1,
-        pWaitSemaphores: &buffer_ready_semaphore,
+        pWaitSemaphores: &swapchain.present_semaphores[swapchain.sync_object_index],
         swapchainCount: 1,
         pSwapchains: &swapchain.handle,
         pImageIndices: &index,
@@ -174,7 +209,10 @@ void swap_buffers(VulkanDevice device, Swapchain* swapchain, VkSemaphore buffer_
     };
 
     const err = device.dispatch_table.QueuePresentKHR(device.graphics, pi);
-    swapchain.state = err;
+    
+    swapchain.sync_object_index = (swapchain.sync_object_index + 1) % num_preferred_swap_buffers;
+
+    return err == VK_SUCCESS;
 }
 
 private:
@@ -213,8 +251,6 @@ void _get_swapchain_images(VulkanDevice device, ref Swapchain swapchain) {
     device.dispatch_table.GetSwapchainImagesKHR(swapchain.handle, count, null);
     swapchain.images = device.context.memory.make_array!VkImage(count);
     device.dispatch_table.GetSwapchainImagesKHR(swapchain.handle, count, swapchain.images.ptr);
-
-    assert(count > 0);
 
     swapchain.views = device.context.memory.make_array!VkImageView(count);
     foreach (i, ref image; swapchain.images) {
@@ -279,15 +315,13 @@ VkExtent2D _image_size(in VkSurfaceCapabilitiesKHR capabilities) {
 uint _num_images(in VkSurfaceCapabilitiesKHR capabilities) {
     import std.algorithm: max;
 
-    enum preferred_count = 3;
-
     // If we can have as many as we like, get 3 or more images
     if (capabilities.maxImageCount == 0) 
-        return max(capabilities.minImageCount, preferred_count);
+        return max(capabilities.minImageCount, num_preferred_swap_buffers);
 
     // If we can have at least 3 images, get as close to 3 images as possible
-    if (preferred_count <= capabilities.maxImageCount)
-        return max(capabilities.minImageCount, preferred_count);
+    if (num_preferred_swap_buffers <= capabilities.maxImageCount)
+        return max(capabilities.minImageCount, num_preferred_swap_buffers);
 
     // Get as many images as we are allowed
     return capabilities.maxImageCount;

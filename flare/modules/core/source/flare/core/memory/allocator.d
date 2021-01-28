@@ -194,18 +194,78 @@ auto make_array(T, A)(auto ref A allocator, size_t length) {
 Resizes an array to a new_length elements. If `length > array.length`, new
 elements are initialized to `T.init`. Resizing to a length of 0 will deallocate
 the array.
+
+Params:
+    allocator   = The allocator that the array was allocated from.
+    array       = The array to be resized. May be `null`.
+    new_length  = The length of the array after resizing. May be `0`.
+
+Returns: `true` if the array was resized, `false` otherwise. The array will not
+         be modified if the operation fails.
 */
-bool resize_array(T, A)(auto ref A allocator, ref T[] array, size_t new_length) {
+bool resize_array(T, A)(auto ref A allocator, ref T[] array, size_t new_length) nothrow {
     import std.algorithm: min;
+
+    const common_length = min(array.length, new_length);
+
+    if (new_length < common_length) {
+        foreach (ref object; array[common_length .. $])
+            destroy(object);
+    }
 
     auto array_ = cast(void[]) array;
     if (!allocator.reallocate(array_, T.sizeof * new_length))
         return false;
     array = cast(T[]) array_;
 
-    const common_length = min(array.length, new_length);
     if (common_length < new_length)
         array[common_length .. $] = T.init;
+
+    return true;
+}
+
+/**
+Resizes an array to `new_length` elements, calling `init_obj` on newly
+allocated objects, and `clear_obj` on objects to be deallocated.
+
+If `new_length > 0` and `array == null`, a new array will be allocated, and the
+slice assigned to `array`. Similarly, if `new_length == 0` and `array != null`,
+the array will be freed, and `array` will become `null`.
+
+Params:
+    allocator   = The allocator that the array was allocated from.
+    array       = The array to be resized. May be `null`.
+    new_length  = The length of the array after resizing. May be `0`.
+    init_obj    = The delegate to call on newly allocated array elements (during array expansion).
+    clear_obj   = The delegate to call on array elements that will be freed (during array reduction).
+*/
+bool resize_array(T, A)(
+        auto ref A allocator,
+        ref T[] array,
+        size_t new_length,
+        void delegate(size_t, ref T) nothrow init_obj,
+        void delegate(size_t, ref T) nothrow clear_obj) nothrow {
+    import std.algorithm: min;
+
+    if (new_length == array.length)
+        return true;
+
+    const common_length = min(array.length, new_length);
+
+    if (new_length < common_length) {
+        foreach (i, ref object; array[new_length .. $])
+            clear_obj(i, object);
+    }
+
+    auto array_ = cast(void[]) array;
+    if (!allocator.reallocate(array_, T.sizeof * new_length))
+        return false;
+    array = cast(T[]) array_;
+
+    if (common_length < new_length) {
+        foreach (i, ref object; array[common_length .. $])
+            init_obj(i, object);
+    }
 
     return true;
 }
