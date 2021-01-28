@@ -115,6 +115,12 @@ final class Sandbox : FlareApp {
                         
                         if (key == KeyCode.S && !mgr.is_visible(id))
                             mgr.change_window_mode(id, DisplayMode.Windowed);
+                        
+                        if (key == KeyCode.R)
+                            mgr.resize(id, 1280, 720);
+                        
+                        if (key == KeyCode.T)
+                            mgr.resize(id, 1920, 1080);
                     }
                 }
             };
@@ -123,7 +129,9 @@ final class Sandbox : FlareApp {
         }
 
         auto device = renderer.get_logical_device();
-        auto swap_chain = renderer.get_swapchain(display_manager.get_swapchain(display));
+
+        auto swapchain_id = display_manager.get_swapchain(display);
+        auto swap_chain = renderer.get_swapchain(swapchain_id);
 
         shaders[0] = device.load_shader("shaders/vert.spv");
         shaders[1] = device.load_shader("shaders/frag.spv");
@@ -132,7 +140,7 @@ final class Sandbox : FlareApp {
         VkVertexInputBindingDescription[1] binding_descriptions = [Vertex.binding_description];
         VkVertexInputAttributeDescription[2] attrib_descriptions = Vertex.attrib_description;
 
-        pipeline = device.create_graphics_pipeline(*swap_chain, shaders[0], shaders[1], binding_descriptions[], attrib_descriptions[], pipeline_layout);
+        pipeline = device.create_graphics_pipeline(*swap_chain, renderer.get_renderpass(swapchain_id), shaders[0], shaders[1], binding_descriptions[], attrib_descriptions[], pipeline_layout);
 
         transfer_command_pool = create_transfer_command_pool(device);
 
@@ -232,7 +240,7 @@ final class Sandbox : FlareApp {
                     clear_color.color.float32 = [0, 0, 0, 1.0];
 
                     VkRenderPassBeginInfo render_pass_info = {
-                        renderPass: frame.render_pass,
+                        renderPass: renderer.get_renderpass(display_manager.get_swapchain(display)),
                         framebuffer: frame.framebuffer,
                         renderArea: VkRect2D(VkOffset2D(0, 0), frame.image_size),
                         clearValueCount: 1,

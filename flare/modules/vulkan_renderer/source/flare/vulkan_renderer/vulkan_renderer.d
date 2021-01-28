@@ -52,9 +52,13 @@ nothrow public:
         auto slot = _swapchains.get(handle);
         slot.surface = surface;
 
-        // These are only necessary if the window is already of > VkExtent2D(0, 0) size.
-        flare.vulkan.create_swapchain(_device, surface, slot.swapchain);
-        slot.init_or_resize_frames(_device, graphics_command_pool);
+        SwapchainProperties properties;
+        get_swapchain_properties(_device, surface, properties);
+
+        if (properties.image_size != VkExtent2D()) {
+            flare.vulkan.create_swapchain(_device, surface, properties, slot.swapchain);
+            slot.init_or_resize_frames(_device, graphics_command_pool);
+        }
 
         return handle.to!SwapchainId;
     }
@@ -63,10 +67,11 @@ nothrow public:
         auto swapchain = _swapchains.get(SwapchainHandle.from!SwapchainId(id));
         
         if (swapchain.handle) {
-            flare.vulkan.destroy_swapchain(_device, swapchain.swapchain);
-
             foreach (ref frame; swapchain.frames)
                 destroy_frame(_device, frame);
+
+            flare.vulkan.destroy_swapchain(_device, swapchain.swapchain);
+            _device.dispatch_table.DestroyRenderPass(swapchain.render_pass);
         }
         else
             assert(!swapchain.frames);
@@ -78,7 +83,38 @@ nothrow public:
 
     override void resize(SwapchainId id, ushort width, ushort height) {
         auto slot = _swapchains.get(SwapchainHandle.from!SwapchainId(id));
-        flare.vulkan.recreate_swapchain(_device, slot.surface, slot.swapchain);
+
+        SwapchainProperties properties;
+        get_swapchain_properties(_device, slot.surface, properties);
+        
+        const was_zero_size = slot.image_size == VkExtent2D();
+        const is_zero_size = properties.image_size == VkExtent2D();
+
+        if (was_zero_size && !is_zero_size) {
+            flare.vulkan.create_swapchain(_device, slot.surface, properties, slot.swapchain);
+            slot.render_pass = _create_render_pass(_device, slot.swapchain.format);
+        }
+        else if (!was_zero_size && !is_zero_size) {
+            const old_format = slot.swapchain.format;
+            
+            flare.vulkan.resize_swapchain(_device, slot.surface, properties, slot.swapchain);
+
+            if (slot.swapchain.format != old_format) {
+                _device.dispatch_table.DestroyRenderPass(slot.render_pass);
+                slot.render_pass = _create_render_pass(_device, slot.swapchain.format);
+            }
+        }
+        else if (!was_zero_size && is_zero_size) {
+            flare.vulkan.destroy_swapchain(_device, slot.swapchain);
+            _device.dispatch_table.DestroyRenderPass(slot.render_pass);
+            slot.render_pass = null;
+        }
+        else {
+            // was_zero_size && is_zero_size
+            // Is this possible, and does it do anything?
+            assert(0);
+        }
+
         slot.init_or_resize_frames(_device, graphics_command_pool);
     }
 
@@ -88,10 +124,7 @@ nothrow public:
         slot.frame_counter = (slot.frame_counter + 1) % slot.frames.length;
 
         if (slot.state == VK_ERROR_OUT_OF_DATE_KHR || slot.state == VK_SUBOPTIMAL_KHR) {
-            recreate_swapchain(_device, slot.surface, slot.swapchain);
-
-            foreach (ref frame; slot.frames)
-                frame.resize(_device, slot.swapchain.image_size);
+            resize(id, 0, 0);
         }
     }
 
@@ -114,7 +147,19 @@ nothrow public:
         auto slot = _swapchains.get(SwapchainHandle.from!SwapchainId(id));
         assert(slot.swapchain.handle, "Cannot get swapchain frame from hidden window!");
 
-        return slot.next_frame(_device);
+        auto frame = &slot.frames[slot.frame_counter];
+        auto image_index = acquire_next_image(_device, &slot.swapchain, frame.image_acquire, frame.frame_complete_fence);
+
+        while (slot.swapchain.state == VK_ERROR_OUT_OF_DATE_KHR) {
+            resize(id, 0, 0);
+            image_index = acquire_next_image(_device, &slot.swapchain, frame.image_acquire, frame.frame_complete_fence);
+        }
+
+        return frame;
+    }
+
+    VkRenderPass get_renderpass(SwapchainId id) {
+        return _swapchains.get(SwapchainHandle.from(id)).render_pass;
     }
 
 nothrow private:
@@ -158,25 +203,10 @@ struct SwapchainInfo {
     size_t frame_counter;
 
     VkSurfaceKHR surface;
+    VkRenderPass render_pass;
 
     Frame* current_frame() nothrow return {
         return &frames[frame_counter];
-    }
-
-    Frame* next_frame(VulkanDevice device) nothrow return {
-        auto frame = &frames[frame_counter];
-        auto image_index = acquire_next_image(device, &swapchain, frame.image_acquire, frame.frame_complete_fence);
-
-        while (swapchain.state == VK_ERROR_OUT_OF_DATE_KHR) {
-            recreate_swapchain(device, surface, swapchain);
-            image_index = acquire_next_image(device, &swapchain, frame.image_acquire, frame.frame_complete_fence);
-
-            // TODO: does not handle changing frame count
-            foreach (ref f; frames)
-                f.resize(device, swapchain.image_size);
-        }
-
-        return frame;
     }
 
     void init_or_resize_frames(VulkanDevice device, CommandPool command_pool) nothrow {
@@ -186,8 +216,9 @@ struct SwapchainInfo {
         const num_shared = min(num_frames, frames.length);
 
         // Resize frames
-        foreach (ref frame; frames[0 .. num_shared]) {
-            frame.resize(device, swapchain.image_size);
+        foreach (i, ref frame; frames[0 .. num_shared]) {
+            FramebufferAttachmentSpec[1] attachments = [FramebufferAttachmentSpec(swapchain.views[i])];
+            resize_frame(device, frame, swapchain.image_size, attachments, render_pass);
         }
 
         // Add more frames
@@ -198,7 +229,7 @@ struct SwapchainInfo {
                 FramebufferAttachmentSpec[1] attachments = [FramebufferAttachmentSpec(swapchain.views[i])];
 
                 FrameSpec spec = {
-                    render_pass: swapchain.render_pass,
+                    render_pass: render_pass,
                     framebuffer_size: swapchain.image_size,
                     framebuffer_attachments: attachments,
                     graphics_commands: command_pool.allocate(),
@@ -209,10 +240,58 @@ struct SwapchainInfo {
         }
         // Remove extra frames
         else if (num_frames == 0 || num_frames < num_shared) {
-            foreach (ref frame; frames[num_shared .. $])
+            foreach (ref frame; frames[num_shared .. $]) {
                 destroy_frame(device, frame);
+                command_pool.free(frame.graphics_commands);
+            }
 
             device.context.memory.resize_array(frames, num_frames);
         }
     }
+}
+
+VkRenderPass _create_render_pass(VulkanDevice device, VkFormat format) {
+    VkAttachmentDescription color_attachment = {
+        format: format,
+        samples: VK_SAMPLE_COUNT_1_BIT,
+        loadOp: VK_ATTACHMENT_LOAD_OP_CLEAR,
+        storeOp: VK_ATTACHMENT_STORE_OP_STORE,
+        stencilLoadOp: VK_ATTACHMENT_LOAD_OP_DONT_CARE,
+        stencilStoreOp: VK_ATTACHMENT_STORE_OP_DONT_CARE,
+        initialLayout: VK_IMAGE_LAYOUT_UNDEFINED,
+        finalLayout: VK_IMAGE_LAYOUT_PRESENT_SRC_KHR
+    };
+
+    VkAttachmentReference color_attachment_ref = {
+        attachment: 0,
+        layout: VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL
+    };
+
+    VkSubpassDescription subpass = {
+        pipelineBindPoint: VK_PIPELINE_BIND_POINT_GRAPHICS,
+        colorAttachmentCount: 1,
+        pColorAttachments: &color_attachment_ref
+    };
+
+    VkSubpassDependency dependency = {
+        srcSubpass: VK_SUBPASS_EXTERNAL,
+        dstSubpass: 0,
+        srcStageMask: VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
+        srcAccessMask: 0,
+        dstStageMask: VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
+        dstAccessMask: VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
+    };
+
+    VkRenderPassCreateInfo ci = {
+        attachmentCount: 1,
+        pAttachments: &color_attachment,
+        subpassCount: 1,
+        pSubpasses: &subpass,
+        dependencyCount: 1,
+        pDependencies: &dependency
+    };
+
+    VkRenderPass render_pass;
+    device.dispatch_table.CreateRenderPass(ci, render_pass);
+    return render_pass;
 }

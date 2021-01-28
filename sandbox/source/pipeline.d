@@ -7,6 +7,7 @@ import flare.vulkan;
 VkPipeline create_graphics_pipeline(
     VulkanDevice device,
     ref Swapchain swapchain,
+    VkRenderPass render_pass,
     VkShaderModule vert,
     VkShaderModule frag,
     VkVertexInputBindingDescription[] binding_descs,
@@ -101,7 +102,7 @@ VkPipeline create_graphics_pipeline(
         pColorBlendState: &color_blending,
         pDynamicState: &dynamic_state,
         layout: layout,
-        renderPass: swapchain.render_pass,
+        renderPass: render_pass,
         subpass: 0,
         basePipelineHandle: VK_NULL_HANDLE,
         basePipelineIndex: -1,

@@ -25,24 +25,7 @@ struct Frame {
     VkSemaphore image_acquire;
     VkSemaphore render_complete;
 
-    VkRenderPass render_pass;
     VkCommandBuffer graphics_commands;
-
-    void resize(VulkanDevice device, VkExtent2D new_size) nothrow {
-        device.dispatch_table.DestroyFramebuffer(framebuffer);
-
-        VkFramebufferCreateInfo framebuffer_ci = {
-            renderPass: render_pass,
-            attachmentCount: cast(uint) framebuffer_attachments.length,
-            pAttachments: framebuffer_attachments.ptr,
-            width: new_size.width,
-            height: new_size.height,
-            layers: 1
-        };
-
-        device.dispatch_table.CreateFramebuffer(framebuffer_ci, framebuffer);
-        image_size = new_size;
-    }
 }
 
 void init_frame(VulkanDevice device, ref FrameSpec spec, out Frame frame) nothrow {
@@ -70,7 +53,6 @@ void init_frame(VulkanDevice device, ref FrameSpec spec, out Frame frame) nothro
     frame.frame_complete_fence = device.create_fence(true);
     frame.image_acquire = device.create_semaphore();
     frame.render_complete = device.create_semaphore();
-    frame.render_pass = spec.render_pass;
     frame.graphics_commands = spec.graphics_commands;
 }
 
@@ -84,11 +66,16 @@ void destroy_frame(VulkanDevice device, ref Frame frame) nothrow {
     device.context.memory.dispose(frame.framebuffer_attachments);
 }
 
-void resize_frame(VulkanDevice device, ref Frame frame, VkExtent2D size) nothrow {
+void resize_frame(VulkanDevice device, ref Frame frame, VkExtent2D size, FramebufferAttachmentSpec[] attachments, VkRenderPass render_pass) nothrow {
     device.dispatch_table.DestroyFramebuffer(frame.framebuffer);
 
+    assert(frame.framebuffer_attachments.length == attachments.length, "resize_frame() is not the place to change attachments!");
+
+    foreach (i, ref attachment; attachments)
+        frame.framebuffer_attachments[i] = attachment.image_view;
+
     VkFramebufferCreateInfo framebuffer_ci = {
-        renderPass: frame.render_pass,
+        renderPass: render_pass,
         attachmentCount: cast(uint) frame.framebuffer_attachments.length,
         pAttachments: frame.framebuffer_attachments.ptr,
         width: size.width,
