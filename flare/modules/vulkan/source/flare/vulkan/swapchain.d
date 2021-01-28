@@ -62,25 +62,13 @@ struct Swapchain {
     VkImage[] images;
     VkImageView[] views;
 
-    // VkFramebuffer[] framebuffers;
-    // VkCommandBuffer[] command_buffers;
-
-    // VkFence[] frame_fences;
-    // VkSemaphore[] image_acquire_semaphores;
-    // VkSemaphore[] render_complete_semaphores;
-
     VkResult state;
-    // ushort current_sync_index;
+
     ushort current_frame_index;
 }
 
 struct SwapchainImage {
     uint index;
-    // VkFramebuffer framebuffer;
-    // VkCommandBuffer command_buffer;
-    // VkFence frame_fence;
-    // VkSemaphore image_acquire;
-    // VkSemaphore render_complete;
 }
 
 /**
@@ -123,6 +111,16 @@ void recreate_swapchain(VulkanDevice device, VkSurfaceKHR surface, ref Swapchain
     device.wait_idle();
 
     auto properties = _get_swapchain_properties(device, surface);
+
+    if (properties.image_size == VkExtent2D()) {
+        device.dispatch_table.DestroySwapchainKHR(swapchain.handle);
+        _free_swapchain_images(device, swapchain);
+        device.dispatch_table.DestroyRenderPass(swapchain.render_pass);
+        swapchain = Swapchain();
+        device.context.logger.trace("Attempted to 0-resize a swapchain for surface %s. Destroying swapchain.", surface);
+        return;
+    }
+
     Swapchain new_swapchain = {
         handle: _create_swapchain(device, properties, swapchain.handle),
         properties: properties,
@@ -137,7 +135,7 @@ void recreate_swapchain(VulkanDevice device, VkSurfaceKHR surface, ref Swapchain
         new_swapchain.render_pass = _create_render_pass(device, swapchain.format);
     }
 
-    _free_frame_objects(device, swapchain);
+    _free_swapchain_images(device, swapchain);
     _get_swapchain_images(device, new_swapchain);
 
     device.context.logger.trace("Swapchain for surface %s has been recreated. It is now %s (%sw, %sh).", surface, new_swapchain.handle, properties.image_size.width, properties.image_size.height);
@@ -150,13 +148,13 @@ void destroy_swapchain(VulkanDevice device, ref Swapchain swapchain) {
         return;
 
     device.wait_idle();
-    _free_frame_objects(device, swapchain);
+    _free_swapchain_images(device, swapchain);
     device.dispatch_table.DestroyRenderPass(swapchain.render_pass);
     device.dispatch_table.DestroySwapchainKHR(swapchain.handle);
     swapchain = Swapchain();
 }
 
-void acquire_next_image(VulkanDevice device, Swapchain* swapchain, VkSemaphore acquire_semaphore, VkFence render_complete_fence, out SwapchainImage image) {
+size_t acquire_next_image(VulkanDevice device, Swapchain* swapchain, VkSemaphore acquire_semaphore, VkFence render_complete_fence) {
     uint index;
     const err = device.dispatch_table.AcquireNextImageKHR(swapchain.handle, ulong.max, acquire_semaphore, null, index);
     swapchain.state = err;
@@ -164,8 +162,7 @@ void acquire_next_image(VulkanDevice device, Swapchain* swapchain, VkSemaphore a
     swapchain.current_frame_index = cast(ushort) index;
 
     wait_and_reset_fence(device, render_complete_fence);
-
-    image.index = index;
+    return index;
 }
 
 void swap_buffers(VulkanDevice device, Swapchain* swapchain, VkSemaphore buffer_ready_semaphore) {
@@ -288,7 +285,7 @@ void _get_swapchain_images(VulkanDevice device, ref Swapchain swapchain) {
     }
 }
 
-void _free_frame_objects(VulkanDevice device, ref Swapchain swapchain) {
+void _free_swapchain_images(VulkanDevice device, ref Swapchain swapchain) {
     foreach (i; 0 .. swapchain.images.length)
         device.dispatch_table.DestroyImageView(swapchain.views[i]);
 

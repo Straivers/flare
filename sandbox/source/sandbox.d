@@ -4,6 +4,7 @@ import flare.application;
 import flare.core.math.vector;
 import flare.core.memory;
 import flare.display.manager;
+import flare.display.input;
 import flare.vulkan_renderer;
 import flare.vulkan;
 import pipeline;
@@ -103,7 +104,19 @@ final class Sandbox : FlareApp {
                 width: app_settings.main_window_width,
                 height: app_settings.main_window_height,
                 is_resizable: true,
-                renderer: renderer
+                renderer: renderer,
+                input_callbacks: {
+                    on_key: (mgr, id, key, state, user) nothrow {
+                        if (key == KeyCode.Escape)
+                            mgr.close(id);
+                        
+                        if (key == KeyCode.H)
+                            mgr.change_window_mode(id, DisplayMode.Minimized);
+                        
+                        if (key == KeyCode.S && !mgr.is_visible(id))
+                            mgr.change_window_mode(id, DisplayMode.Windowed);
+                    }
+                }
             };
 
             display = display_manager.create(settings);

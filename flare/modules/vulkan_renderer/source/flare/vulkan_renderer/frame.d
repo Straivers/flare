@@ -17,7 +17,6 @@ struct FrameSpec {
 }
 
 struct Frame {
-    uint index;
     VkExtent2D image_size;
     VkFramebuffer framebuffer;
     VkImageView[] framebuffer_attachments;
@@ -67,6 +66,7 @@ void init_frame(VulkanDevice device, ref FrameSpec spec, out Frame frame) nothro
 
     device.dispatch_table.CreateFramebuffer(framebuffer_ci, frame.framebuffer);
 
+    frame.image_size = spec.framebuffer_size;
     frame.frame_complete_fence = device.create_fence(true);
     frame.image_acquire = device.create_semaphore();
     frame.render_complete = device.create_semaphore();

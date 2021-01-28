@@ -3,7 +3,8 @@ module flare.display.win32;
 version (Windows):
 
 import core.sys.windows.windows;
-import flare.display.display;
+import flare.display.manager;
+import flare.display.input;
 
 pragma(lib, "user32");
 
@@ -20,11 +21,16 @@ struct DisplayImpl {
 
     DisplayMode mode;
     Renderer renderer;
+    DisplayManager manager;
+    DisplayInput input_callbacks;
     CursorIcon cursor_icon;
 
     HWND hwnd;
     DisplayState state;
+    DisplayId id;
     SwapchainId swapchain;
+
+    void* user_data;
 
     bool is_close_requested;
     bool has_cursor;
@@ -55,7 +61,7 @@ private:
 }
 
 struct OsWindowManager {
-    void create_window(ref DisplayProperties properties, out DisplayImpl display) {
+    void create_window(DisplayManager manager, DisplayId id, ref DisplayProperties properties, out DisplayImpl display) nothrow {
         if (!_registered_wndclass) {
             WNDCLASSEXW wc = {
                 cbSize: WNDCLASSEXW.sizeof,
@@ -79,9 +85,13 @@ struct OsWindowManager {
         RECT rect = {0, 0, properties.width, properties.height};
         AdjustWindowRectEx(&rect, style, FALSE, 0);
 
+        display.id = id;
         display.mode = properties.mode;
         display.renderer = properties.renderer;
+        display.manager = manager;
+        display.input_callbacks = properties.input_callbacks;
         display.cursor_icon = properties.cursor_icon;
+        display.user_data = properties.user_data;
 
         display.state = DisplayState.Initializing;
         CreateWindowEx(
@@ -100,11 +110,15 @@ struct OsWindowManager {
         display.state = DisplayState.Initialized;
     }
 
-    void destroy_window(DisplayImpl* impl) {
+    void close_window(DisplayImpl* impl) nothrow {
+        PostMessage(impl.hwnd, WM_CLOSE, 0, 0);
+    }
+
+    void destroy_window(DisplayImpl* impl) nothrow {
         DestroyWindow(impl.hwnd);
     }
 
-    void process_events(bool should_wait) {
+    void process_events(bool should_wait) nothrow {
         static send(ref MSG msg) {
             TranslateMessage(&msg);
             DispatchMessage(&msg);
@@ -159,6 +173,14 @@ extern (Windows) LRESULT window_procedure(HWND hwnd, uint msg, WPARAM wp, LPARAM
         }
         return 0;
 
+    case WM_CLOSE:
+        display.is_close_requested = true;
+        return 0;
+
+    case WM_DESTROY:
+        display.renderer.destroy(display.swapchain);
+        return 0;
+
     case WM_MOUSEMOVE:
         if (!display.has_cursor) {
             display.has_cursor = true;
@@ -173,12 +195,11 @@ extern (Windows) LRESULT window_procedure(HWND hwnd, uint msg, WPARAM wp, LPARAM
         }
         return 0;
 
-    case WM_CLOSE:
-        display.is_close_requested = true;
-        return 0;
+    case WM_KEYDOWN:
+    case WM_SYSKEYDOWN:
+        if (display.input_callbacks.on_key)
+            display.input_callbacks.on_key(display.manager, display.id, keycode_table[wp], ButtonState.Pressed, display.user_data);
 
-    case WM_DESTROY:
-        display.renderer.destroy(display.swapchain);
         return 0;
 
     default:

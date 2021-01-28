@@ -1,6 +1,6 @@
-module flare.vulkan_renderer.renderer;
+module flare.vulkan_renderer.vulkan_renderer;
 
-public import flare.renderer.renderer;
+import flare.renderer.renderer;
 import flare.core.memory;
 import flare.vulkan;
 import flare.vulkan_renderer.frame;
@@ -52,20 +52,9 @@ nothrow public:
         auto slot = _swapchains.get(handle);
         slot.surface = surface;
 
-        slot.frames = _instance.memory.make_array!Frame(slot.swapchain.views.length);
-
-        foreach (i, ref frame; slot.frames) {
-            FrameSpec spec = {
-                render_pass: slot.swapchain.render_pass,
-                framebuffer_size: slot.swapchain.image_size,
-                graphics_commands: graphics_command_pool.allocate(),
-            };
-
-            FramebufferAttachmentSpec[1] attachments = [FramebufferAttachmentSpec(slot.swapchain.views[i])];
-            spec.framebuffer_attachments = attachments;
-
-            init_frame(_device, spec, frame);
-        }
+        // These are only necessary if the window is already of > VkExtent2D(0, 0) size.
+        flare.vulkan.create_swapchain(_device, surface, slot.swapchain);
+        slot.init_or_resize_frames(_device, graphics_command_pool);
 
         return handle.to!SwapchainId;
     }
@@ -73,40 +62,24 @@ nothrow public:
     override void destroy(SwapchainId id) {
         auto swapchain = _swapchains.get(SwapchainHandle.from!SwapchainId(id));
         
-        flare.vulkan.destroy_swapchain(_device, swapchain.swapchain);
+        if (swapchain.handle) {
+            flare.vulkan.destroy_swapchain(_device, swapchain.swapchain);
+
+            foreach (ref frame; swapchain.frames)
+                destroy_frame(_device, frame);
+        }
+        else
+            assert(!swapchain.frames);
+
         vkDestroySurfaceKHR(_instance.instance, swapchain.surface, null);
         _swapchains.deallocate(SwapchainHandle.from!SwapchainId(id));
 
-        foreach (ref frame; swapchain.frames)
-            destroy_frame(_device, frame);
     }
 
     override void resize(SwapchainId id, ushort width, ushort height) {
         auto slot = _swapchains.get(SwapchainHandle.from!SwapchainId(id));
         flare.vulkan.recreate_swapchain(_device, slot.surface, slot.swapchain);
-
-        if (slot.frames.length != slot.swapchain.views.length) {
-            _instance.memory.dispose(slot.frames);
-            slot.frames = _instance.memory.make_array!Frame(slot.swapchain.views.length);
-
-            foreach (i, ref frame; slot.frames) {
-                FrameSpec spec = {
-                    render_pass: slot.swapchain.render_pass,
-                    framebuffer_size: slot.swapchain.image_size,
-                    graphics_commands: graphics_command_pool.allocate(),
-                };
-
-                // auto tmp = TempAllocator(_device.context.memory);
-                // spec.framebuffer_attachments = tmp.alloc_array!FramebufferAttachmentSpec(1);
-                // spec.framebuffer_attachments[0] = FramebufferAttachmentSpec(slot.swapchain.views[i]);
-                spec.framebuffer_attachments = [FramebufferAttachmentSpec(slot.swapchain.views[i])];
-
-                init_frame(_device, spec, frame);
-            }
-        }
-
-        foreach (ref frame; slot.frames)
-            resize_frame(_device, frame, slot.swapchain.image_size);
+        slot.init_or_resize_frames(_device, graphics_command_pool);
     }
 
     override void swap_buffers(SwapchainId id) {
@@ -116,7 +89,7 @@ nothrow public:
 
         if (slot.state == VK_ERROR_OUT_OF_DATE_KHR || slot.state == VK_SUBOPTIMAL_KHR) {
             recreate_swapchain(_device, slot.surface, slot.swapchain);
-            
+
             foreach (ref frame; slot.frames)
                 frame.resize(_device, slot.swapchain.image_size);
         }
@@ -140,20 +113,8 @@ nothrow public:
     Frame* get_frame(SwapchainId id) {
         auto slot = _swapchains.get(SwapchainHandle.from!SwapchainId(id));
         assert(slot.swapchain.handle, "Cannot get swapchain frame from hidden window!");
-        auto current_frame = slot.current_frame();
 
-        SwapchainImage image;
-        acquire_next_image(_device, &slot.swapchain, current_frame.image_acquire, current_frame.frame_complete_fence, image);
-
-        while (slot.state == VK_ERROR_OUT_OF_DATE_KHR) {
-            recreate_swapchain(_device, slot.surface, slot.swapchain);
-            acquire_next_image(_device, &slot.swapchain, current_frame.image_acquire, current_frame.frame_complete_fence, image);
-            
-            foreach (ref frame; slot.frames)
-                frame.resize(_device, slot.swapchain.image_size);
-        }
-
-        return current_frame;
+        return slot.next_frame(_device);
     }
 
 nothrow private:
@@ -200,5 +161,58 @@ struct SwapchainInfo {
 
     Frame* current_frame() nothrow return {
         return &frames[frame_counter];
+    }
+
+    Frame* next_frame(VulkanDevice device) nothrow return {
+        auto frame = &frames[frame_counter];
+        auto image_index = acquire_next_image(device, &swapchain, frame.image_acquire, frame.frame_complete_fence);
+
+        while (swapchain.state == VK_ERROR_OUT_OF_DATE_KHR) {
+            recreate_swapchain(device, surface, swapchain);
+            image_index = acquire_next_image(device, &swapchain, frame.image_acquire, frame.frame_complete_fence);
+
+            // TODO: does not handle changing frame count
+            foreach (ref f; frames)
+                f.resize(device, swapchain.image_size);
+        }
+
+        return frame;
+    }
+
+    void init_or_resize_frames(VulkanDevice device, CommandPool command_pool) nothrow {
+        import std.algorithm: min;
+        
+        const num_frames = swapchain.images.length;
+        const num_shared = min(num_frames, frames.length);
+
+        // Resize frames
+        foreach (ref frame; frames[0 .. num_shared]) {
+            frame.resize(device, swapchain.image_size);
+        }
+
+        // Add more frames
+        if (num_frames > num_shared) {
+            device.context.memory.resize_array(frames, num_frames);
+
+            foreach (i, ref frame; frames[num_shared .. $]) {
+                FramebufferAttachmentSpec[1] attachments = [FramebufferAttachmentSpec(swapchain.views[i])];
+
+                FrameSpec spec = {
+                    render_pass: swapchain.render_pass,
+                    framebuffer_size: swapchain.image_size,
+                    framebuffer_attachments: attachments,
+                    graphics_commands: command_pool.allocate(),
+                };
+
+                init_frame(device, spec, frame);
+            }
+        }
+        // Remove extra frames
+        else if (num_frames == 0 || num_frames < num_shared) {
+            foreach (ref frame; frames[num_shared .. $])
+                destroy_frame(device, frame);
+
+            device.context.memory.resize_array(frames, num_frames);
+        }
     }
 }
