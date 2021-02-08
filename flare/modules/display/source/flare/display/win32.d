@@ -5,6 +5,7 @@ version (Windows):
 import core.sys.windows.windows;
 import flare.display.manager;
 import flare.display.input;
+import flare.core.os.types: OsWindow;
 
 pragma(lib, "user32");
 
@@ -17,18 +18,14 @@ enum DisplayState : ubyte {
 }
 
 struct DisplayImpl {
-    import flare.renderer.renderer: Renderer, SwapchainId;
-
     DisplayMode mode;
-    Renderer renderer;
     DisplayManager manager;
-    DisplayInput input_callbacks;
+    Callbacks callbacks;
     CursorIcon cursor_icon;
 
     HWND hwnd;
     DisplayState state;
     DisplayId id;
-    SwapchainId swapchain;
 
     void* user_data;
 
@@ -52,15 +49,19 @@ struct DisplayImpl {
 private:
     void _on_create(HWND hwnd) nothrow {
         this.hwnd = hwnd;
-        swapchain = renderer.create_swapchain(hwnd);
+        // swapchain = renderer.create_swapchain(hwnd);
     }
 
     void _on_resize(ushort width, ushort height) nothrow {
-        renderer.resize(swapchain, width, height);
+        // renderer.resize(swapchain, width, height);
     }
 }
 
 struct OsWindowManager {
+    OsWindow get_os_handle(DisplayImpl* impl) nothrow {
+        return impl.hwnd;
+    }
+
     void create_window(DisplayManager manager, DisplayId id, ref DisplayProperties properties, out DisplayImpl display) nothrow {
         if (!_registered_wndclass) {
             WNDCLASSEXW wc = {
@@ -87,9 +88,8 @@ struct OsWindowManager {
 
         display.id = id;
         display.mode = properties.mode;
-        display.renderer = properties.renderer;
         display.manager = manager;
-        display.input_callbacks = properties.input_callbacks;
+        display.callbacks = properties.callbacks;
         display.cursor_icon = properties.cursor_icon;
         display.user_data = properties.user_data;
 
@@ -140,11 +140,19 @@ struct OsWindowManager {
     private bool _registered_wndclass;
 }
 
+void dispatch(string name, Args...)(DisplayImpl* impl, auto ref Args args) {
+    mixin("if (impl.callbacks." ~ name ~ ")
+        impl.callbacks." ~ name ~ "(EventSource(impl.manager, impl.id, impl.user_data), args);");
+}
+
 extern (Windows) LRESULT window_procedure(HWND hwnd, uint msg, WPARAM wp, LPARAM lp) nothrow {
     if (msg == WM_NCCREATE) {
         auto display = cast(DisplayImpl*) ((cast(CREATESTRUCT*) lp).lpCreateParams);
         SetWindowLongPtr(hwnd, GWLP_USERDATA, cast(LONG_PTR) display);
-        display._on_create(hwnd);
+
+        display.hwnd = hwnd;
+        dispatch!"on_create"(display);
+
         return TRUE;
     }
 
@@ -169,7 +177,7 @@ extern (Windows) LRESULT window_procedure(HWND hwnd, uint msg, WPARAM wp, LPARAM
 
             const width = LOWORD(lp);
             const height = HIWORD(lp);
-            display.renderer.resize(display.swapchain, width, height);
+            dispatch!"on_resize"(display, width, height);
         }
         return 0;
 
@@ -178,7 +186,7 @@ extern (Windows) LRESULT window_procedure(HWND hwnd, uint msg, WPARAM wp, LPARAM
         return 0;
 
     case WM_DESTROY:
-        display.renderer.destroy(display.swapchain);
+        dispatch!"on_destroy"(display);
         return 0;
 
     case WM_MOUSEMOVE:
@@ -197,9 +205,12 @@ extern (Windows) LRESULT window_procedure(HWND hwnd, uint msg, WPARAM wp, LPARAM
 
     case WM_KEYDOWN:
     case WM_SYSKEYDOWN:
-        if (display.input_callbacks.on_key)
-            display.input_callbacks.on_key(display.manager, display.id, keycode_table[wp], ButtonState.Pressed, display.user_data);
+        dispatch!"on_key"(display, keycode_table[wp], ButtonState.Pressed);
+        return 0;
 
+    case WM_KEYUP:
+    case WM_SYSKEYUP:
+        dispatch!"on_key"(display, keycode_table[wp], ButtonState.Released);
         return 0;
 
     default:

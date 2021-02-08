@@ -8,12 +8,7 @@ public import flare.core.math.util;
 
 package:
 
-PtrType!T emplace_obj(T, Args...)(PtrType!T mem, auto ref Args args)
-in (mem.length > 0) {
-    import std.conv : emplace;
-
-    return mem.ptr.emplace(args);
-}
+public import std.conv: emplace;
 
 template PtrType(T) {
     static if (is(T == class))

@@ -2,4 +2,3 @@ name "renderer"
 targetPath "../../build"
 
 dependency "flare:core" version="*"
-dependency "flare:vulkan" version="*"

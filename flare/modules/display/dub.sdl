@@ -2,4 +2,3 @@ name "display"
 targetPath "../../build"
 
 dependency "flare:core" version="*"
-dependency "flare:renderer" version="*"

@@ -6,7 +6,7 @@ import flare.core.memory.allocator;
 import core.stdc.string: memset;
 
 struct MemoryPool {
-public:
+public nothrow:
     /**
     Initializes a memory pool of `memory.length / block_size` blocks. Block size
     must be at least `size_t.sizeof` and does not require any particular
@@ -48,7 +48,7 @@ public:
 
     @disable this(this);
 
-    void[] managed_memory() {
+    void[] managed_memory() nothrow {
         return _start[0 .. _num_blocks * _block_size];
     }
 
@@ -260,8 +260,9 @@ public nothrow:
     @disable this(this);
 
     ~this() {
+        auto mem = _pool.managed_memory;
         if (_base_allocator)
-            _base_allocator.deallocate(_pool.managed_memory);
+            _base_allocator.deallocate(mem);
     }
 
     /// The alignment of every allocation from this pool, in bytes.
@@ -292,7 +293,7 @@ public nothrow:
     */
     PtrType!T allocate(Args...)(auto scope ref Args args) {
         auto object_pointer = cast(PtrType!T) _pool.allocate(object_size!T);
-        return emplace_obj(object_pointer, args);
+        return emplace(object_pointer, args);
     }
 
     /**
@@ -308,7 +309,7 @@ public nothrow:
              `false` otherwise.
     */
     bool deallocate(ref PtrType!T object) {
-        assert(owns(object));
+        assert(owns(object) != Ternary.no);
 
         auto mem = (cast(void*) object)[0 .. object_size!T];
         return _pool.deallocate(mem);
@@ -443,7 +444,7 @@ public nothrow:
         _freelist_index = block.next_index;
 
         static if (args.length > 0)
-            emplace_obj(cast(PtrType!T) block.memory.ptr, args);
+            emplace(cast(PtrType!T) block.memory.ptr, args);
         else
             memset(block.memory.ptr, 0, _Block.sizeof);
 
