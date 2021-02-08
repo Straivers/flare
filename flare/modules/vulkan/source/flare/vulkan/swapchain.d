@@ -69,6 +69,20 @@ struct Swapchain {
     ushort current_frame_index;
 }
 
+struct SwapchainImage {
+    size_t index;
+
+    VkImage handle;
+    VkFormat format;
+    VkImageView view;
+    VkExtent2D image_size;
+
+    VkFence render_fence;
+
+    VkSemaphore acquire_semaphore;
+    VkSemaphore present_semaphore;
+}
+
 void get_swapchain_properties(VulkanDevice device, VkSurfaceKHR surface, out SwapchainProperties result) {
     auto mem = temp_arena(device.context.memory);
 
@@ -173,7 +187,7 @@ Params:
 Returns:
     The index of the next swapchain image.
 */
-size_t acquire_next_image(VulkanDevice device, Swapchain* swapchain) {
+void acquire_next_image(VulkanDevice device, Swapchain* swapchain, out SwapchainImage image) {
     assert(swapchain.handle);
 
     uint index;
@@ -182,8 +196,16 @@ size_t acquire_next_image(VulkanDevice device, Swapchain* swapchain) {
 
     swapchain.current_frame_index = cast(ushort) index;
 
-    // wait_and_reset_fence(device, swapchain.render_fences[swapchain.sync_object_index]);
-    return index;
+    image.index = index;
+    image.handle = swapchain.images[index];
+    image.format = swapchain.format;
+    image.view = swapchain.views[index];
+    image.image_size = swapchain.image_size;
+
+    image.render_fence = swapchain.render_fences[index];
+
+    image.acquire_semaphore = swapchain.acquire_semaphores[swapchain.sync_object_index];
+    image.present_semaphore = swapchain.present_semaphores[swapchain.sync_object_index];
 }
 
 /**

@@ -59,8 +59,12 @@ public:
         object.destroy(_instance);
     }
 
-    Swapchain* get_swapchain(DisplayId id) nothrow {
-        return cast(Swapchain*) super.get_user_data(id);
+    void acquire_next_image(DisplayId id, out SwapchainImage image) {
+        flare.vulkan.acquire_next_image(_device, &(cast(SwapchainData*) super.get_user_data(id)).swapchain, image);
+    }
+
+    override void* get_user_data(DisplayId id) nothrow {
+        return (cast(SwapchainData*) super.get_user_data(id)).overridden_user_data;
     }
 
     override DisplayId create(ref DisplayProperties properties) nothrow {

@@ -5,6 +5,7 @@ import flare.core.memory;
 import flare.vulkan;
 import flare.vulkan_renderer.frame;
 
+/+
 final class VulkanRenderer : Renderer {
     import flare.core.os.types : OsWindow;
 
@@ -306,3 +307,4 @@ VkRenderPass _create_render_pass(VulkanDevice device, VkFormat format) {
     device.dispatch_table.CreateRenderPass(ci, render_pass);
     return render_pass;
 }
++/

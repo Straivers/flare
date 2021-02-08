@@ -16,7 +16,7 @@ void main() {
 
 class Test : FlareApp {
     import flare.core.memory: AllocatorApi, BuddyAllocator, mib;
-    import flare.vulkan : ContextOptions, init_vulkan, VulkanContext, VkVersion, VK_LAYER_KHRONOS_VALIDATION_NAME;
+    import flare.vulkan : ContextOptions, init_vulkan, VulkanContext, VkVersion, VK_LAYER_KHRONOS_VALIDATION_NAME, SwapchainImage;
     import flare.vulkan_renderer.display_manager : DisplayId, VulkanDisplayManager, VulkanDisplayProperties, KeyCode, ButtonState;
     import std.stdio : writefln, writeln;
 
@@ -86,7 +86,15 @@ public:
                 _display_manager.destroy(_display_id);
             }
             else {
-                // auto swapchain = _display_manager.get_next_image(_display_id);
+                SwapchainImage swapchain_image;
+                _display_manager.get_next_image(_display_id);
+                // auto device = _display_manager.device;
+
+                // render_pass.write_commands(command_buffers[swapchain_image.index]);
+
+                // wait_fence(device, swapchain_image.render_fence);
+
+                // submit_buffer(device, device.graphics, command_buffers[swapchain_image.index], swapchain_image.render_fence);
             }
         }
     }
