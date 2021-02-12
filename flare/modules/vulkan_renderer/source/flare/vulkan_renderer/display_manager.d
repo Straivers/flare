@@ -59,12 +59,20 @@ public:
         object.destroy(_instance);
     }
 
-    void acquire_next_image(DisplayId id, out SwapchainImage image) {
+    VulkanDevice device() {
+        return _device;
+    }
+
+    void get_next_image(DisplayId id, out SwapchainImage image) {
         flare.vulkan.acquire_next_image(_device, &(cast(SwapchainData*) super.get_user_data(id)).swapchain, image);
     }
 
-    VulkanDevice device() {
-        return _device;
+    void swap_buffers(DisplayId id) {
+        auto data = cast(SwapchainData*) super.get_user_data(id);
+        if (!flare.vulkan.swap_buffers(_device, &data.swapchain)) {
+            auto src = EventSource(this, id, data.overridden_user_data);
+            _resize_impl(src, data);
+        }
     }
 
     override void* get_user_data(DisplayId id) nothrow {
@@ -128,33 +136,7 @@ public:
             auto data = cast(SwapchainData*) src.user_data;
             auto self = data.manager;
 
-            SwapchainProperties properties;
-            get_swapchain_properties(self._device, data.surface, properties);
-
-            const is_zero_size = properties.image_size == VkExtent2D();
-            const was_zero_size = data.swapchain.image_size == VkExtent2D();
-
-            if (data.overridden_on_resize)
-                data.overridden_on_resize(_user_source(src, data), width, height);
-
-            if (was_zero_size && !is_zero_size) {
-                create_swapchain(self._device, data.surface, properties, data.swapchain);
-
-                if (data.on_swapchain_create)
-                    data.on_swapchain_create(_user_source(src, data), &data.swapchain);
-            }
-            else if (!was_zero_size && !is_zero_size) {
-                resize_swapchain(self._device, data.surface, properties, data.swapchain);
-
-                if (data.on_swapchain_resize)
-                    data.on_swapchain_resize(_user_source(src, data), &data.swapchain);
-            }
-            else if (!was_zero_size && is_zero_size) {
-                destroy_swapchain(self._device, data.swapchain);
-
-                if (data.on_swapchain_destroy)
-                    data.on_swapchain_destroy(_user_source(src, data), &data.swapchain);
-            }
+            self._resize_impl(src, data);
         };
 
         return super.create(properties.display_properties);
@@ -192,6 +174,36 @@ private:
             _device = _instance.create_device(gpu);
         else
             assert(0, "No suitable GPU was detected.");
+    }
+
+    void _resize_impl(ref EventSource src, SwapchainData* data) nothrow {
+        SwapchainProperties properties;
+        get_swapchain_properties(_device, data.surface, properties);
+
+        const is_zero_size = properties.image_size == VkExtent2D();
+        const was_zero_size = data.swapchain.image_size == VkExtent2D();
+
+        if (data.overridden_on_resize)
+            data.overridden_on_resize(_user_source(src, data), cast(ushort) properties.image_size.width, cast(ushort) properties.image_size.height);
+
+        if (was_zero_size && !is_zero_size) {
+            create_swapchain(_device, data.surface, properties, data.swapchain);
+
+            if (data.on_swapchain_create)
+                data.on_swapchain_create(_user_source(src, data), &data.swapchain);
+        }
+        else if (!was_zero_size && !is_zero_size) {
+            resize_swapchain(_device, data.surface, properties, data.swapchain);
+
+            if (data.on_swapchain_resize)
+                data.on_swapchain_resize(_user_source(src, data), &data.swapchain);
+        }
+        else if (!was_zero_size && is_zero_size) {
+            destroy_swapchain(_device, data.swapchain);
+
+            if (data.on_swapchain_destroy)
+                data.on_swapchain_destroy(_user_source(src, data), &data.swapchain);
+        }
     }
 
     static EventSource _user_source(ref EventSource src, SwapchainData* data) nothrow {

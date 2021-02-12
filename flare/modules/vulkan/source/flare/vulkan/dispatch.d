@@ -60,6 +60,7 @@ struct DispatchTable {
     VkResult EndCommandBuffer(VkCommandBuffer cmds) { return check!vkEndCommandBuffer(cmds); } 
 
     void CmdSetViewport(VkCommandBuffer cmds, in VkViewport[] viewports...) { vkCmdSetViewport(cmds, 0, cast(uint) viewports.length, viewports.ptr); }
+    void CmdSetScissor(VkCommandBuffer cmds, in VkRect2D[] scissor_rects...) { vkCmdSetScissor(cmds, 0, cast(uint) scissor_rects.length, scissor_rects.ptr); }
     void CmdBeginRenderPass(VkCommandBuffer cmds, in VkRenderPassBeginInfo begin_info, VkSubpassContents contents) { vkCmdBeginRenderPass(cmds, &begin_info, contents); }
     void CmdEndRenderPass(VkCommandBuffer cmds) { vkCmdEndRenderPass(cmds); }
     void CmdPipelineBarrier(VkCommandBuffer cmds, VkPipelineStageFlags src_flags, VkPipelineStageFlags dst_flags, VkDependencyFlags dependencies, VkMemoryBarrier[] memory_barriers, VkBufferMemoryBarrier[] buffer_barriers, VkImageMemoryBarrier[] image_barriers) { vkCmdPipelineBarrier(cmds, src_flags, dst_flags, dependencies, cast(uint) memory_barriers.length, memory_barriers.ptr, cast(uint) buffer_barriers.length, buffer_barriers.ptr, cast(uint) image_barriers.length, image_barriers.ptr); }

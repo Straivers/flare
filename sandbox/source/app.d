@@ -14,6 +14,10 @@ void main() {
     run_app!Test(settings);
 }
 
+import flare.core.math.vector;
+import flare.vulkan;
+import renderpass;
+
 struct Mesh {
     Vertex[] vertices;
     ushort[] indices;
@@ -149,8 +153,8 @@ public:
 
             RenderPassSpec spec = {
                 attachments: attachments,
-                vertex_shader_blob: load_shader("shaders/vert.spv"),
-                fragment_shader_blob: load_shader("shaders/frag.spv"),
+                vertex_shader: load_shader(_display_manager.device, "shaders/vert.spv"),
+                fragment_shader: load_shader(_display_manager.device, "shaders/frag.spv"),
                 bindings: Vertex.binding_description,
                 attributes: attributes
             };
@@ -162,7 +166,7 @@ public:
 
         foreach (ref frame; _virtual_frames) with (frame) {
             fence = create_fence(_display_manager.device, true);
-            begin_sempahore = create_semaphore(_display_manager.device);
+            begin_semaphore = create_semaphore(_display_manager.device);
             done_semaphore = create_semaphore(_display_manager.device);
             command_buffer = _command_pool.allocate();
         }
@@ -181,15 +185,45 @@ public:
             }
             else {
                 SwapchainImage swapchain_image;
-                _display_manager.get_next_image(_display_id);
+                _display_manager.get_next_image(_display_id, swapchain_image);
                 auto device = _display_manager.device;
+                auto vk = device.dispatch_table;
                 auto frame = &_virtual_frames[_frame_counter % _virtual_frames.length];
 
-                // render_pass.write_commands(command_buffers[swapchain_image.index]);
+                {
+                    record_preamble(device, _renderpass, frame.command_buffer, frame.framebuffer, swapchain_image.image_size);
+                    // render_pass.write_commands(command_buffers[swapchain_image.index]);
 
-                // wait_fence(device, swapchain_image.render_fence);
+                    {
+                        VkBuffer[1] vertex_buffers /* = [mesh_buffer.handle] */;
+                        VkDeviceSize[1] offsets = [0];
+                        vk.CmdBindVertexBuffers(frame.command_buffer, vertex_buffers, offsets);
+                    }
 
-                // submit_buffer(device, device.graphics, command_buffers[swapchain_image.index], swapchain_image.render_fence);
+                    vk.CmdBindIndexBuffer(frame.command_buffer, mesh_buffer.handle, mesh.vertices_size, VK_INDEX_TYPE_UINT16);
+                    vk.CmdDrawIndexed(frame.command_buffer, cast(uint) mesh.indices.length, 1, 0, 0, 0);
+
+                    record_postamble(device, _renderpass, frame.command_buffer);
+                }
+
+                {
+                    uint wait_stage = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+                    VkSubmitInfo submit_i = {
+                        waitSemaphoreCount: 1,
+                        pWaitSemaphores: &frame.begin_semaphore,
+                        pWaitDstStageMask: &wait_stage,
+                        commandBufferCount: 1,
+                        pCommandBuffers: &frame.command_buffer,
+                        signalSemaphoreCount: 1,
+                        pSignalSemaphores: &frame.done_semaphore
+                    };
+
+                    wait_and_reset_fence(device, frame.fence);
+                    _command_pool.submit(device.graphics, frame.fence, submit_i);
+                }
+
+                _display_manager.swap_buffers(_display_id);
+                _frame_counter++;
             }
         }
     }

@@ -5,14 +5,15 @@ import flare.vulkan;
 
 struct AttachmentSpec {
     VkFormat format;
+    float[4] clear_color;
     bool swapchain_attachment;
 }
 
 struct RenderPassSpec {
     AttachmentSpec[] attachments;
 
-    ubyte[] vertex_shader_blob;
-    ubyte[] fragment_shader_blob;
+    VkShaderModule vertex_shader;
+    VkShaderModule fragment_shader;
 
     VkVertexInputBindingDescription bindings;
     VkVertexInputAttributeDescription[] attributes;
@@ -20,8 +21,8 @@ struct RenderPassSpec {
 
 struct VirtualFrame {
     VkFence fence;
-    VkSempahore begin_semaphore;
-    VkSemaphore done_sempaphore;
+    VkSemaphore begin_semaphore;
+    VkSemaphore done_semaphore;
     VkCommandBuffer command_buffer;
 
     VkFramebuffer framebuffer;
@@ -49,7 +50,7 @@ void create_renderpass_1(VulkanDevice device, ref RenderPassSpec spec, out Rende
     {
         auto references = tmp.make_array!VkAttachmentReference(spec.attachments.length);
         foreach (i, ref reference; references) {
-            reference.attachment = i;
+            reference.attachment = cast(uint) i;
             reference.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
         }
 
@@ -90,26 +91,13 @@ void create_renderpass_1(VulkanDevice device, ref RenderPassSpec spec, out Rende
         device.dispatch_table.CreateRenderPass(renderpass_ci, renderpass.handle);
     }
     {
-        VkShaderModuleCreateInfo vertex_ci = {
-            codeSize: spec.vertex_shader_blob.length,
-            pCode: cast(uint*) spec.vertex_shader_blob.ptr
-        };
-
-        device.dispatch_table.CreateShaderModule(vertex_ci, renderpass.vertex_shader);
-    }
-    {
-        VkShaderModuleCreateInfo fragment_ci = {
-            codeSize: spec.fragment_shader_blob.length,
-            pCode: cast(uint*) spec.fragment_shader_blob.ptr
-        };
-
-        device.dispatch_table.CreateShaderModule(fragment_ci, renderpass.fragment_shader);
+        renderpass.vertex_shader = spec.vertex_shader;
+        renderpass.fragment_shader = spec.fragment_shader;
     }
     {
         VkPipelineLayoutCreateInfo layout_ci = {};
         device.dispatch_table.CreatePipelineLayout(layout_ci, renderpass.layout);
     }
-
     {
         VkPipelineShaderStageCreateInfo[2] shader_stages = [{
             stage: VK_SHADER_STAGE_VERTEX_BIT,
@@ -123,7 +111,7 @@ void create_renderpass_1(VulkanDevice device, ref RenderPassSpec spec, out Rende
 
         VkPipelineVertexInputStateCreateInfo vertex_input = {
             vertexBindingDescriptionCount: 1,
-            pVertexBindingDescriptions: spec.bindings.ptr,
+            pVertexBindingDescriptions: &spec.bindings,
             vertexAttributeDescriptionCount: cast(uint) spec.attributes.length,
             pVertexAttributeDescriptions: spec.attributes.ptr
         };
@@ -131,6 +119,11 @@ void create_renderpass_1(VulkanDevice device, ref RenderPassSpec spec, out Rende
         VkPipelineInputAssemblyStateCreateInfo input_assembly_info = {
             topology: VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,
             primitiveRestartEnable: VK_FALSE,
+        };
+
+        VkPipelineViewportStateCreateInfo viewport_state = {
+            viewportCount:  1,
+            scissorCount:  1,
         };
 
         VkPipelineRasterizationStateCreateInfo rasterizer = {
@@ -170,11 +163,11 @@ void create_renderpass_1(VulkanDevice device, ref RenderPassSpec spec, out Rende
         };
 
         VkGraphicsPipelineCreateInfo[1] pipeline_info = [{
-            stageCount: cast(uint) pipeline_stages.length,
-            pStages: pipeline_stages.ptr,
+            stageCount: cast(uint) shader_stages.length,
+            pStages: &shader_stages[0],
             pVertexInputState: &vertex_input,
             pInputAssemblyState: &input_assembly_info,
-            pViewportState: null,
+            pViewportState: &viewport_state,
             pRasterizationState: &rasterizer,
             pMultisampleState: &multisample,
             pDepthStencilState: null,
@@ -187,7 +180,9 @@ void create_renderpass_1(VulkanDevice device, ref RenderPassSpec spec, out Rende
             basePipelineIndex: -1,
         }];
 
-        device.dispatch_table.CreateGraphicsPipelines(null, pipeline_info, renderpass.pipeline);
+        VkPipeline[1] pipeline;
+        device.dispatch_table.CreateGraphicsPipelines(null, pipeline_info, pipeline);
+        renderpass.pipeline = pipeline[0];
     }
 
     renderpass.bindings = spec.bindings;
@@ -207,4 +202,74 @@ void destroy_renderpass(VulkanDevice device, ref RenderPass1 renderpass) {
     }
 
     device.context.memory.dispose(renderpass.attributes);
+}
+
+void record_preamble(VulkanDevice device, ref RenderPass1 render_pass, VkCommandBuffer cmd, VkFramebuffer fb, VkExtent2D viewport_size) {
+    auto tmp = temp_arena(device.context.memory);
+
+    auto viewport_rect = VkRect2D(VkOffset2D(0, 0), VkExtent2D(viewport_size.width, viewport_size.height));
+
+    with (device.dispatch_table) {
+        {
+            VkCommandBufferBeginInfo begin_i;
+            BeginCommandBuffer(cmd, begin_i);
+        }
+        {
+            VkViewport viewport = {
+                x: 0,
+                y: 0,
+                width: viewport_size.width,
+                height: viewport_size.height,
+                minDepth: 0,
+                maxDepth: 1
+            };
+            CmdSetViewport(cmd, viewport);
+        }
+        {
+            CmdSetScissor(cmd, viewport_rect);
+        }
+        {
+            auto clear_colors = tmp.make_array!VkClearValue(render_pass.attachments.length);
+            foreach (i, ref attachment; render_pass.attachments)
+                clear_colors[i].color.float32 = attachment.clear_color;
+            
+            VkRenderPassBeginInfo render_pass_bi = {
+                renderPass: render_pass.handle,
+                framebuffer: fb,
+                renderArea: viewport_rect,
+                clearValueCount: cast(uint) clear_colors.length,
+                pClearValues: &clear_colors[0]
+            };
+
+            CmdBeginRenderPass(cmd, render_pass_bi, VK_SUBPASS_CONTENTS_INLINE);
+        }
+
+        CmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, render_pass.pipeline);
+    }
+}
+
+void record_postamble(VulkanDevice device, ref RenderPass1 render_pass, VkCommandBuffer cmd) {
+    auto vk = device.dispatch_table;
+    vk.CmdEndRenderPass(cmd);
+    vk.EndCommandBuffer(cmd);
+}
+
+VkShaderModule create_shader(VulkanDevice device, ubyte[] data) {
+    VkShaderModuleCreateInfo sci = {
+        codeSize: data.length,
+        pCode: cast(uint*) data.ptr
+    };
+
+    VkShaderModule shader;
+    device.dispatch_table.CreateShaderModule(sci, shader);
+    return shader;
+}
+
+VkShaderModule load_shader(VulkanDevice device, string path) {
+    import flare.core.os.file: read_file;
+
+    auto bytes = read_file(path, device.context.memory);
+    auto shader = device.create_shader(bytes);
+    device.context.memory.dispose(bytes);
+    return shader;
 }
