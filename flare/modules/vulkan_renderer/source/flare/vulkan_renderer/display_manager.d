@@ -63,6 +63,10 @@ public:
         flare.vulkan.acquire_next_image(_device, &(cast(SwapchainData*) super.get_user_data(id)).swapchain, image);
     }
 
+    VulkanDevice device() {
+        return _device;
+    }
+
     override void* get_user_data(DisplayId id) nothrow {
         return (cast(SwapchainData*) super.get_user_data(id)).overridden_user_data;
     }

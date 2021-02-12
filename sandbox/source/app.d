@@ -14,6 +14,73 @@ void main() {
     run_app!Test(settings);
 }
 
+struct Mesh {
+    Vertex[] vertices;
+    ushort[] indices;
+
+    size_t vertices_size() const {
+        return Vertex.sizeof * vertices.length;
+    }
+
+    size_t indices_size() const {
+        return ushort.sizeof * indices.length;
+    }
+
+    size_t size() const {
+        return Vertex.sizeof * vertices.length + ushort.sizeof * indices.length;
+    }
+}
+
+struct Vertex {
+    float2 position;
+    float3 colour;
+
+    static VkVertexInputBindingDescription binding_description() {
+        VkVertexInputBindingDescription desc = {
+            binding: 0,
+            stride: Vertex.sizeof,
+            inputRate: VK_VERTEX_INPUT_RATE_VERTEX
+        };
+
+        return desc;
+    }
+
+    static VkVertexInputAttributeDescription[2] attrib_description() {
+        VkVertexInputAttributeDescription[2] descs = [
+            {
+                binding: 0,
+                location: 0,
+                format: VK_FORMAT_R32G32_SFLOAT,
+                offset: Vertex.position.offsetof,
+            },
+            {
+                binding: 0,
+                location: 1,
+                format: VK_FORMAT_R32G32B32_SFLOAT,
+                offset: Vertex.colour.offsetof,
+            }
+        ];
+
+        return descs;
+    }
+}
+
+immutable mesh = Mesh(
+    [
+        // 0 ----- 1
+        // |       |
+        // 2 ----- 3
+        Vertex(float2(-0.5, -0.5), float3(1, 0, 0)),
+        Vertex(float2(0.5, -0.5), float3(0, 1, 0)),
+        Vertex(float2(-0.5, 0.5), float3(0, 0, 1)),
+        Vertex(float2(0.5, 0.5), float3(1, 1, 1))
+    ],
+    [
+    0, 1, 2,
+    2, 1, 3
+    ]
+);
+
 class Test : FlareApp {
     import flare.core.memory: AllocatorApi, BuddyAllocator, mib;
     import flare.vulkan : ContextOptions, init_vulkan, VulkanContext, VkVersion, VK_LAYER_KHRONOS_VALIDATION_NAME, SwapchainImage;
@@ -72,6 +139,33 @@ public:
 
             _display_id = _display_manager.create(display_properties);
         }
+
+        {
+            AttachmentSpec[1] attachments = [{
+                swapchain_attachment: true
+            }];
+
+            auto attributes = Vertex.attrib_description;
+
+            RenderPassSpec spec = {
+                attachments: attachments,
+                vertex_shader_blob: load_shader("shaders/vert.spv"),
+                fragment_shader_blob: load_shader("shaders/frag.spv"),
+                bindings: Vertex.binding_description,
+                attributes: attributes
+            };
+
+            create_renderpass_1(_display_manager.device, spec, _renderpass);
+        }
+
+        _command_pool = create_graphics_command_pool(_display_manager.device);
+
+        foreach (ref frame; _virtual_frames) with (frame) {
+            fence = create_fence(_display_manager.device, true);
+            begin_sempahore = create_semaphore(_display_manager.device);
+            done_semaphore = create_semaphore(_display_manager.device);
+            command_buffer = _command_pool.allocate();
+        }
     }
 
     override void on_shutdown() {
@@ -88,7 +182,8 @@ public:
             else {
                 SwapchainImage swapchain_image;
                 _display_manager.get_next_image(_display_id);
-                // auto device = _display_manager.device;
+                auto device = _display_manager.device;
+                auto frame = &_virtual_frames[_frame_counter % _virtual_frames.length];
 
                 // render_pass.write_commands(command_buffers[swapchain_image.index]);
 
@@ -102,4 +197,11 @@ public:
 private:
     DisplayId _display_id;
     VulkanDisplayManager _display_manager;
+
+    RenderPass1 _renderpass;
+
+    ulong _frame_counter;
+    VirtualFrame[3] _virtual_frames;
+
+    CommandPool _command_pool;
 }
