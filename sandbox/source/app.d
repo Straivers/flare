@@ -144,6 +144,9 @@ public:
             _display_id = _display_manager.create(display_properties);
         }
 
+        import resources;
+        auto m = new VulkanResourceManager(_display_manager.device);
+
         {
             AttachmentSpec[1] attachments = [{
                 swapchain_attachment: true
@@ -170,6 +173,32 @@ public:
             done_semaphore = create_semaphore(_display_manager.device);
             command_buffer = _command_pool.allocate();
         }
+
+        /*
+        _resource_manager = new DeviceResourceManager(_display_manager.device);
+
+        {
+            BufferAllocInfo alloc_i = {
+                type: ResourceType.write_static,
+                usage: BufferUsage.VertexBuffer | BufferUsage.IndexBuffer | BufferUsage.TransferDst,
+                size: mesh.size
+            };
+
+            auto buffer = _resource_manger.allocate(alloc_i);
+
+            DeviceBuffer.Parition[2] part_specs = [{mesh.vertices_size}, {mesh.indices_size}];
+            DeviceBuffer[2] parts;
+            buffer.partition(part_specs, parts);
+            _vertex_buffer = parts[0];
+            _index_buffer = parts[1];
+        }
+
+        _staging_manager = new DeviceStagingManager(_resource_manager);
+        _staging_manager.stage(mesh.vertices, _vertex_buffer);
+        _staging_manager.stage(mesh.indices, _index_buffer);
+        _staging_manager.flush();
+        _staging_manager.wait();
+        */
     }
 
     override void on_shutdown() {
@@ -200,8 +229,8 @@ public:
                         vk.CmdBindVertexBuffers(frame.command_buffer, vertex_buffers, offsets);
                     }
 
-                    vk.CmdBindIndexBuffer(frame.command_buffer, mesh_buffer.handle, mesh.vertices_size, VK_INDEX_TYPE_UINT16);
-                    vk.CmdDrawIndexed(frame.command_buffer, cast(uint) mesh.indices.length, 1, 0, 0, 0);
+                    // vk.CmdBindIndexBuffer(frame.command_buffer, mesh_buffer.handle, mesh.vertices_size, VK_INDEX_TYPE_UINT16);
+                    // vk.CmdDrawIndexed(frame.command_buffer, cast(uint) mesh.indices.length, 1, 0, 0, 0);
 
                     record_postamble(device, _renderpass, frame.command_buffer);
                 }

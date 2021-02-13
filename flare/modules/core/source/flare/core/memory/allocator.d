@@ -168,7 +168,7 @@ auto make(T, A, Args...)(auto ref A allocator, auto ref Args args) {
 
     auto typed = () @trusted { return cast(T[]) memory; } ();
     assert(typed.length == 1);
-    return emplace_obj!T(typed, args);
+    return emplace!T(typed, args);
 }
 
 /**

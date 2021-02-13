@@ -70,7 +70,7 @@ struct LogEvent {
     /// Message header
     Header header;
     /// The message provided by the creator of the log event.
-    char[max_message_length] message_storage;
+    char[max_message_length] message;
 
     alias header this;
 
@@ -81,18 +81,6 @@ struct LogEvent {
         this.line = line;
         this.module_name = mod;
         this.func_name = func;
-    }
-
-    ///
-    void set_message(in char[] message)
-    in (message.length <= message_storage.length) {
-        message_length = cast(ushort) message.length;
-        message_storage[0 .. message_length] = message;
-    }
-
-    ///
-    const(char)[] get_message() const return  {
-        return message_storage[0 .. message_length];
     }
 }
 
@@ -111,6 +99,8 @@ struct Logger {
     /// The maximum number of event sinks that the logger can have registered at
     /// any time.
     enum max_event_sinks = 16;
+
+    static immutable malformed_error_message = "ERR LOG MESSAGE MALFORMED";
 
 @safe nothrow public:
     import flare.core.time : get_time;
@@ -203,7 +193,10 @@ struct Logger {
      passed on to its parent logger if one was provided.
      */
     void log(LogLevel level, Args...)(string fmt, Args args, uint line, string mod, string func) {
-        import std.format : sformat;
+        import std.format : sformat, FormatException;
+        import core.exception : RangeError;
+        import std.format: formattedWrite;
+        import flare.core.buffer_writer: TypedWriter;
 
         if (level > 0 && level < _level)
             return;
@@ -211,10 +204,18 @@ struct Logger {
         char[LogEvent.max_message_length] msgbuf;
 
         auto event = LogEvent(get_timestamp(), level, mod, line, func);
+        auto writer = TypedWriter!char(event.message);
+
         try
-            event.set_message(sformat(msgbuf, fmt, args));
+            formattedWrite(writer, fmt, args);
+        catch (FormatException e) {
+            writer.clear();
+            writer.put(malformed_error_message);
+        }
         catch (Exception e)
-            event.set_message("ERR LOG MESSAGE TOO LONG");
+            assert(0, "Unknown error.");
+
+        event.message_length = cast(ushort) writer.length;
 
         log_event(event);
     }
@@ -299,7 +300,7 @@ public:
             writer.formattedWrite!"%23s %s"(ts, text[event.level]);
             debug writer.formattedWrite!"{%s:%s} "(event.module_name, event.line);
 
-            writer.put(event.get_message());
+            writer.put(event.message[0 .. event.message_length]);
             writer.put(clear_colors);
             writer.put("\n\0");
 
