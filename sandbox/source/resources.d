@@ -98,6 +98,7 @@ public:
 
 class VulkanResourceManager {
     import flare.core.memory.virtual: vm_alloc, vm_commit, vm_free;
+    import flare.core.memory.allocator: make_array, dispose;
 
     /// 2 Million Allocations
     // At 8 bytes per index, 2 ^ 20 slots gives 16 mib for the table
@@ -119,9 +120,12 @@ public:
         _num_touched_ids = 1;
         _id_pool[0].index_or_next = AllocationId_.max_u20;
         _id_pool[0].generation = 1;
+
+        _memory_pools = device.context.memory.make_array!VulkanMemoryPool(_memory_info.memoryHeapCount);
     }
 
     ~this() {
+        _device.context.memory.dispose(_memory_pools);
         vm_free(_id_pool);
     }
 
@@ -206,7 +210,7 @@ private:
     uint _num_touched_ids;
     AllocationId_[] _id_pool;
 
-    VulkanMemoryPool[MemoryType.Count] _memory_pools;
+    VulkanMemoryPool[] _memory_pools;
 }
 
 private:
@@ -252,7 +256,12 @@ public:
 }
 
 struct VulkanMemoryPool {
+    import flare.core.memory.measures: mib, gib;
 
+    enum chunk_size = 256.mib;
+    enum max_chunk_size = 4.gib;
+
+public:
     @disable this(this);
 
     DeviceBuffer allocate(ref BufferAllocInfo info, ref AllocationId_ id) {
@@ -261,5 +270,12 @@ struct VulkanMemoryPool {
 
     void deallocate(DeviceBuffer allocation) {
 
+    }
+
+private:
+    struct Block {
+        VkDeviceMemory memory;
+
+        // occupancy table...? buddy allocator setup?
     }
 }
