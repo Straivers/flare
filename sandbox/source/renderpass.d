@@ -48,6 +48,10 @@ void create_renderpass_1(VulkanDevice device, ref RenderPassSpec spec, out Rende
     auto tmp = scoped_arena(device.context.memory);
 
     {
+        renderpass.attachments = device.context.memory.make_array!AttachmentSpec(spec.attachments.length);
+        renderpass.attachments[] = spec.attachments;
+    }
+    {
         auto references = tmp.make_array!VkAttachmentReference(spec.attachments.length);
         foreach (i, ref reference; references) {
             reference.attachment = cast(uint) i;

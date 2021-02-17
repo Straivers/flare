@@ -133,6 +133,7 @@ private:
         "vkEndCommandBuffer",
 
         "vkCmdSetViewport",
+        "vkCmdSetScissor",
         "vkCmdBeginRenderPass",
         "vkCmdEndRenderPass",
         "vkCmdBindPipeline",

@@ -2,6 +2,7 @@ module resources;
 
 import flare.vulkan;
 
+/+
 /**
 Describes the location of an allocation, and the features that it must support.
 */
@@ -98,7 +99,7 @@ public:
 
 class VulkanResourceManager {
     import flare.core.memory.virtual: vm_alloc, vm_commit, vm_free;
-    import flare.core.memory.allocator: make_array, dispose;
+    import flare.core.memory.allocators.allocator: make_array, dispose;
 
     /// 2 Million Allocations
     // At 8 bytes per index, 2 ^ 20 slots gives 16 mib for the table
@@ -279,3 +280,4 @@ private:
         // occupancy table...? buddy allocator setup?
     }
 }
++/

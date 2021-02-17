@@ -1,7 +1,5 @@
 module flare.core.memory.measures;
 
-enum default_alignment = 8;
-
 // dfmt off
 size_t kib(size_t n) nothrow { return n * 1024; }
 size_t mib(size_t n) nothrow { return n * (1024 ^^ 2); }

@@ -1,14 +1,9 @@
 module flare.core.memory.common;
 
+public import std.conv : emplace;
+public import std.typecons : Ternary;
 
-public import std.typecons: Ternary;
-
-public import flare.core.memory.measures;
-public import flare.core.math.util;
-
-package:
-
-public import std.conv: emplace;
+enum default_alignment = 8;
 
 template PtrType(T) {
     static if (is(T == class))

@@ -1,8 +1,9 @@
-module flare.core.memory.buddy;
+module flare.core.memory.allocators.buddy;
 
-import flare.core.memory.allocator;
-import flare.core.memory.common;
 import flare.core.bitarray;
+import flare.core.math.util : ilog2, is_power_of_two;
+import flare.core.memory.allocators.allocator : Allocator;
+import flare.core.memory.common : default_alignment, Ternary;
 
 enum min_chunk_size = 128;
 enum min_allocator_size = 2 * min_chunk_size;
@@ -388,7 +389,7 @@ unittest {
 }
 
 unittest {
-    import flare.core.memory.allocator;
+    import flare.core.memory.allocator: test_allocate_api, test_reallocate_api, test_resize_api;
 
     auto allocator = BuddyAllocator(new void[](4.kib));
 
@@ -402,9 +403,9 @@ unittest {
         // Resize test when new size is less than half of a block
 
         // Allocate all 512-byte aligned blocks except for a 1024-byte block
-        auto p1 = allocator.allocate(2048);
+        const p1 = allocator.allocate(2048);
         assert(p1);
-        auto p2 = allocator.allocate(512);
+        const p2 = allocator.allocate(512);
         assert(p2);
 
         // Allocate testing block
@@ -419,7 +420,7 @@ unittest {
         allocator.resize(m1, m1.length / 2);
 
         // Ensure that the released 512-bytes are available for allocation
-        auto m2 = allocator.allocate(512);
+        const m2 = allocator.allocate(512);
         assert(m2);
     }
     {

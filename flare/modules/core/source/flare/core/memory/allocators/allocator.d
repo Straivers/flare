@@ -1,4 +1,4 @@
-module flare.core.memory.allocator;
+module flare.core.memory.allocators.allocator;
 
 import flare.core.memory.common;
 import std.traits: hasElaborateDestructor, hasMember;

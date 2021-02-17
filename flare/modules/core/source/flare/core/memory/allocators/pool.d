@@ -1,7 +1,8 @@
-module flare.core.memory.pool;
+module flare.core.memory.allocators.pool;
 
+import flare.core.memory.measures;
 import flare.core.memory.common;
-import flare.core.memory.allocator;
+import flare.core.memory.allocators.allocator;
 
 import core.stdc.string: memset;
 

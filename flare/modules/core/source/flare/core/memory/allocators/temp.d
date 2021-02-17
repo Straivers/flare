@@ -1,8 +1,9 @@
 
-module flare.core.memory.temp;
+module flare.core.memory.allocators.temp;
 
-import flare.core.memory.allocator;
-import flare.core.memory.common;
+import flare.core.memory.allocators.allocator: Allocator;
+import flare.core.memory.common : Ternary;
+import flare.core.memory.measures: kib;
 
 enum default_temp_arena_size = 16.kib;
 
@@ -11,7 +12,7 @@ auto scoped_arena(Allocator allocator, size_t size = default_temp_arena_size) no
 }
 
 struct ScopedArena {
-    import flare.core.memory.arena : Arena;
+    import flare.core.memory.allocators.arena : Arena;
     import std.typecons : scoped;
 
     final class Impl : Allocator {
@@ -74,7 +75,8 @@ nothrow public:
 }
 
 unittest {
-    import flare.core.memory.arena: Arena;
+    import flare.core.memory.allocators.allocator: AllocatorApi;
+    import flare.core.memory.allocators.arena: Arena;
 
     auto base = new AllocatorApi!Arena(32.kib);
     auto temp = scoped_arena(base);

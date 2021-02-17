@@ -1,8 +1,8 @@
-module flare.core.memory.arena;
+module flare.core.memory.allocators.arena;
 
 struct Arena {
-    import flare.core.memory.common : align_pointer, default_alignment, Ternary, is_sub_slice_of;
     import flare.core.math.util : round_to_next;
+    import flare.core.memory.common : align_pointer, default_alignment, is_sub_slice_of, Ternary;
 
 public nothrow:
     this(void[] memory, size_t alignment = default_alignment) {

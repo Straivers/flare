@@ -144,9 +144,6 @@ public:
             _display_id = _display_manager.create(display_properties);
         }
 
-        import resources;
-        auto m = new VulkanResourceManager(_display_manager.device);
-
         {
             AttachmentSpec[1] attachments = [{
                 swapchain_attachment: true
@@ -172,6 +169,8 @@ public:
             begin_semaphore = create_semaphore(_display_manager.device);
             done_semaphore = create_semaphore(_display_manager.device);
             command_buffer = _command_pool.allocate();
+
+            // create framebuffers!
         }
 
         /*
