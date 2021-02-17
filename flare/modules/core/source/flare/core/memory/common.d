@@ -40,3 +40,9 @@ unittest {
     const p2 = cast(void*) 8;
     assert(align_pointer(p2, 8) == cast(void*) 8);
 }
+
+bool is_sub_slice_of(const void[] inner, const void[] outer) nothrow {
+    const outer_end = outer.ptr + outer.length;
+    const inner_end = inner.ptr + inner.length;
+    return outer.ptr <= inner.ptr && inner_end <= outer_end;
+}

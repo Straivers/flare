@@ -43,7 +43,7 @@ bool select_gpu(VulkanContext ctx, ref VulkanDeviceCriteria criteria, out Vulkan
     vkEnumeratePhysicalDevices(ctx.instance, &n_devices, devices.ptr);
 
     foreach (device; devices) {
-        auto mem = temp_arena(ctx.memory, 64.kib);
+        auto mem = scoped_arena(ctx.memory, 64.kib);
 
         QueueFamilies selection;
         const queues_ok = select_queue_families(device, mem, criteria, selection);

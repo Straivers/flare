@@ -8,7 +8,7 @@ public import flare.core.memory.measures;
 
 public import flare.core.memory.pool;
 
-public import flare.core.memory.stack;
+public import flare.core.memory.arena;
 
 public import flare.core.memory.temp;
 

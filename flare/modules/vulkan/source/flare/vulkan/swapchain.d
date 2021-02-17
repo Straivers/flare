@@ -84,7 +84,7 @@ struct SwapchainImage {
 }
 
 void get_swapchain_properties(VulkanDevice device, VkSurfaceKHR surface, out SwapchainProperties result) {
-    auto mem = temp_arena(device.context.memory);
+    auto mem = scoped_arena(device.context.memory);
 
     VkSurfaceCapabilitiesKHR capabilities;
     vkGetPhysicalDeviceSurfaceCapabilitiesKHR(device.gpu.handle, surface, &capabilities);

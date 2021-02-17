@@ -496,12 +496,12 @@ private:
 }
 
 unittest {
-    import flare.core.memory.stack: VirtualStackAllocator;
+    import flare.core.memory.arena: Arena;
     import core.exception: AssertError;
 
     enum num_objects = 8;
 
-    auto allocator = new AllocatorApi!VirtualStackAllocator(4.kib);
+    auto allocator = new AllocatorApi!Arena(new void[](4.kib));
     auto pool = WeakObjectPool!ulong(allocator, num_objects);
 
     pool.Handle[num_objects] handles;

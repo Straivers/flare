@@ -88,7 +88,7 @@ nothrow private:
 VulkanDevice create_device(ref VulkanContext ctx, ref VulkanGpuInfo gpu) {
     import flare.vulkan.compat: to_cstr_array;
 
-    auto mem = temp_arena(ctx.memory);
+    auto mem = scoped_arena(ctx.memory);
     const queues = create_queue_create_infos(gpu, mem);
 
     VkPhysicalDeviceFeatures default_features;

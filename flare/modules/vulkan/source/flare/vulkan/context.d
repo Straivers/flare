@@ -61,7 +61,7 @@ VkInstance create_instance(ref ContextOptions options) {
         apiVersion: options.api_version
     };
 
-    auto mem = temp_arena(options.memory);
+    auto mem = scoped_arena(options.memory);
     auto layers = options.layers.to_cstr_array(mem);
     auto extensions = options.extensions.to_cstr_array(mem);
 

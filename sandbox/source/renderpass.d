@@ -45,7 +45,7 @@ struct RenderPass1 {
 }
 
 void create_renderpass_1(VulkanDevice device, ref RenderPassSpec spec, out RenderPass1 renderpass) {
-    auto tmp = temp_arena(device.context.memory);
+    auto tmp = scoped_arena(device.context.memory);
 
     {
         auto references = tmp.make_array!VkAttachmentReference(spec.attachments.length);
@@ -205,7 +205,7 @@ void destroy_renderpass(VulkanDevice device, ref RenderPass1 renderpass) {
 }
 
 void record_preamble(VulkanDevice device, ref RenderPass1 render_pass, VkCommandBuffer cmd, VkFramebuffer fb, VkExtent2D viewport_size) {
-    auto tmp = temp_arena(device.context.memory);
+    auto tmp = scoped_arena(device.context.memory);
 
     auto viewport_rect = VkRect2D(VkOffset2D(0, 0), VkExtent2D(viewport_size.width, viewport_size.height));
 
