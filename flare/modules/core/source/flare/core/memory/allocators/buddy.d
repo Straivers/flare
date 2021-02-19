@@ -380,18 +380,18 @@ unittest {
     // Failure to do so will cause a problem when the bitmap requires an even
     // number of chunks (the first free chunk is not of Order(0)) where the free
     // lists for Order(0) has the same values as Order(1).
-    auto mem1 = BuddyAllocator(new void[](256.kib));
+    auto mem1 = BuddyAllocator(new void[](256 * 1024));
     assert(mem1.allocate(1) !is mem1.allocate(1));
 
-    auto mem2 = BuddyAllocator(new void[](512.kib));
+    auto mem2 = BuddyAllocator(new void[](512 * 1024));
     assert(mem2.allocate(1) !is mem2.allocate(1));
     assert(mem2.allocate(300) !is mem2.allocate(300));
 }
 
 unittest {
-    import flare.core.memory.allocator: test_allocate_api, test_reallocate_api, test_resize_api;
+    import flare.core.memory.allocators.allocator: test_allocate_api, test_reallocate_api, test_resize_api;
 
-    auto allocator = BuddyAllocator(new void[](4.kib));
+    auto allocator = BuddyAllocator(new void[](4 * 1024));
 
     assert(allocator.alignment == default_alignment);
 

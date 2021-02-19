@@ -75,10 +75,10 @@ nothrow public:
 }
 
 unittest {
-    import flare.core.memory.allocators.allocator: AllocatorApi;
+    import flare.core.memory.allocators.allocator: AllocatorApi, test_allocate_api, test_reallocate_api, test_resize_api;
     import flare.core.memory.allocators.arena: Arena;
 
-    auto base = new AllocatorApi!Arena(32.kib);
+    auto base = new AllocatorApi!Arena(new void[](32.kib));
     auto temp = scoped_arena(base);
 
     test_allocate_api(temp);

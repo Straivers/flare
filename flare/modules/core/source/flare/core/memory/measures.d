@@ -21,3 +21,19 @@ template object_alignment(T) {
     else
         enum object_alignment = T.alignof;
 }
+
+size_t bits_to_store(size_t value) nothrow {
+    import core.bitop : bsr;
+
+    return value == 0 ? 0 : bsr(value) + 1;
+}
+
+unittest {
+    assert(bits_to_store(0) == 0);
+    assert(bits_to_store(1) == 1);
+    assert(bits_to_store(2) == 2);
+    assert(bits_to_store(3) == 2);
+    assert(bits_to_store(64) == 7);
+    assert(bits_to_store(128 - 1) == 7);
+    assert(bits_to_store(128) == 8);
+}

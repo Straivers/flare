@@ -118,7 +118,7 @@ private:
 }
 
 unittest {
-    import flare.core.memory.allocator: test_allocate_api;
+    import flare.core.memory.allocators.allocator: test_allocate_api;
     
     auto allocator = MemoryPool(new void[](36), 12);
     assert(allocator.alignment == 4);
@@ -497,7 +497,7 @@ private:
 }
 
 unittest {
-    import flare.core.memory.arena: Arena;
+    import flare.core.memory.allocators.arena: Arena;
     import core.exception: AssertError;
 
     enum num_objects = 8;

@@ -7,4 +7,3 @@ public import flare.core.memory.allocators.pool;
 public import flare.core.memory.allocators.temp;
 
 public import flare.core.memory.measures;
-public import flare.core.memory.virtual;

@@ -97,9 +97,9 @@ private:
 }
 
 unittest {
-    import flare.core.memory.allocator: test_allocate_api, test_reallocate_api, test_resize_api;
+    import flare.core.memory.allocators.allocator: test_allocate_api, test_reallocate_api, test_resize_api;
 
-    auto arena = Arena(new void[](4.kib));
+    auto arena = Arena(new void[](4 * 1024));
 
     test_allocate_api(arena);
     test_reallocate_api(arena);
