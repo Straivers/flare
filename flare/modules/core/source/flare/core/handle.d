@@ -67,9 +67,7 @@ public:
     this(void[] memory) {
         auto base = memory.ptr.align_pointer(_Slot.alignof);
         auto count = (memory.length - (base - memory.ptr)) / _Slot.sizeof;
-        _slots = (cast(_Slot*) base)[0 .. count];
-
-        _reserve_null_handle();
+        this((cast(_Slot*) base)[0 .. count]);
     }
 
     /**
@@ -81,8 +79,11 @@ public:
     */
     this(Allocator allocator) {
         _base_allocator = allocator;
-        _slots = _base_allocator.make_array!_Slot(num_slots);
+        this(_base_allocator.make_array!_Slot(num_slots));
+    }
 
+    private this(_Slot[] slots) {
+        _slots = slots;
         _reserve_null_handle();
     }
 
@@ -113,21 +114,23 @@ public:
     }
 
     void dispose(Handle handle) {
-        static if (!is(SlotData == void) && hasElaborateDestructor!SlotData) {
-            // destructor
-        }
+        auto _handle = _Handle(handle);
+
+        _free_slot!true(_handle.index_or_next);
     }
 
 private:
-    align(max(object_alignment!SlotData, Handle.alignof)) struct _Slot {
-        union {
-            Handle handle;
-            struct {
-                mixin(bitfields!(
-                        uint, "index", bits_to_store(max_index),
-                        uint, "generation", bits_to_store(max_generation)));
-            }
+    union _Handle {
+        Handle handle;
+        struct {
+            mixin(bitfields!(
+                    uint, "index_or_next", bits_to_store(max_index),
+                    uint, "generation", bits_to_store(max_generation)));
         }
+    }
+
+    align(max(object_alignment!SlotData, Handle.alignof)) struct _Slot {
+        _Handle handle;
 
         static if (!is(SlotData == void))
             void[object_size!SlotData] data;
@@ -138,16 +141,55 @@ private:
     }
 
     void _reserve_null_handle() {
-        // If we can only have one generation per slot, skip over the first slot.
-        static if (num_generations == 1) {
-            _top++;
-        }
-        else {
-            _slots[_top].generation = _slots[_top].generation + 1;
+        // If we have more than 1 generation per slot, increment the generation
+        // for the first slot.
+        static if (num_generations > 1)
+            _free_slot!false(0);
+
+        _top++;
+    }
+
+    void _free_slot(bool destroy_data)(uint index) {
+        with (_slots[index]) {
+            // Call the destructor on the slot if necessary.
+            static if (destroy_data && hasElaborateDestructor!SlotData) {
+                if (is(SlotData == class))
+                    destroy(data_ptr);
+                else if (is(SlotData == interface))
+                    destroy(cast(Object) data_ptr);
+                else
+                    destroy(*data_ptr);
+            }
+
+            // Invalidate the slot (either for reuse or retirement).
+            static if (num_generations > 1) {
+                if (handle.generation != max_generation) {
+                    // Invalidate old handles
+                    handle.generation = handle.generation + 1;
+
+                    // Add slot to freelist
+                    handle.index_or_next = _first_free_slot;
+                    _first_free_slot = index;
+
+                    // Record new element of freelist
+                    _freelist_length++;
+                }
+                else {
+                    // Do nothing. Retired slots don't get put back on the
+                    // freelist.
+                }
+            }
+            else {
+                // If the handle is null, the slot has been invalidated.
+                handle.index_or_next = 0;
+            }
         }
     }
 
     Allocator _base_allocator;
     _Slot[] _slots;
     size_t _top;
+
+    uint _first_free_slot;
+    uint _freelist_length;
 }
