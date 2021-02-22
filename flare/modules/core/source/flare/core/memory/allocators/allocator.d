@@ -1,7 +1,7 @@
 module flare.core.memory.allocators.allocator;
 
-import flare.core.memory.common;
-import std.traits: hasElaborateDestructor, hasMember;
+import flare.core.memory.allocators.common;
+import std.traits : hasElaborateDestructor;
 
 public import std.typecons: Ternary;
 

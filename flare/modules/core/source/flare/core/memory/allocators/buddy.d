@@ -3,7 +3,7 @@ module flare.core.memory.allocators.buddy;
 import flare.core.bitarray;
 import flare.core.math.util : ilog2, is_power_of_two;
 import flare.core.memory.allocators.allocator : Allocator;
-import flare.core.memory.common : default_alignment, Ternary;
+import flare.core.memory.allocators.common;
 
 enum min_chunk_size = 128;
 enum min_allocator_size = 2 * min_chunk_size;

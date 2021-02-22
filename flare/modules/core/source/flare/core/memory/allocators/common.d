@@ -1,23 +1,12 @@
-module flare.core.memory.common;
+module flare.core.memory.allocators.common;
 
 public import std.conv : emplace;
 public import std.typecons : Ternary;
 
+public import flare.core.math.util : round_to_next;
+public import flare.core.memory.traits;
+
 enum default_alignment = 8;
-
-template PtrType(T) {
-    static if (is(T == class))
-        alias PtrType = T;
-    else
-        alias PtrType = T*;
-}
-
-PtrType!T get_ptr_type(T)(ref T object) {
-    static if (is(T == class))
-        return object;
-    else
-        return &object;
-}
 
 void* align_pointer(void* ptr, size_t alignment) nothrow {
     auto rem = (cast(size_t) ptr) % alignment;

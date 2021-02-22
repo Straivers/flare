@@ -1,5 +1,10 @@
 module flare.core.handle;
 
+import flare.core.math.util : min, max;
+import flare.core.memory;
+import flare.core.memory.allocators.common;
+import std.traits : hasElaborateDestructor;
+
 align(4) struct Handle32(string name) {
     void[4] value;
 
@@ -8,11 +13,11 @@ align(4) struct Handle32(string name) {
     }
 }
 
-static assert(HandlePool!(uint, "", 64).num_slots == 64);
+static assert(HandlePool!(uint, "", 64).max_slots == 64);
 static assert(HandlePool!(uint, "", 64).num_generations == 67108864);
 
-static assert(HandlePool!(uint, "", 12).num_slots == 16);
-static assert(HandlePool!(uint, "", uint.max).num_generations == 1);
+static assert(HandlePool!(void, "", 12).max_slots == 16);
+static assert(HandlePool!(void, "", uint.max).num_generations == 1);
 
 /*
 A HandlePool provides a fixed number of slots from which objects may be
@@ -40,21 +45,17 @@ Params:
     min_slots   = The minimum number of slots that the pool should have. Affects
                   the number of supported generations.
 */
-struct HandlePool(SlotData, string handle_name = __MODULE__, uint min_slots = 2 ^^ 20 - 1) {
-    import flare.core.math.util : max;
-    import flare.core.memory.allocators.allocator : Allocator, dispose, make_array;
-    import flare.core.memory.common : PtrType, Ternary, align_pointer;
-    import flare.core.memory.measures : bits_to_store, object_alignment, object_size;
+struct HandlePool(SlotData, string handle_name = __MODULE__, size_t min_slots = 2 ^^ 20 - 1)
+if (0 < min_slots && min_slots <= (1uL << 32)) {
     import std.bitmanip : bitfields;
-    import std.traits : hasElaborateDestructor;
 
     alias Handle = Handle32!handle_name;
 
     // Subtract 1 from min_slots because we index from 0.
-    enum num_slots = 2 ^^ bits_to_store(min_slots - 1);
+    enum max_slots = 2 ^^ bits_to_store(min_slots - 1);
     enum num_generations = 2 ^^ ((8 * uint.sizeof) - bits_to_store(min_slots - 1));
 
-    private enum max_index = num_slots - 1;
+    private enum max_index = max_slots - 1;
     private enum max_generation = num_generations - 1;
 
 public:
@@ -66,25 +67,28 @@ public:
     */
     this(void[] memory) {
         auto base = memory.ptr.align_pointer(_Slot.alignof);
-        auto count = (memory.length - (base - memory.ptr)) / _Slot.sizeof;
-        this((cast(_Slot*) base)[0 .. count]);
+        const count = (memory.length - (base - memory.ptr)) / _Slot.sizeof;
+        this((cast(_Slot*) base)[0 .. min(max_slots, count)]);
     }
 
     /**
-    Initializes the pool with an allocator and the minimum number of slots to
-    create. If the allocator's `get_optimal_alloc_size()` allows more slots, it
-    will create them provided that it does not reduce `max_generations`.
-    Ownership of the memory is held within the pool, and will be returned to the
-    allocator when the pool is destroyed.
+    Initializes the pool with an allocator. At least `min_slots` will be
+    allocated. Ownership of the memory is held within the pool, and will be
+    returned to the allocator when the pool is destroyed.
     */
     this(Allocator allocator) {
         _base_allocator = allocator;
-        this(_base_allocator.make_array!_Slot(num_slots));
+        const count = _base_allocator.get_optimal_alloc_size(_Slot.sizeof * min_slots) / _Slot.sizeof;
+        this(_base_allocator.make_array!_Slot(min(max_slots, count)));
     }
 
     private this(_Slot[] slots) {
         _slots = slots;
-        _reserve_null_handle();
+
+        static if (num_generations > 1)
+            _deallocate_slot(_allocate_slot());
+        else
+            _top++;
     }
 
     @disable this(this);
@@ -94,29 +98,57 @@ public:
             _base_allocator.dispose(_slots);
     }
 
-    Ternary owns(Handle handle) {
+    size_t num_slots() const {
+        return _slots.length;
+    }
+
+    Ternary owns(Handle handle) const {
+        const _handle = _Handle(handle);
+
+        if (_handle.index_or_next < _top) {
+            static if (num_generations > 1)
+                return Ternary(_slots[_handle.index_or_next].handle == _handle);
+            else
+                return Ternary(_slots[_handle.index_or_next].handle != _Handle());
+        }
+
         return Ternary.no;
     }
 
     static if (!is(SlotData == void)) {
         PtrType!SlotData get(Handle handle) {
-            return null;
+            assert(owns(handle) == Ternary.yes);
+            const _handle = _Handle(handle);
+            return _slots[_handle.index_or_next].slot_data;
         }
     }
 
     Handle make(Args...)(Args args) {
+        if (auto slot = _allocate_slot()) {
+            static if (!is(SlotData == void))
+                emplace(slot.slot_data, args);
 
-        static if (!is(SlotData == void)) {
-            // constructor
+            return slot.handle.handle;
         }
-
         return Handle();
     }
 
     void dispose(Handle handle) {
-        auto _handle = _Handle(handle);
+        const _handle = _Handle(handle);
+        auto slot = &_slots[_handle.index_or_next];
 
-        _free_slot!true(_handle.index_or_next);
+        assert(slot.handle == _handle, "Detected destruction of invalid handle.");
+
+        static if (hasElaborateDestructor!SlotData) {
+            static if (is(SlotData == class))
+                destroy(slot.data_ptr);
+            else static if (is(SlotData == interface))
+                destroy(cast(Object) slot.data_ptr);
+            else
+                destroy(*slot.data_ptr);
+        }
+
+        _deallocate_slot(slot);
     }
 
 private:
@@ -132,64 +164,138 @@ private:
     align(max(object_alignment!SlotData, Handle.alignof)) struct _Slot {
         _Handle handle;
 
-        static if (!is(SlotData == void))
+        static if (!is(SlotData == void)) {
             void[object_size!SlotData] data;
 
-        auto slot_data() {
-            return cast(PtrType!SlotData) data.ptr;
+            auto slot_data() {
+                return cast(PtrType!SlotData) data.ptr;
+            }
         }
     }
 
-    void _reserve_null_handle() {
-        // If we have more than 1 generation per slot, increment the generation
-        // for the first slot.
-        static if (num_generations > 1)
-            _free_slot!false(0);
+    _Slot* _allocate_slot() {
+        if (_freelist_length > 0) {
+            auto slot = &_slots[_first_free_slot];
+            const slot_index = _first_free_slot;
 
-        _top++;
+            _first_free_slot = slot.handle.index_or_next;
+            slot.handle.index_or_next = slot_index;
+            _freelist_length--;
+
+            return slot;
+        }
+
+        if (_top < _slots.length) {
+            auto slot = &_slots[_top];
+            slot.handle.index_or_next = _top;
+
+            static if (num_generations > 1)
+                slot.handle.generation = 0; // For non-zeroing `_base_allocator`s
+
+            _top++;
+            return slot;
+        }
+
+        return null;
     }
 
-    void _free_slot(bool destroy_data)(uint index) {
-        with (_slots[index]) {
-            // Call the destructor on the slot if necessary.
-            static if (destroy_data && hasElaborateDestructor!SlotData) {
-                if (is(SlotData == class))
-                    destroy(data_ptr);
-                else if (is(SlotData == interface))
-                    destroy(cast(Object) data_ptr);
-                else
-                    destroy(*data_ptr);
-            }
+    void _deallocate_slot(_Slot* slot) {
+        // If each slot supports multiple generations
+        static if (num_generations > 1) {
+            if (slot.handle.generation != max_generation) {
+                // Invalidate old handles
+                slot.handle.generation = slot.handle.generation + 1;
 
-            // Invalidate the slot (either for reuse or retirement).
-            static if (num_generations > 1) {
-                if (handle.generation != max_generation) {
-                    // Invalidate old handles
-                    handle.generation = handle.generation + 1;
+                // Add slot to freelist
+                const slot_index = slot.handle.index_or_next;
+                slot.handle.index_or_next = _first_free_slot;
+                _first_free_slot = slot_index;
 
-                    // Add slot to freelist
-                    handle.index_or_next = _first_free_slot;
-                    _first_free_slot = index;
-
-                    // Record new element of freelist
-                    _freelist_length++;
-                }
-                else {
-                    // Do nothing. Retired slots don't get put back on the
-                    // freelist.
-                }
-            }
-            else {
-                // If the handle is null, the slot has been invalidated.
-                handle.index_or_next = 0;
+                // Record new element of freelist
+                _freelist_length++;
+                return;
             }
         }
+
+        // Invalidate handle of consumed slot to catch use-after-free.
+        slot.handle = _Handle();
     }
 
     Allocator _base_allocator;
     _Slot[] _slots;
-    size_t _top;
 
+    uint _top;
     uint _first_free_slot;
     uint _freelist_length;
+}
+
+unittest {
+    auto pool = HandlePool!uint(new void[](4.kib));
+
+    static assert(pool.max_slots == 1 << 20);
+    static assert(pool.num_generations == 4 * (1 << 10));
+    
+    assert(pool.num_slots == 512);
+
+    assert(pool.owns(pool.Handle()) == Ternary.no);
+
+    const a1 = pool.make(1);
+    assert(pool.owns(a1) == Ternary.yes);
+    assert(*pool.get(a1) == 1);
+
+    {
+        const h1 = pool._Handle(a1);
+        assert(h1.index_or_next == 0);
+        assert(h1.generation == 1);
+    }
+
+    pool.dispose(a1);
+    assert(pool.owns(a1) == Ternary.no);
+
+    foreach (i; 0 .. 4093)
+        pool.dispose(pool.make());
+    
+    const a2 = pool.make(100);
+    assert(*pool.get(a2) == 100);
+
+    {
+        const h2 = pool._Handle(a2);
+        assert(h2.index_or_next == 0);
+        assert(h2.generation == 4095);
+    }
+
+    pool.dispose(a2);
+
+    const a3 = pool.make(0);
+
+    {
+        const h3 = pool._Handle(a3);
+        assert(h3.index_or_next == 1);
+        assert(h3.generation == 0);
+    }
+}
+
+unittest {
+    const pool = HandlePool!(uint, "", 64)(new void[](4.kib));
+    assert(pool.max_slots == 64);
+    assert(pool.num_slots == 64);
+}
+
+unittest {
+    auto pool = HandlePool!(void, "", 1UL << 32)(new void[](4.kib));
+    assert(pool.max_slots == 1UL << 32);
+    assert(pool.num_generations == 1);
+
+    assert(pool.owns(pool.Handle()) == Ternary.no);
+
+    const a1 = pool.make();
+    assert(pool.owns(a1) == Ternary.yes);
+    pool.dispose(a1);
+    assert(pool.owns(a1) == Ternary.no);
+
+    {
+        const h1 = pool._Handle(pool.make());
+        assert(h1.index_or_next == 2);
+        assert(h1.generation == 0);
+    }
 }

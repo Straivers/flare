@@ -1,6 +1,7 @@
 module flare.display.manager;
 
-import flare.core.memory;
+import flare.core.memory: Allocator, Ternary;
+import flare.core.handle: HandlePool, Handle32;
 import flare.display.win32;
 import flare.display.input: KeyCode, ButtonState;
 
@@ -42,9 +43,8 @@ enum DisplayMode : ubyte {
     // Fullscreen,
 }
 
-struct DisplayId {
-    ulong value;
-}
+enum display_handle_name = "flare_handle32_display_id";
+alias DisplayId = Handle32!display_handle_name;
 
 /**
 An EventSource is a convenience struct that is passed to display callbacks.
@@ -109,7 +109,7 @@ class DisplayManager {
 
 public nothrow:
     this(Allocator allocator) {
-        _displays = WeakObjectPool!DisplayImpl(allocator, max_open_displays);
+        _displays = DisplayPool(allocator);
     }
 
     void process_events(bool should_wait = false) {
@@ -121,60 +121,60 @@ public nothrow:
     }
 
     OsWindow get_os_handle(DisplayId id) {
-        return _os.get_os_handle(_displays.get(Handle.from(id)));
+        return _os.get_os_handle(_displays.get(id));
     }
 
     void* get_user_data(DisplayId id) {
-        return _displays.get(Handle.from(id)).user_data;
+        return _displays.get(id).user_data;
     }
 
     DisplayId create(ref DisplayProperties properties) nothrow {
-        auto id = _displays.allocate();
+        auto id = _displays.make();
         _num_allocated++;
 
-        _os.create_window(this, id.to!DisplayId, properties, *_displays.get(id));
-        return id.to!DisplayId;
+        _os.create_window(this, id, properties, *_displays.get(id));
+        return id;
     }
 
     void close(DisplayId id) nothrow {
-        _os.close_window(_displays.get(Handle.from(id)));
+        _os.close_window(_displays.get(id));
     }
 
     void destroy(DisplayId id) nothrow {
-        _os.destroy_window(_displays.get(Handle.from(id)));
-        _displays.deallocate(Handle.from(id));
+        _os.destroy_window(_displays.get(id));
+        _displays.dispose(id);
         _num_allocated--;
     }
 
     bool is_live(DisplayId id) nothrow {
-        return _displays.owns(Handle.from(id)) == Ternary.yes;
+        return _displays.owns(id) == Ternary.yes;
     }
 
     bool is_visible(DisplayId id) nothrow {
-        auto display = _displays.get(Handle.from(id));
+        auto display = _displays.get(id);
         return (display.mode & (DisplayMode.Hidden | DisplayMode.Minimized)) == 0;
     }
 
     bool is_close_requested(DisplayId id) nothrow {
-        return _displays.get(Handle.from(id)).is_close_requested;
+        return _displays.get(id).is_close_requested;
     }
 
     void resize(DisplayId id, ushort width, ushort height) nothrow {
-        _displays.get(Handle.from(id)).resize(width, height);
+        _displays.get(id).resize(width, height);
     }
 
     void retitle(DisplayId id, in char[] title) nothrow {
-        _displays.get(Handle.from(id)).retitle(title);
+        _displays.get(id).retitle(title);
     }
 
     void change_window_mode(DisplayId id, DisplayMode mode) nothrow {
-        _displays.get(Handle.from(id)).set_mode(mode);
+        _displays.get(id).set_mode(mode);
     }
 
 private:
+    alias DisplayPool = HandlePool!(DisplayImpl, display_handle_name, max_open_displays);
+
     OsWindowManager _os;
     size_t _num_allocated;
-    WeakObjectPool!DisplayImpl _displays;
-
-    alias Handle = _displays.Handle;
+    DisplayPool _displays;
 }

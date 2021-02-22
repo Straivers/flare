@@ -2,7 +2,7 @@
 module flare.core.memory.allocators.temp;
 
 import flare.core.memory.allocators.allocator: Allocator;
-import flare.core.memory.common : Ternary;
+import flare.core.memory.allocators.common : Ternary;
 import flare.core.memory.measures: kib;
 
 enum default_temp_arena_size = 16.kib;
