@@ -10,8 +10,8 @@ subPackage {
     targetType "library"
     targetPath "./build"
 
-    sourcePaths "./modules/app/source"
-    importPaths "./modules/app/source"
+    sourcePaths "./modules/app"
+    importPaths "./modules/app"
 
     dependency "flare:renderer" version="*"
     dependency "flare:vulkan_renderer" version="*"
@@ -24,8 +24,8 @@ subPackage {
     targetType "library"
     targetPath "./build"
 
-    sourcePaths "./modules/core/source"
-    importPaths "./modules/core/source"
+    sourcePaths "./modules/core"
+    importPaths "./modules/core"
 }
 
 subPackage {
@@ -34,8 +34,8 @@ subPackage {
     targetType "library"
     targetPath "./build"
 
-    sourcePaths "./modules/display/source"
-    importPaths "./modules/display/source"
+    sourcePaths "./modules/display"
+    importPaths "./modules/display"
 
     dependency "flare:core" version="*"
 }
@@ -46,8 +46,8 @@ subPackage {
     targetType "library"
     targetPath "build"
 
-    sourcePaths "./modules/renderer/source"
-    importPaths "./modules/renderer/source"
+    sourcePaths "./modules/renderer"
+    importPaths "./modules/renderer"
 
     dependency "flare:core" version="*"
 }
@@ -58,8 +58,8 @@ subPackage {
     targetType "library"
     targetPath "build"
 
-    sourcePaths "./modules/vulkan/source"
-    importPaths "./modules/vulkan/source"
+    sourcePaths "./modules/vulkan"
+    importPaths "./modules/vulkan"
 
     dependency "flare:core" version="*"
     dependency "erupted" version="~>2.1.12"
@@ -71,8 +71,8 @@ subPackage {
     targetType "library"
     targetPath "build"
 
-    sourcePaths "./modules/vulkan_renderer/source"
-    importPaths "./modules/vulkan_renderer/source"
+    sourcePaths "./modules/vulkan_renderer"
+    importPaths "./modules/vulkan_renderer"
 
     dependency "flare:core" version="*"
     dependency "flare:display" version="*"
