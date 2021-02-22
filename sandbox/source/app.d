@@ -2,6 +2,7 @@ module app;
 
 import sandbox;
 import flare.application;
+import flare.core.memory;
 
 void main() {
     FlareAppSettings settings = {
@@ -22,6 +23,7 @@ struct Mesh {
     Vertex[] vertices;
     ushort[] indices;
 
+nothrow:
     size_t vertices_size() const {
         return Vertex.sizeof * vertices.length;
     }
@@ -39,6 +41,7 @@ struct Vertex {
     float2 position;
     float3 colour;
 
+nothrow:
     static VkVertexInputBindingDescription binding_description() {
         VkVertexInputBindingDescription desc = {
             binding: 0,
@@ -85,6 +88,16 @@ immutable mesh = Mesh(
     ]
 );
 
+struct DisplayFrames {
+    ulong frame_counter;
+
+    FrameResources[3] resources;
+    VkCommandBuffer[3] pending_command_buffers;
+
+    RenderPass1 render_pass;
+    VkFramebuffer[] frame_buffers;
+}
+
 class Test : FlareApp {
     import flare.core.memory: AllocatorApi, BuddyAllocator, mib;
     import flare.vulkan : ContextOptions, init_vulkan, VulkanContext, VkVersion, VK_LAYER_KHRONOS_VALIDATION_NAME, SwapchainImage;
@@ -114,64 +127,97 @@ public:
                     width: app_settings.main_window_width,
                     height: app_settings.main_window_height,
                     is_resizable: true,
+                    user_data: new DisplayFrames(),
                     callbacks: {
                         on_key: (src, key, state) nothrow {
                             if (key == KeyCode.Escape && state == ButtonState.Released)
                                 src.manager.close(src.display_id);
                         },
-                        on_resize: (src, width, height) nothrow {
-                            debug writefln("Resizing window to (%s, %s)", width, height);
-                        },
                         on_create: (src) nothrow {
-                            debug writeln("Creating window");
+                            auto vk_mgr = cast(VulkanDisplayManager) src.manager;
+                            auto frames = cast(DisplayFrames*) vk_mgr.get_user_data(src.display_id);
+
+                            foreach (ref frame_resources; frames.resources) with (frame_resources) {
+                                fence = create_fence(vk_mgr.device, true);
+                                begin_semaphore = create_semaphore(vk_mgr.device);
+                                done_semaphore = create_semaphore(vk_mgr.device);
+                            }
                         },
                         on_destroy: (src) nothrow {
-                            debug writeln("Destroying window");
+                            auto vk_mgr = cast(VulkanDisplayManager) src.manager;
+                            auto frames = cast(DisplayFrames*) vk_mgr.get_user_data(src.display_id);
+
+                            foreach (ref frame_resources; frames.resources) with (frame_resources) {
+                                destroy_fence(vk_mgr.device, fence);
+                                destroy_semaphore(vk_mgr.device, begin_semaphore);
+                                destroy_semaphore(vk_mgr.device, done_semaphore);
+                            }
+
+                            foreach (fb; frames.frame_buffers)
+                                vk_mgr.device.dispatch_table.DestroyFramebuffer(fb);
+
+                            destroy_renderpass(vk_mgr.device, frames.render_pass);
                         }
                     }
                 },
                 on_swapchain_create: (src, swapchain) nothrow {
-                    debug writefln("Creating new swapchain. ID = %s", swapchain.handle);
-                },
-                on_swapchain_destroy: (src, swapchain) nothrow {
-                    debug writefln("Destroying swapchain. ID = %s", swapchain.handle);
+                    auto frames = cast(DisplayFrames*) src.manager.get_user_data(src.display_id);
+
+                    if (frames.render_pass.swapchain_attachment.format != swapchain.format) {
+                        destroy_renderpass(src.manager.device, frames.render_pass);
+                    }
+
+                    if (!frames.render_pass.handle) {
+                        RenderPassSpec rps = {
+                            swapchain_attachment: AttachmentSpec(swapchain.format, [0, 0, 0, 1]),
+                            vertex_shader: load_shader(src.manager.device, "shaders/vert.spv"),
+                            fragment_shader: load_shader(src.manager.device, "shaders/frag.spv"),
+                            bindings: Vertex.binding_description,
+                            attributes: Vertex.attrib_description
+                        };
+
+                        create_renderpass_1(src.manager.device, rps, frames.render_pass);
+                    }
+
+                    frames.frame_buffers = src.manager.device.context.memory.make_array!VkFramebuffer(swapchain.images.length);
+                    foreach (i, ref fb; frames.frame_buffers) {
+                        VkFramebufferCreateInfo framebuffer_ci = {
+                            renderPass: frames.render_pass.handle,
+                            attachmentCount: 1,
+                            pAttachments: &swapchain.views[i],
+                            width: swapchain.image_size.width,
+                            height: swapchain.image_size.height,
+                            layers: 1
+                        };
+
+                        src.manager.device.dispatch_table.CreateFramebuffer(framebuffer_ci, fb);
+                    }
                 },
                 on_swapchain_resize: (src, swapchain) nothrow {
-                    debug writefln("Recreating swapchain. Id = %s", swapchain.handle);
+                    auto frames = cast(DisplayFrames*) src.manager.get_user_data(src.display_id);
+
+                    foreach (fb; frames.frame_buffers)
+                        src.manager.device.dispatch_table.DestroyFramebuffer(fb);
+
+                    foreach (i, ref fb; frames.frame_buffers) {
+                        VkFramebufferCreateInfo framebuffer_ci = {
+                            renderPass: frames.render_pass.handle,
+                            attachmentCount: 1,
+                            pAttachments: &swapchain.views[i],
+                            width: swapchain.image_size.width,
+                            height: swapchain.image_size.height,
+                            layers: 1
+                        };
+
+                        src.manager.device.dispatch_table.CreateFramebuffer(framebuffer_ci, fb);
+                    }
                 }
             };
 
             _display_id = _display_manager.create(display_properties);
         }
 
-        {
-            AttachmentSpec[1] attachments = [{
-                swapchain_attachment: true
-            }];
-
-            auto attributes = Vertex.attrib_description;
-
-            RenderPassSpec spec = {
-                attachments: attachments,
-                vertex_shader: load_shader(_display_manager.device, "shaders/vert.spv"),
-                fragment_shader: load_shader(_display_manager.device, "shaders/frag.spv"),
-                bindings: Vertex.binding_description,
-                attributes: attributes
-            };
-
-            create_renderpass_1(_display_manager.device, spec, _renderpass);
-        }
-
         _command_pool = create_graphics_command_pool(_display_manager.device);
-
-        foreach (ref frame; _virtual_frames) with (frame) {
-            fence = create_fence(_display_manager.device, true);
-            begin_semaphore = create_semaphore(_display_manager.device);
-            done_semaphore = create_semaphore(_display_manager.device);
-            command_buffer = _command_pool.allocate();
-
-            // create framebuffers!
-        }
 
         /*
         _resource_manager = new DeviceResourceManager(_display_manager.device);
@@ -201,39 +247,52 @@ public:
     }
 
     override void on_shutdown() {
+        destroy(_command_pool);
         destroy(_display_manager);
     }
 
     override void run() {
+        auto device = _display_manager.device;
+        auto vk = device.dispatch_table;
+
         while (_display_manager.is_live(_display_id)) {
             _display_manager.process_events(false);
 
             if (_display_manager.is_close_requested(_display_id)) {
+                // clean up command buffers
+                auto frames = cast(DisplayFrames*) _display_manager.get_user_data(_display_id);
+
+                foreach (ref resources; frames.resources)
+                    wait_fence(device, resources.fence);
+
+                _command_pool.free(frames.pending_command_buffers);
                 _display_manager.destroy(_display_id);
             }
-            else {
-                SwapchainImage swapchain_image;
-                _display_manager.get_next_image(_display_id, swapchain_image);
-                auto device = _display_manager.device;
-                auto vk = device.dispatch_table;
-                auto frame = &_virtual_frames[_frame_counter % _virtual_frames.length];
+            else if (_display_manager.is_visible(_display_id)) {
 
+                auto frames = cast(DisplayFrames*) _display_manager.get_user_data(_display_id);
+                const frame_id = frames.frame_counter % frames.resources.length;
+                auto frame = &frames.resources[frame_id];
+
+                SwapchainImage swapchain_image;
+                _display_manager.get_next_image(_display_id, swapchain_image, frame.begin_semaphore);
+
+                auto commands = _command_pool.allocate();
                 {
-                    record_preamble(device, _renderpass, frame.command_buffer, frame.framebuffer, swapchain_image.image_size);
+                    record_preamble(device, frames.render_pass, commands, frames.frame_buffers[swapchain_image.index], swapchain_image.image_size);
                     // render_pass.write_commands(command_buffers[swapchain_image.index]);
 
-                    {
-                        VkBuffer[1] vertex_buffers /* = [mesh_buffer.handle] */;
-                        VkDeviceSize[1] offsets = [0];
-                        vk.CmdBindVertexBuffers(frame.command_buffer, vertex_buffers, offsets);
-                    }
+                    // {
+                    //     VkBuffer[1] vertex_buffers /* = [mesh_buffer.handle] */;
+                    //     VkDeviceSize[1] offsets = [0];
+                    //     vk.CmdBindVertexBuffers(commands, vertex_buffers, offsets);
+                    // }
 
-                    // vk.CmdBindIndexBuffer(frame.command_buffer, mesh_buffer.handle, mesh.vertices_size, VK_INDEX_TYPE_UINT16);
-                    // vk.CmdDrawIndexed(frame.command_buffer, cast(uint) mesh.indices.length, 1, 0, 0, 0);
+                    // vk.CmdBindIndexBuffer(commands, mesh_buffer.handle, mesh.vertices_size, VK_INDEX_TYPE_UINT16);
+                    // vk.CmdDrawIndexed(commands, cast(uint) mesh.indices.length, 1, 0, 0, 0);
 
-                    record_postamble(device, _renderpass, frame.command_buffer);
+                    record_postamble(device, frames.render_pass, commands);
                 }
-
                 {
                     uint wait_stage = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
                     VkSubmitInfo submit_i = {
@@ -241,17 +300,22 @@ public:
                         pWaitSemaphores: &frame.begin_semaphore,
                         pWaitDstStageMask: &wait_stage,
                         commandBufferCount: 1,
-                        pCommandBuffers: &frame.command_buffer,
+                        pCommandBuffers: &commands,
                         signalSemaphoreCount: 1,
                         pSignalSemaphores: &frame.done_semaphore
                     };
 
                     wait_and_reset_fence(device, frame.fence);
+
+                    if (auto pending = frames.pending_command_buffers[frame_id])
+                        _command_pool.free(pending);
+
                     _command_pool.submit(device.graphics, frame.fence, submit_i);
+                    frames.pending_command_buffers[frame_id] = commands;
                 }
 
-                _display_manager.swap_buffers(_display_id);
-                _frame_counter++;
+                _display_manager.swap_buffers(_display_id, frame.done_semaphore);
+                frames.frame_counter++;
             }
         }
     }
@@ -259,11 +323,6 @@ public:
 private:
     DisplayId _display_id;
     VulkanDisplayManager _display_manager;
-
-    RenderPass1 _renderpass;
-
-    ulong _frame_counter;
-    VirtualFrame[3] _virtual_frames;
 
     CommandPool _command_pool;
 }

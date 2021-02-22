@@ -3,14 +3,15 @@ module renderpass;
 import flare.core.memory;
 import flare.vulkan;
 
+nothrow:
+
 struct AttachmentSpec {
     VkFormat format;
     float[4] clear_color;
-    bool swapchain_attachment;
 }
 
 struct RenderPassSpec {
-    AttachmentSpec[] attachments;
+    AttachmentSpec swapchain_attachment;
 
     VkShaderModule vertex_shader;
     VkShaderModule fragment_shader;
@@ -19,20 +20,16 @@ struct RenderPassSpec {
     VkVertexInputAttributeDescription[] attributes;
 }
 
-struct VirtualFrame {
+struct FrameResources {
     VkFence fence;
     VkSemaphore begin_semaphore;
     VkSemaphore done_semaphore;
-    VkCommandBuffer command_buffer;
-
-    VkFramebuffer framebuffer;
-    VkFormat framebuffer_format;
 }
 
 struct RenderPass1 {
     VkRenderPass handle;
 
-    AttachmentSpec[] attachments;
+    AttachmentSpec swapchain_attachment;
 
     VkShaderModule vertex_shader;
     VkShaderModule fragment_shader;
@@ -48,15 +45,13 @@ void create_renderpass_1(VulkanDevice device, ref RenderPassSpec spec, out Rende
     auto tmp = scoped_arena(device.context.memory);
 
     {
-        renderpass.attachments = device.context.memory.make_array!AttachmentSpec(spec.attachments.length);
-        renderpass.attachments[] = spec.attachments;
+        renderpass.swapchain_attachment = spec.swapchain_attachment;
     }
     {
-        auto references = tmp.make_array!VkAttachmentReference(spec.attachments.length);
-        foreach (i, ref reference; references) {
-            reference.attachment = cast(uint) i;
-            reference.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
-        }
+        VkAttachmentReference[1] references = [{
+            attachment : 0,
+            layout : VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL
+        }];
 
         VkSubpassDescription subpass = {
             pipelineBindPoint: VK_PIPELINE_BIND_POINT_GRAPHICS,
@@ -64,17 +59,16 @@ void create_renderpass_1(VulkanDevice device, ref RenderPassSpec spec, out Rende
             pColorAttachments: &references[0]
         };
 
-        auto attachments = tmp.make_array!VkAttachmentDescription(spec.attachments.length);
-        foreach (i, ref attachment; attachments) with (attachment) {
-            format          = spec.attachments[i].format;
-            samples         = VK_SAMPLE_COUNT_1_BIT;
-            loadOp          = VK_ATTACHMENT_LOAD_OP_CLEAR;
-            storeOp         = VK_ATTACHMENT_STORE_OP_STORE;
-            stencilLoadOp   = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
-            stencilStoreOp  = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-            initialLayout   = VK_IMAGE_LAYOUT_UNDEFINED;
-            finalLayout     = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
-        }
+        VkAttachmentDescription[1] attachments = [{
+            format          : spec.swapchain_attachment.format,
+            samples         : VK_SAMPLE_COUNT_1_BIT,
+            loadOp          : VK_ATTACHMENT_LOAD_OP_CLEAR,
+            storeOp         : VK_ATTACHMENT_STORE_OP_STORE,
+            stencilLoadOp   : VK_ATTACHMENT_LOAD_OP_DONT_CARE,
+            stencilStoreOp  : VK_ATTACHMENT_STORE_OP_DONT_CARE,
+            initialLayout   : VK_IMAGE_LAYOUT_UNDEFINED,
+            finalLayout     : VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
+        }];
 
         VkSubpassDependency dependency = {
             srcSubpass: VK_SUBPASS_EXTERNAL,
@@ -206,6 +200,7 @@ void destroy_renderpass(VulkanDevice device, ref RenderPass1 renderpass) {
     }
 
     device.context.memory.dispose(renderpass.attributes);
+    renderpass = RenderPass1();
 }
 
 void record_preamble(VulkanDevice device, ref RenderPass1 render_pass, VkCommandBuffer cmd, VkFramebuffer fb, VkExtent2D viewport_size) {
@@ -233,16 +228,15 @@ void record_preamble(VulkanDevice device, ref RenderPass1 render_pass, VkCommand
             CmdSetScissor(cmd, viewport_rect);
         }
         {
-            auto clear_colors = tmp.make_array!VkClearValue(render_pass.attachments.length);
-            foreach (i, ref attachment; render_pass.attachments)
-                clear_colors[i].color.float32 = attachment.clear_color;
-            
+            VkClearValue clear_color;
+            clear_color.color.float32 = render_pass.swapchain_attachment.clear_color;
+
             VkRenderPassBeginInfo render_pass_bi = {
                 renderPass: render_pass.handle,
                 framebuffer: fb,
                 renderArea: viewport_rect,
-                clearValueCount: cast(uint) clear_colors.length,
-                pClearValues: &clear_colors[0]
+                clearValueCount: 1,
+                pClearValues: &clear_color
             };
 
             CmdBeginRenderPass(cmd, render_pass_bi, VK_SUBPASS_CONTENTS_INLINE);

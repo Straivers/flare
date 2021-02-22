@@ -54,18 +54,8 @@ struct Swapchain {
     VkImage[] images;
     VkImageView[] views;
 
-    /// Fences that are passed to vkQueueSubmit, and are signalled upon queue completion.
-    VkFence[num_preferred_swap_buffers] render_fences;
-
-    /// Semaphores that are signalled when a swapchain image is ready to be rendered to.
-    VkSemaphore[num_preferred_swap_buffers] acquire_semaphores;
-    
-    /// Semaphores that are signalled when a swapchain image is ready to be presented.
-    VkSemaphore[num_preferred_swap_buffers] present_semaphores;
-
     VkResult state;
 
-    ubyte sync_object_index;
     ushort current_frame_index;
 }
 
@@ -76,11 +66,6 @@ struct SwapchainImage {
     VkFormat format;
     VkImageView view;
     VkExtent2D image_size;
-
-    VkFence render_fence;
-
-    VkSemaphore acquire_semaphore;
-    VkSemaphore present_semaphore;
 }
 
 void get_swapchain_properties(VulkanDevice device, VkSurfaceKHR surface, out SwapchainProperties result) {
@@ -119,12 +104,6 @@ void create_swapchain(VulkanDevice device, VkSurfaceKHR surface, in SwapchainPro
     swapchain.handle = _create_swapchain(device, surface, properties, null);
     _get_swapchain_images(device, swapchain);
 
-    foreach (i; 0 .. num_preferred_swap_buffers) {
-        swapchain.render_fences[i] = create_fence(device, true);
-        swapchain.acquire_semaphores[i] = create_semaphore(device);
-        swapchain.present_semaphores[i] = create_semaphore(device);
-    }
-
     device.context.logger.trace("Created swapchain (%sw, %sh) ID %s for surface %s.", swapchain.image_size.width, swapchain.image_size.height, swapchain.handle, surface);
 }
 
@@ -139,14 +118,11 @@ void resize_swapchain(VulkanDevice device, VkSurfaceKHR surface, in SwapchainPro
     assert(swapchain.handle);
     assert(properties.image_size != VkExtent2D(), "It is invalid to attempt to resize a swapchain to (0, 0)!");
 
-    wait_fences(device, true, ulong.max, swapchain.render_fences);
+    device.wait_idle();
 
     Swapchain new_swapchain = {
         handle: _create_swapchain(device, surface, properties, swapchain.handle),
         properties: properties,
-        render_fences: swapchain.render_fences,
-        acquire_semaphores: swapchain.acquire_semaphores,
-        present_semaphores: swapchain.present_semaphores
     };
 
     _free_swapchain_images(device, swapchain);
@@ -162,13 +138,7 @@ void resize_swapchain(VulkanDevice device, VkSurfaceKHR surface, in SwapchainPro
 void destroy_swapchain(VulkanDevice device, ref Swapchain swapchain) {
     assert(swapchain.handle);
 
-    wait_fences(device, true, ulong.max, swapchain.render_fences);
-
-    foreach (i; 0 .. num_preferred_swap_buffers) {
-        destroy_fence(device, swapchain.render_fences[i]);
-        destroy_semaphore(device, swapchain.acquire_semaphores[i]);
-        destroy_semaphore(device, swapchain.present_semaphores[i]);
-    }
+    device.wait_idle();
 
     _free_swapchain_images(device, swapchain);
     device.dispatch_table.DestroySwapchainKHR(swapchain.handle);
@@ -187,11 +157,11 @@ Params:
 Returns:
     The index of the next swapchain image.
 */
-void acquire_next_image(VulkanDevice device, Swapchain* swapchain, out SwapchainImage image) {
+void acquire_next_image(VulkanDevice device, Swapchain* swapchain, VkSemaphore acquire_sempahore, out SwapchainImage image) {
     assert(swapchain.handle);
 
     uint index;
-    const err = device.dispatch_table.AcquireNextImageKHR(swapchain.handle, ulong.max, swapchain.acquire_semaphores[swapchain.sync_object_index], null, index);
+    const err = device.dispatch_table.AcquireNextImageKHR(swapchain.handle, ulong.max, acquire_sempahore, null, index);
     swapchain.state = err;
 
     swapchain.current_frame_index = cast(ushort) index;
@@ -201,11 +171,6 @@ void acquire_next_image(VulkanDevice device, Swapchain* swapchain, out Swapchain
     image.format = swapchain.format;
     image.view = swapchain.views[index];
     image.image_size = swapchain.image_size;
-
-    image.render_fence = swapchain.render_fences[index];
-
-    image.acquire_semaphore = swapchain.acquire_semaphores[swapchain.sync_object_index];
-    image.present_semaphore = swapchain.present_semaphores[swapchain.sync_object_index];
 }
 
 /**
@@ -219,22 +184,19 @@ Returns:
     `true` if the swapchain images were swapped, `false` if the buffer is out of
     date.
 */
-bool swap_buffers(VulkanDevice device, Swapchain* swapchain) {
+bool swap_buffers(VulkanDevice device, Swapchain* swapchain, VkSemaphore present_semaphore) {
     uint index = swapchain.current_frame_index;
     VkPresentInfoKHR pi = {
         waitSemaphoreCount: 1,
-        pWaitSemaphores: &swapchain.present_semaphores[swapchain.sync_object_index],
+        pWaitSemaphores: &present_semaphore,
         swapchainCount: 1,
         pSwapchains: &swapchain.handle,
         pImageIndices: &index,
         pResults: null,
     };
 
-    const err = device.dispatch_table.QueuePresentKHR(device.graphics, pi);
-    
-    swapchain.sync_object_index = (swapchain.sync_object_index + 1) % num_preferred_swap_buffers;
-
-    return err == VK_SUCCESS;
+    const status = device.dispatch_table.QueuePresentKHR(device.graphics, pi);
+    return status == VK_SUCCESS;
 }
 
 private:
