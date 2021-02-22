@@ -88,7 +88,7 @@ immutable mesh = Mesh(
     ]
 );
 
-struct DisplayFrames {
+struct RenderContext {
     ulong frame_counter;
 
     FrameResources[3] resources;
@@ -118,7 +118,7 @@ public:
             extensions: VulkanDisplayManager.required_instance_extensions
         };
 
-        _display_manager = new VulkanDisplayManager(init_vulkan(options));
+        _display_manager = new VulkanDisplayManager(&log, init_vulkan(options));
 
         {
             VulkanDisplayProperties display_properties = {
@@ -127,7 +127,7 @@ public:
                     width: app_settings.main_window_width,
                     height: app_settings.main_window_height,
                     is_resizable: true,
-                    user_data: new DisplayFrames(),
+                    user_data: new RenderContext(),
                     callbacks: {
                         on_key: (src, key, state) nothrow {
                             if (key == KeyCode.Escape && state == ButtonState.Released)
@@ -135,7 +135,7 @@ public:
                         },
                         on_create: (src) nothrow {
                             auto vk_mgr = cast(VulkanDisplayManager) src.manager;
-                            auto frames = cast(DisplayFrames*) vk_mgr.get_user_data(src.display_id);
+                            auto frames = cast(RenderContext*) vk_mgr.get_user_data(src.display_id);
 
                             foreach (ref frame_resources; frames.resources) with (frame_resources) {
                                 fence = create_fence(vk_mgr.device, true);
@@ -145,7 +145,7 @@ public:
                         },
                         on_destroy: (src) nothrow {
                             auto vk_mgr = cast(VulkanDisplayManager) src.manager;
-                            auto frames = cast(DisplayFrames*) vk_mgr.get_user_data(src.display_id);
+                            auto frames = cast(RenderContext*) vk_mgr.get_user_data(src.display_id);
 
                             foreach (ref frame_resources; frames.resources) with (frame_resources) {
                                 destroy_fence(vk_mgr.device, fence);
@@ -153,15 +153,12 @@ public:
                                 destroy_semaphore(vk_mgr.device, done_semaphore);
                             }
 
-                            foreach (fb; frames.frame_buffers)
-                                vk_mgr.device.dispatch_table.DestroyFramebuffer(fb);
-
                             destroy_renderpass(vk_mgr.device, frames.render_pass);
                         }
                     }
                 },
                 on_swapchain_create: (src, swapchain) nothrow {
-                    auto frames = cast(DisplayFrames*) src.manager.get_user_data(src.display_id);
+                    auto frames = cast(RenderContext*) src.manager.get_user_data(src.display_id);
 
                     if (frames.render_pass.swapchain_attachment.format != swapchain.format) {
                         destroy_renderpass(src.manager.device, frames.render_pass);
@@ -194,7 +191,7 @@ public:
                     }
                 },
                 on_swapchain_resize: (src, swapchain) nothrow {
-                    auto frames = cast(DisplayFrames*) src.manager.get_user_data(src.display_id);
+                    auto frames = cast(RenderContext*) src.manager.get_user_data(src.display_id);
 
                     foreach (fb; frames.frame_buffers)
                         src.manager.device.dispatch_table.DestroyFramebuffer(fb);
@@ -211,6 +208,12 @@ public:
 
                         src.manager.device.dispatch_table.CreateFramebuffer(framebuffer_ci, fb);
                     }
+                },
+                on_swapchain_destroy: (src, swapchain) nothrow {
+                    auto frames = cast(RenderContext*) src.manager.get_user_data(src.display_id);
+
+                    foreach (fb; frames.frame_buffers)
+                        src.manager.device.dispatch_table.DestroyFramebuffer(fb);
                 }
             };
 
@@ -260,7 +263,7 @@ public:
 
             if (_display_manager.is_close_requested(_display_id)) {
                 // clean up command buffers
-                auto frames = cast(DisplayFrames*) _display_manager.get_user_data(_display_id);
+                auto frames = cast(RenderContext*) _display_manager.get_user_data(_display_id);
 
                 foreach (ref resources; frames.resources)
                     wait_fence(device, resources.fence);
@@ -270,7 +273,7 @@ public:
             }
             else if (_display_manager.is_visible(_display_id)) {
 
-                auto frames = cast(DisplayFrames*) _display_manager.get_user_data(_display_id);
+                auto frames = cast(RenderContext*) _display_manager.get_user_data(_display_id);
                 const frame_id = frames.frame_counter % frames.resources.length;
                 auto frame = &frames.resources[frame_id];
 

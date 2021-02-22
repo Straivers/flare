@@ -1,5 +1,6 @@
 module flare.display.manager;
 
+import flare.core.logger: Logger;
 import flare.core.memory: Allocator, Ternary;
 import flare.core.handle: HandlePool, Handle32;
 import flare.display.win32;
@@ -108,7 +109,8 @@ class DisplayManager {
     enum max_title_length = DisplayProperties.max_title_length;
 
 public nothrow:
-    this(Allocator allocator) {
+    this(Logger* sys_logger, Allocator allocator) {
+        _sys_logger = sys_logger;
         _displays = DisplayPool(allocator);
     }
 
@@ -132,7 +134,10 @@ public nothrow:
         auto id = _displays.make();
         _num_allocated++;
 
+        _sys_logger.info("Initalizing new OS window into slot %8#0x: %s (w: %s, h: %s)", cast(uint) id, properties.title, properties.width, properties.height);
         _os.create_window(this, id, properties, *_displays.get(id));
+        _sys_logger.info("Initialization for window %8#0x completed.", cast(uint) id);
+
         return id;
     }
 
@@ -141,6 +146,8 @@ public nothrow:
     }
 
     void destroy(DisplayId id) nothrow {
+        _sys_logger.info("Destroying window %8#0x.", cast(uint) id);
+
         _os.destroy_window(_displays.get(id));
         _displays.dispose(id);
         _num_allocated--;
@@ -171,8 +178,12 @@ public nothrow:
         _displays.get(id).set_mode(mode);
     }
 
+protected:
+    Logger* _sys_logger;
+
 private:
     alias DisplayPool = HandlePool!(DisplayImpl, display_handle_name, max_open_displays);
+
 
     OsWindowManager _os;
     size_t _num_allocated;

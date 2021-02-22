@@ -204,8 +204,6 @@ void destroy_renderpass(VulkanDevice device, ref RenderPass1 renderpass) {
 }
 
 void record_preamble(VulkanDevice device, ref RenderPass1 render_pass, VkCommandBuffer cmd, VkFramebuffer fb, VkExtent2D viewport_size) {
-    auto tmp = scoped_arena(device.context.memory);
-
     auto viewport_rect = VkRect2D(VkOffset2D(0, 0), VkExtent2D(viewport_size.width, viewport_size.height));
 
     with (device.dispatch_table) {

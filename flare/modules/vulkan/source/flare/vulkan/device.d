@@ -1,5 +1,6 @@
 module flare.vulkan.device;
 
+import flare.core.logger: Logger;
 import flare.core.memory;
 import flare.vulkan.context;
 import flare.vulkan.dispatch;
@@ -37,6 +38,10 @@ nothrow public:
 
     inout(VulkanContext) context() inout {
         return _context;
+    }
+
+    inout(Logger*) log() inout {
+        return &_context.logger;
     }
 
     DispatchTable* dispatch_table() {

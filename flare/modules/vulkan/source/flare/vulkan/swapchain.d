@@ -104,7 +104,7 @@ void create_swapchain(VulkanDevice device, VkSurfaceKHR surface, in SwapchainPro
     swapchain.handle = _create_swapchain(device, surface, properties, null);
     _get_swapchain_images(device, swapchain);
 
-    device.context.logger.trace("Created swapchain (%sw, %sh) ID %s for surface %s.", swapchain.image_size.width, swapchain.image_size.height, swapchain.handle, surface);
+    device.log.trace("Created swapchain (%sw, %sh) ID %s for surface %s.", swapchain.image_size.width, swapchain.image_size.height, swapchain.handle, surface);
 }
 
 /**
@@ -130,7 +130,7 @@ void resize_swapchain(VulkanDevice device, VkSurfaceKHR surface, in SwapchainPro
 
     _get_swapchain_images(device, new_swapchain);
 
-    device.context.logger.trace("Swapchain for surface %s has been recreated. It is now %s (%sw, %sh).", surface, new_swapchain.handle, properties.image_size.width, properties.image_size.height);
+    device.log.trace("Swapchain for surface %s has been recreated. It is now %s (%sw, %sh).", surface, new_swapchain.handle, properties.image_size.width, properties.image_size.height);
 
     swapchain = new_swapchain;
 }

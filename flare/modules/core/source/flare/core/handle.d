@@ -9,7 +9,11 @@ align(4) struct Handle32(string name) {
     void[4] value;
 
     T opCast(T : bool)() const {
-        return *(cast(uint*)&value[0]) == 0;
+        return (cast(uint) this) == 0;
+    }
+
+    T opCast(T: uint)() const {
+        return *(cast(uint*) &value[0]);
     }
 }
 

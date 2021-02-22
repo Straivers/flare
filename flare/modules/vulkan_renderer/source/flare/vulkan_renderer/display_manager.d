@@ -1,5 +1,6 @@
 module flare.vulkan_renderer.display_manager;
 
+import flare.core.logger : Logger;
 import flare.core.memory;
 import flare.vulkan;
 
@@ -56,8 +57,8 @@ final class VulkanDisplayManager : DisplayManager {
     ];
 
 public:
-    this(VulkanContext vulkan) {
-        super(vulkan.memory);
+    this(Logger* sys_logger, VulkanContext vulkan) {
+        super(sys_logger, vulkan.memory);
 
         _instance = vulkan;
         _swapchains = ObjectPool!SwapchainData(vulkan.memory, max_open_displays);
@@ -130,6 +131,8 @@ public:
                 if (data.on_swapchain_create)
                     data.on_swapchain_create(_vk_source(src.display_id, data), &data.swapchain);
             }
+            else
+                self._sys_logger.trace("Attempted to create 0-size swapchain. Deferring operation.");
         };
 
         properties.display_properties.callbacks.on_destroy = (src) nothrow {
@@ -139,12 +142,14 @@ public:
             if (data.on_swapchain_destroy)
                 data.on_swapchain_destroy(_vk_source(src.display_id, data), &data.swapchain);
 
+            self._sys_logger.trace("Destroying swapchain %s and surface %s for window %s.", data.swapchain.handle, data.surface, cast(uint) src.display_id);
+
             destroy_swapchain(self._device, data.swapchain);
             vkDestroySurfaceKHR(self._instance.instance, data.surface, null);    
 
             if (data.overridden_on_destroy)
                 data.overridden_on_destroy(_user_source(src, data));
-            
+
             self._swapchains.deallocate(data);
         };
 
@@ -203,18 +208,40 @@ private:
             data.overridden_on_resize(_user_source(src, data), cast(ushort) properties.image_size.width, cast(ushort) properties.image_size.height);
 
         if (was_zero_size && !is_zero_size) {
+            // dfmt off
+            _sys_logger.trace(
+                "Resizing swapchain for window %8#0x from (0, 0) to (%s, %s); creating swapchain.",
+                cast(uint) src.display_id,
+                properties.image_size.width, properties.image_size.height);
+            // dfmt on
+
             create_swapchain(_device, data.surface, properties, data.swapchain);
 
             if (data.on_swapchain_create)
                 data.on_swapchain_create(_vk_source(src.display_id, data), &data.swapchain);
         }
         else if (!was_zero_size && !is_zero_size) {
+            // dfmt off
+            _sys_logger.trace(
+                "Resizing swapchain for window %8#0x from (%s, %s) to (%s, %s); recreating swapchain.",
+                cast(uint) src.display_id,
+                data.swapchain.image_size.width, data.swapchain.image_size.height,
+                properties.image_size.width, properties.image_size.height);
+            // dfmt on
+
             resize_swapchain(_device, data.surface, properties, data.swapchain);
 
             if (data.on_swapchain_resize)
                 data.on_swapchain_resize(_vk_source(src.display_id, data), &data.swapchain);
         }
         else if (!was_zero_size && is_zero_size) {
+            // dfmt off
+            _sys_logger.trace(
+                "Resizing swapchain for window %8#0x from (%s, %s) to (0, 0); destroying swapchain.",
+                cast(uint) src.display_id,
+                data.swapchain.image_size.width, data.swapchain.image_size.height);
+            // dfmt on
+
             destroy_swapchain(_device, data.swapchain);
 
             if (data.on_swapchain_destroy)

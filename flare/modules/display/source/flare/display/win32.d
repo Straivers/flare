@@ -3,9 +3,10 @@ module flare.display.win32;
 version (Windows):
 
 import core.sys.windows.windows;
-import flare.display.manager;
+import flare.core.logger : Logger;
+import flare.core.os.types : OsWindow;
 import flare.display.input;
-import flare.core.os.types: OsWindow;
+import flare.display.manager;
 
 pragma(lib, "user32");
 
@@ -44,16 +45,6 @@ struct DisplayImpl {
 
     void retitle(const(char)[] title) nothrow {
         SetWindowText(hwnd, WCharBuffer(title).ptr);
-    }
-
-private:
-    void _on_create(HWND hwnd) nothrow {
-        this.hwnd = hwnd;
-        // swapchain = renderer.create_swapchain(hwnd);
-    }
-
-    void _on_resize(ushort width, ushort height) nothrow {
-        // renderer.resize(swapchain, width, height);
     }
 }
 
@@ -177,6 +168,7 @@ extern (Windows) LRESULT window_procedure(HWND hwnd, uint msg, WPARAM wp, LPARAM
 
             const width = LOWORD(lp);
             const height = HIWORD(lp);
+
             dispatch!"on_resize"(display, width, height);
         }
         return 0;
