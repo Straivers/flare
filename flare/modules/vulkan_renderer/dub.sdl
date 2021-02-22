@@ -1,8 +1,0 @@
-name "vulkan_renderer"
-
-targetPath "../../build"
-
-dependency "flare:core" version="*"
-dependency "flare:display" version="*"
-dependency "flare:renderer" version="*"
-dependency "flare:vulkan" version="*"

@@ -1,4 +1,0 @@
-name "renderer"
-targetPath "../../build"
-
-dependency "flare:core" version="*"

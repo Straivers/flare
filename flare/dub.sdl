@@ -4,12 +4,78 @@ authors "David"
 copyright "Copyright © 2020, David"
 license "proprietary"
 
-subPackage "./modules/app"
-subPackage "./modules/core"
-subPackage "./modules/display"
-subPackage "./modules/renderer"
-subPackage "./modules/ui"
-subPackage "./modules/vulkan"
-subPackage "./modules/vulkan_renderer"
+subPackage {
+    name "app"
 
-targetType "none"
+    targetType "library"
+    targetPath "./build"
+
+    sourcePaths "./modules/app/source"
+    importPaths "./modules/app/source"
+
+    dependency "flare:renderer" version="*"
+    dependency "flare:vulkan_renderer" version="*"
+    dependency "flare:display" version="*"
+}
+
+subPackage {
+    name "core"
+
+    targetType "library"
+    targetPath "./build"
+
+    sourcePaths "./modules/core/source"
+    importPaths "./modules/core/source"
+}
+
+subPackage {
+    name "display"
+
+    targetType "library"
+    targetPath "./build"
+
+    sourcePaths "./modules/display/source"
+    importPaths "./modules/display/source"
+
+    dependency "flare:core" version="*"
+}
+
+subPackage {
+    name "renderer"
+
+    targetType "library"
+    targetPath "build"
+
+    sourcePaths "./modules/renderer/source"
+    importPaths "./modules/renderer/source"
+
+    dependency "flare:core" version="*"
+}
+
+subPackage {
+    name "vulkan"
+
+    targetType "library"
+    targetPath "build"
+
+    sourcePaths "./modules/vulkan/source"
+    importPaths "./modules/vulkan/source"
+
+    dependency "flare:core" version="*"
+    dependency "erupted" version="~>2.1.12"
+}
+
+subPackage {
+    name "vulkan_renderer"
+
+    targetType "library"
+    targetPath "build"
+
+    sourcePaths "./modules/vulkan_renderer/source"
+    importPaths "./modules/vulkan_renderer/source"
+
+    dependency "flare:core" version="*"
+    dependency "flare:display" version="*"
+    dependency "flare:renderer" version="*"
+    dependency "flare:vulkan" version="*"
+}

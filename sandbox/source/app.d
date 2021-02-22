@@ -256,7 +256,7 @@ public:
 
     override void run() {
         auto device = _display_manager.device;
-        auto vk = device.dispatch_table;
+        // auto vk = device.dispatch_table;
 
         while (_display_manager.is_live(_display_id)) {
             _display_manager.process_events(false);
@@ -283,7 +283,6 @@ public:
                 auto commands = _command_pool.allocate();
                 {
                     record_preamble(device, frames.render_pass, commands, frames.frame_buffers[swapchain_image.index], swapchain_image.image_size);
-                    // render_pass.write_commands(command_buffers[swapchain_image.index]);
 
                     // {
                     //     VkBuffer[1] vertex_buffers /* = [mesh_buffer.handle] */;

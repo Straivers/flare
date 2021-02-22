@@ -97,15 +97,14 @@ public:
 
     DisplayId create(ref VulkanDisplayProperties properties) nothrow {
         auto swapchain = _swapchains.allocate(
-            this,
-            properties.display_properties.user_data,
-            properties.display_properties.callbacks.on_create,
-            properties.display_properties.callbacks.on_destroy,
-            properties.display_properties.callbacks.on_resize,
-            properties.on_swapchain_create,
-            properties.on_swapchain_destroy,
-            properties.on_swapchain_resize
-        );
+                this,
+                properties.display_properties.user_data,
+                properties.display_properties.callbacks.on_create,
+                properties.display_properties.callbacks.on_destroy,
+                properties.display_properties.callbacks.on_resize,
+                properties.on_swapchain_create,
+                properties.on_swapchain_destroy,
+                properties.on_swapchain_resize);
 
         properties.display_properties.user_data = swapchain;
 
@@ -142,10 +141,14 @@ public:
             if (data.on_swapchain_destroy)
                 data.on_swapchain_destroy(_vk_source(src.display_id, data), &data.swapchain);
 
-            self._sys_logger.trace("Destroying swapchain %s and surface %s for window %s.", data.swapchain.handle, data.surface, cast(uint) src.display_id);
+            // dfmt off
+            self._sys_logger.trace(
+                "Destroying swapchain %s and surface %s for window %s.",
+                data.swapchain.handle, data.surface, cast(uint) src.display_id);
+            // dfmt on
 
             destroy_swapchain(self._device, data.swapchain);
-            vkDestroySurfaceKHR(self._instance.instance, data.surface, null);    
+            vkDestroySurfaceKHR(self._instance.instance, data.surface, null);
 
             if (data.overridden_on_destroy)
                 data.overridden_on_destroy(_user_source(src, data));
