@@ -18,6 +18,7 @@ void main() {
 import flare.core.math.vector;
 import flare.vulkan;
 import renderpass;
+import mem.device;
 
 struct Mesh {
     Vertex[] vertices;
@@ -225,27 +226,13 @@ public:
         /*
         _resource_manager = new DeviceResourceManager(_display_manager.device);
 
-        {
-            BufferAllocInfo alloc_i = {
-                type: ResourceType.write_static,
-                usage: BufferUsage.VertexBuffer | BufferUsage.IndexBuffer | BufferUsage.TransferDst,
-                size: mesh.size
-            };
+        const mesh_info = {
+            vertices: triangle_vertices,
+            indices: triangle_indices,
+            type: ResourceType.write_static
+        };
 
-            auto buffer = _resource_manger.allocate(alloc_i);
-
-            DeviceBuffer.Parition[2] part_specs = [{mesh.vertices_size}, {mesh.indices_size}];
-            DeviceBuffer[2] parts;
-            buffer.partition(part_specs, parts);
-            _vertex_buffer = parts[0];
-            _index_buffer = parts[1];
-        }
-
-        _staging_manager = new DeviceStagingManager(_resource_manager);
-        _staging_manager.stage(mesh.vertices, _vertex_buffer);
-        _staging_manager.stage(mesh.indices, _index_buffer);
-        _staging_manager.flush();
-        _staging_manager.wait();
+        _mesh_id = _resource_manager.create_static_mesh(mesh_info);
         */
     }
 
@@ -292,6 +279,13 @@ public:
 
                     // vk.CmdBindIndexBuffer(commands, mesh_buffer.handle, mesh.vertices_size, VK_INDEX_TYPE_UINT16);
                     // vk.CmdDrawIndexed(commands, cast(uint) mesh.indices.length, 1, 0, 0, 0);
+
+                    // record_mesh_draw(_resource_manager, commands, _mesh_id);
+                        // ---- Approx. ----
+                        // auto mesh = _resource_manager.get(_mesh_id);
+                        // vkCmdBindVertexBuffers(commands, mesh.vertex_buffer, auto_offsets(0));
+                        // vkCmdBindIndexBuffer(commands, mesh.index_buffer, ...)
+                        // vkCmdDrawIndexed(commands, cast(uint) mesh.num_indices, 1, 0, 0, 0);
 
                     record_postamble(device, frames.render_pass, commands);
                 }

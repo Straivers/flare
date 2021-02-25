@@ -9,6 +9,8 @@ size_t gib(size_t n) nothrow { return n * (1024 ^^ 3); }
 template object_size(T) {
     static if (is(T == class))
         enum object_size = __traits(classInstanceSize, T);
+    else static if (is(T == interface))
+        static assert(0, "Unable to determine object size from an interface.");
     else
         enum object_size = T.sizeof;
 }
@@ -18,6 +20,8 @@ template object_alignment(T) {
 
     static if (is(T == class))
         enum object_alignment = classInstanceAlignment!T;
+    else static if (is(T == interface))
+        static assert(0, "Unable to determine object alignment from an interface.");
     else
         enum object_alignment = T.alignof;
 }

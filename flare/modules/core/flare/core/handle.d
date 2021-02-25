@@ -50,7 +50,7 @@ Params:
                   the number of supported generations.
 */
 struct HandlePool(SlotData, string handle_name = __MODULE__, size_t min_slots = 2 ^^ 20 - 1)
-if (0 < min_slots && min_slots <= (1uL << 32)) {
+if ((0 < min_slots && min_slots <= (1uL << 32)) && (is(SlotData == void) || object_size!SlotData > 0)) {
     import std.bitmanip : bitfields;
 
     alias Handle = Handle32!handle_name;

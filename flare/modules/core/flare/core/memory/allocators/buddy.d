@@ -300,13 +300,15 @@ const nothrow:
     /// The size of a single chunk in bytes.
     size_t chunk_size() { return 2 ^^ value * min_chunk_size; }
 
-    /// The index of the chunk starting at offset.
-    size_t index_of(size_t offset) in (is_aligned(offset)) {
-        return offset / chunk_size;
+    /// The index of the chunk starting at byte_offset as if the entire span of
+    /// memory were an array of block of size Order.chunk_size.
+    size_t index_of(size_t byte_offset) in (is_aligned(byte_offset)) {
+        return byte_offset / chunk_size;
     }
 
-    bool is_aligned(size_t offset) {
-        return offset % chunk_size == 0;
+    /// Checks that the byte offset could start a chunk in this order.
+    bool is_aligned(size_t byte_offset) {
+        return byte_offset % chunk_size == 0;
     }
 }
 

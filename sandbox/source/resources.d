@@ -2,7 +2,6 @@ module resources;
 
 import flare.vulkan;
 
-/+
 /**
 Describes the location of an allocation, and the features that it must support.
 */
@@ -28,6 +27,8 @@ enum MemoryType : ubyte {
     Count
 }
 
+/+
+
 /**
 Describes the intended use for a memory allocation.
 */
@@ -50,50 +51,6 @@ align (8) struct AllocationId {
 
     bool opCast(T: bool)() const {
         return *(cast(ulong*) &value[0]) != 0;
-    }
-}
-
-struct DeviceBuffer {
-    import flare.core.math.util : round_to_next;
-
-    struct Partition {
-        uint size;
-        uint alignment;
-    }
-
-public:
-    AllocationId handle;
-    uint offset;
-    uint size;
-
-    DeviceBuffer opIndex() {
-        return this;
-    }
-
-    DeviceBuffer opSlice(uint lo, uint hi) {
-        assert(handle && lo < hi && offset + hi <= size);
-        return DeviceBuffer(handle, offset + lo, hi - lo);
-    }
-
-    uint opDollar() {
-        return size;
-    }
-
-    bool partition(Partition[] part_specs, DeviceBuffer[] parts) {
-        assert(part_specs.length == parts.length);
-
-        size_t start = offset;
-        foreach (i, ref spec; part_specs) {
-            start = round_to_next(start, spec.alignment);
-
-            if (start + spec.size >= size)
-                return false;
-            
-            parts[i] = DeviceBuffer(handle, cast(uint) offset, spec.size);
-            start += spec.size;
-        }
-
-        assert(0, "Not Implemented");
     }
 }
 

@@ -1,5 +1,6 @@
 module flare.core.memory.allocators.allocator;
 
+import flare.core.memory.measures;
 import flare.core.memory.allocators.common;
 import std.traits : hasElaborateDestructor;
 
@@ -156,7 +157,7 @@ Allocates the memory for an object of type `T` then initializes it with the
 provided arguments (if any) in-place. If memory allocation or object
 initialization fails, returns `null`.
 */
-auto make(T, A, Args...)(auto ref A allocator, auto ref Args args) {
+PtrType!T make(T, A, Args...)(auto ref A allocator, auto ref Args args) {
     assert(allocator.alignment >= object_alignment!T, "Non-default alignment not currently supported ");
     auto memory = allocator.allocate(object_size!T);
 
@@ -174,7 +175,7 @@ auto make(T, A, Args...)(auto ref A allocator, auto ref Args args) {
 /**
 Allocates a default-initialized array of the given length.
 */
-auto make_array(T, A)(auto ref A allocator, size_t length) {
+T[] make_array(T, A)(auto ref A allocator, size_t length) {
     if (!length)
         return null;
 
@@ -283,7 +284,7 @@ void dispose(T, A)(auto ref A allocator, auto ref T* object) {
         destroy(*object);
 
     auto memory = (cast(void*) object)[0 .. object_size!T];
-    assert(allocator.owns(memory));
+    assert(allocator.owns(memory) != Ternary.no);
     allocator.deallocate(memory);
 
     static if (__traits(isRef, object))
