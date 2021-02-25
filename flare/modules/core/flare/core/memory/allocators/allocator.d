@@ -2,7 +2,7 @@ module flare.core.memory.allocators.allocator;
 
 import flare.core.memory.measures;
 import flare.core.memory.allocators.common;
-import std.traits : hasElaborateDestructor;
+import std.traits : hasMember, hasElaborateDestructor;
 
 public import std.typecons: Ternary;
 
@@ -100,8 +100,6 @@ nothrow:
 }
 
 final class AllocatorApi(T) : Allocator {
-    import std.traits: hasMember;
-
 public:
     this(Args...)(Args args) {
         _impl = T(args);
@@ -207,6 +205,8 @@ Returns: `true` if the array was resized, `false` otherwise. The array will not
 bool resize_array(T, A)(auto ref A allocator, ref T[] array, size_t new_length) nothrow {
     import std.algorithm: min;
 
+    static assert(!hasMember!(T, "opPostMove"), "Move construction on array reallocation not supported!");
+
     const common_length = min(array.length, new_length);
 
     if (new_length < common_length) {
@@ -244,9 +244,11 @@ bool resize_array(T, A)(
         auto ref A allocator,
         ref T[] array,
         size_t new_length,
-        void delegate(size_t, ref T) nothrow init_obj,
-        void delegate(size_t, ref T) nothrow clear_obj) nothrow {
+        scope void delegate(size_t, ref T) nothrow init_obj,
+        scope void delegate(size_t, ref T) nothrow clear_obj) nothrow {
     import std.algorithm: min;
+
+    static assert(!hasMember!(T, "opPostMove"), "Move construction on array reallocation not supported!");
 
     if (new_length == array.length)
         return true;
@@ -327,8 +329,6 @@ void dispose(T, A)(auto ref A allocator, auto ref T[] array) {
 }
 
 version (unittest) {
-    import std.traits: hasMember;
-
     void test_allocate_api(AllocatorType)(ref AllocatorType allocator) {
         assert(allocator.owns([]) == Ternary.yes);
         assert(allocator.allocate(0) == []);

@@ -27,6 +27,7 @@ struct DispatchTable {
     void DestroyFence(VkFence fence) { vkDestroyFence(_device, fence, _allocator); }
     VkResult ResetFences(VkFence[] fences...) { return check!vkResetFences(_device, cast(uint) fences.length, fences.ptr); }
     VkResult WaitForFences(VkFence[] fences, bool wait_all, ulong timeout) { return check!vkWaitForFences(_device, cast(uint) fences.length, fences.ptr, wait_all ? VK_TRUE : VK_FALSE, timeout); }
+    VkResult GetFenceStatus(VkFence fence) { return check!vkGetFenceStatus(_device, fence); }
 
     void GetDeviceQueue(uint queue_family_index, uint queue_index, out VkQueue p_queue) { vkGetDeviceQueue(_device, queue_family_index, queue_index, &p_queue); }
     VkResult QueueSubmit(VkQueue queue, VkFence fence, VkSubmitInfo[] submits...) { return check!vkQueueSubmit(queue, cast(uint) submits.length, submits.ptr, fence); }
@@ -100,6 +101,7 @@ private:
         "vkDestroyFence",
         "vkResetFences",
         "vkWaitForFences",
+        "vkGetFenceStatus",
         
         "vkGetDeviceQueue",
         "vkQueueSubmit",
