@@ -26,6 +26,28 @@ enum DeviceHeap : ubyte {
     Readback = 4,
 }
 
+VkMemoryPropertyFlags get_required_flags(DeviceHeap heap) {
+    static immutable conv = [
+        /* Unknown  */ 0,
+        /* Static   */ VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
+        /* Dynamic  */ VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+        /* Transfer */ VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+        /* Readback */ VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_CACHED_BIT
+    ];
+    return conv[heap];
+}
+
+VkMemoryPropertyFlags get_optional_flags(DeviceHeap heap) {
+    static immutable conv = [
+        /* Unknown  */ 0,
+        /* Static   */ 0,
+        /* Dynamic  */ VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
+        /* Transfer */ 0,
+        /* Readback */ 0,
+    ];
+    return conv[heap];
+}
+
 struct DeviceMemory {
     static assert(DeviceMemory.sizeof == 24);
     static assert(DeviceMemory.alignof == 8);
@@ -83,6 +105,33 @@ struct DeviceMemoryAllocator {
 
     size_t buffer_image_granularity() {
         return device.properties.limits.bufferImageGranularity;
+    }
+
+    int get_memory_type_index(DeviceHeap heap, uint memory_type_bits) {
+        const required_flags = get_required_flags(heap);
+        const optional_flags = get_optional_flags(heap);
+
+        const type = find_type_index(required_flags | optional_flags, memory_type_bits);
+        return type < 0 ? find_type_index(required_flags, memory_type_bits) : type;
+    }
+
+    int find_type_index(VkMemoryPropertyFlags flags, uint memory_type_bits) {
+        int value = -1;
+        foreach (i, memory_type; memory_properties.memoryTypes[0 .. memory_properties.memoryTypeCount]) {
+            const type_bits = (1 << i);
+            const is_correct_type = (memory_type_bits & type_bits) != 0;
+            const has_properties = (memory_type.propertyFlags & flags) == flags;
+
+            if (is_correct_type & has_properties) {
+                // Prefer memory type that has only the requested flags.
+                if((memory_type.propertyFlags & ~flags) == 0)
+                    return cast(int) i;
+
+                value = cast(int) i;
+            }
+        }
+
+        return value;
     }
 
     bool allocate_raw(uint type_index, size_t size, out VkDeviceMemory memory) {
