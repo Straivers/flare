@@ -10,6 +10,12 @@ import flare.vulkan.memory;
 
 nothrow:
 
+struct Queue {
+    VkQueue queue;
+    alias queue this;
+    uint family;
+}
+
 final class VulkanDevice {
     enum max_queues_per_family = 16;
 
@@ -19,17 +25,13 @@ nothrow public:
 
     ~this() {
         _dispatch.DestroyDevice();
-        destroy(_memory);
     }
 
     // dfmt off
-    VkQueue compute() { return _compute_queue; }
-
-    VkQueue present() { return _present_queue; }
-
-    VkQueue graphics() { return _graphics_queue; }
-
-    VkQueue transfer() { return _transfer_queue; }
+    Queue compute() { return _queues[QueueType.Compute]; }
+    Queue present() { return _queues[QueueType.Present]; }
+    Queue graphics() { return _queues[QueueType.Graphics]; }
+    Queue transfer() { return _queues[QueueType.Transfer]; }
     // dfmt on
 
     VkDevice handle() const {
@@ -48,10 +50,6 @@ nothrow public:
         return &_dispatch;
     }
 
-    DeviceMemory* memory() {
-        return &_memory;
-    }
-
     void wait_idle() {
         _dispatch.DeviceWaitIdle();
     }
@@ -63,30 +61,19 @@ nothrow public:
 nothrow private:
     VulkanContext _context;
     DispatchTable _dispatch;
-    DeviceMemory _memory;
 
-    VkQueue _compute_queue;
-    VkQueue _present_queue;
-    VkQueue _graphics_queue;
-    VkQueue _transfer_queue;
+    Queue[QueueType.Count] _queues;
 
     this(VulkanContext ctx, VkDevice device, ref VulkanGpuInfo device_info) {
         _context = ctx;
         this.gpu = device_info;
         _dispatch = DispatchTable(device, null);
-        _memory = DeviceMemory(&_dispatch, gpu.handle);
 
-        if (gpu.compute_family != uint.max)
-            _dispatch.GetDeviceQueue(gpu.compute_family, 0, _compute_queue);
-        
-        if (gpu.present_family != uint.max)
-            _dispatch.GetDeviceQueue(gpu.present_family, 0, _present_queue);
-
-        if (gpu.graphics_family != uint.max)
-            _dispatch.GetDeviceQueue(gpu.graphics_family, 0, _graphics_queue);
-
-        if (gpu.transfer_family != uint.max)
-            _dispatch.GetDeviceQueue(gpu.transfer_family, 0, _transfer_queue);
+        static foreach (i; 0 .. _queues.length)
+            if (gpu.queue_families[i] != uint.max) {
+                _dispatch.GetDeviceQueue(gpu.queue_families[i], 0, _queues[i].queue);
+                _queues[i].family = gpu.queue_families[i];
+            }
     }
 }
 
@@ -120,10 +107,10 @@ VulkanDevice create_device(ref VulkanContext ctx, ref VulkanGpuInfo gpu) {
 
     ctx.logger.info("Vulkan device created with:\n\tExtensions:%-( %s%)\n\tCompute family:  %s\n\tPresent family:  %s\n\tGraphics family: %s\n\tTransfer family: %s",
             gpu.extensions,
-            gpu.compute_family,
-            gpu.present_family,
-            gpu.graphics_family,
-            gpu.transfer_family,
+            gpu.queue_families[QueueType.Compute],
+            gpu.queue_families[QueueType.Present],
+            gpu.queue_families[QueueType.Graphics],
+            gpu.queue_families[QueueType.Transfer],
     );
 
     return new VulkanDevice(ctx, device, gpu);
@@ -134,12 +121,7 @@ private:
 VkDeviceQueueCreateInfo[] create_queue_create_infos(in VulkanGpuInfo device_info, ref ScopedArena mem) {
     import std.algorithm: swap, uniq, count, filter;
 
-    uint[4] all_families = [
-        device_info.compute_family,
-        device_info.graphics_family,
-        device_info.transfer_family,
-        device_info.present_family,
-    ];
+    uint[device_info.queue_families.length] all_families = device_info.queue_families;
 
     bool sorted;
     while (!sorted) {

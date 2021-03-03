@@ -6,26 +6,24 @@ import flare.vulkan.h;
 
 nothrow:
 
+enum QueueType : ubyte {
+    Compute     = 0,
+    Graphics    = 1,
+    Transfer    = 2,
+    Present     = 3,
+    Count
+}
+
+alias QueueFamilies = uint[QueueType.Count];
+
 struct VulkanGpuInfo {
     VkPhysicalDevice handle;
     const(string)[] extensions;
 
     QueueFamilies queue_families;
-    alias queue_families this;
 
     VkPhysicalDeviceProperties properties;
     VkPhysicalDeviceMemoryProperties memory_properties;
-}
-
-struct QueueFamilies {
-    /// Left empty until device selection
-    uint compute_family = uint.max;
-    /// ditto
-    uint graphics_family = uint.max;
-    /// ditto
-    uint transfer_family = uint.max;
-    /// ditto
-    uint present_family = uint.max;
 }
 
 struct VulkanDeviceCriteria {
@@ -94,15 +92,15 @@ bool select_queue_families(VkPhysicalDevice device, ref ScopedArena mem, in Vulk
 
     foreach_reverse (index, ref queue; queue_families) {
         // If we require graphics queues and have yet to find one
-        if (criteria.graphics_queue && selection.graphics_family == uint.max) {
+        if (criteria.graphics_queue && selection[QueueType.Graphics] == uint.max) {
             if ((queue.queueFlags & VK_QUEUE_GRAPHICS_BIT) != 0)
-                selection.graphics_family = cast(uint) index;
+                selection[QueueType.Graphics] = cast(uint) index;
         }
 
         // If we require compute queues and haven't found a compute-only queue
-        if (criteria.compute_queue && !(selection.graphics_family != uint.max || found_compute_only_queue)) {
+        if (criteria.compute_queue && !(selection[QueueType.Graphics] != uint.max || found_compute_only_queue)) {
             if ((queue.queueFlags & VK_QUEUE_COMPUTE_BIT) != 0) {
-                selection.compute_family = cast(uint) index;
+                selection[QueueType.Compute] = cast(uint) index;
 
                 found_compute_only_queue = queue.queueFlags == VK_QUEUE_COMPUTE_BIT
                     || queue.queueFlags == (VK_QUEUE_COMPUTE_BIT | VK_QUEUE_TRANSFER_BIT);
@@ -110,36 +108,36 @@ bool select_queue_families(VkPhysicalDevice device, ref ScopedArena mem, in Vulk
         }
 
         // If we require transfer-only queues and haven't found any
-        if (criteria.transfer_queue && !(selection.transfer_family != uint.max || found_transfer_only_queue)) {
+        if (criteria.transfer_queue && !(selection[QueueType.Transfer] != uint.max || found_transfer_only_queue)) {
             if ((queue.queueFlags & VK_QUEUE_TRANSFER_BIT) != 0) {
-                selection.transfer_family = cast(uint) index;
+                selection[QueueType.Transfer] = cast(uint) index;
 
                 found_transfer_only_queue = (queue.queueFlags & (VK_QUEUE_GRAPHICS_BIT | VK_QUEUE_COMPUTE_BIT)) == 0;
             }
         }
 
         // If we require a display queue that is also a graphics queue
-        if (criteria.display_target && !(selection.present_family != uint.max && found_graphics_present_queue)) {
+        if (criteria.display_target && !(selection[QueueType.Present] != uint.max && found_graphics_present_queue)) {
             VkBool32 can_present;
             vkGetPhysicalDeviceSurfaceSupportKHR(device, cast(uint) index, cast(VkSurfaceKHR) criteria.display_target, &can_present);
             if (can_present == VK_TRUE) {
-                selection.present_family = cast(uint) index;
+                selection[QueueType.Present] = cast(uint) index;
                 found_graphics_present_queue = (queue.queueFlags & VK_QUEUE_GRAPHICS_BIT) != 0;
             }
         }
     }
 
-    if (criteria.transfer_queue && selection.transfer_family == uint.max) {
-        if (selection.graphics_family != uint.max)
-            selection.transfer_family = selection.graphics_family;
-        else if (selection.compute_family != uint.max)
-            selection.transfer_family = selection.compute_family;
+    if (criteria.transfer_queue && selection[QueueType.Transfer] == uint.max) {
+        if (selection[QueueType.Graphics] != uint.max)
+            selection[QueueType.Transfer] = selection[QueueType.Graphics];
+        else if (selection[QueueType.Compute] != uint.max)
+            selection[QueueType.Transfer] = selection[QueueType.Compute];
     }
 
-    const compute_ok = criteria.compute_queue == 0 || selection.compute_family != uint.max;
-    const graphics_ok = criteria.graphics_queue == 0 || selection.graphics_family != uint.max;
-    const transfer_ok = criteria.transfer_queue == 0 || selection.transfer_family != uint.max;
-    const present_ok = criteria.display_target is null || selection.present_family != uint.max;
+    const compute_ok = criteria.compute_queue == 0 || selection[QueueType.Compute] != uint.max;
+    const graphics_ok = criteria.graphics_queue == 0 || selection[QueueType.Graphics] != uint.max;
+    const transfer_ok = criteria.transfer_queue == 0 || selection[QueueType.Transfer] != uint.max;
+    const present_ok = criteria.display_target is null || selection[QueueType.Present] != uint.max;
     return compute_ok && graphics_ok && transfer_ok && present_ok;
 }
 

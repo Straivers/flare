@@ -216,8 +216,8 @@ VkSwapchainKHR _create_swapchain(VulkanDevice device, VkSurfaceKHR surface, in S
         oldSwapchain: old
     };
 
-    const uint[2] shared_queue_indices = [device.graphics_family, device.present_family];
-    if (device.graphics_family != device.present_family) {
+    const uint[2] shared_queue_indices = [device.graphics.family, device.present.family];
+    if (device.graphics.family != device.present.family) {
         ci.imageSharingMode = VK_SHARING_MODE_CONCURRENT;
         ci.queueFamilyIndexCount = cast(uint) shared_queue_indices.length;
         ci.pQueueFamilyIndices = shared_queue_indices.ptr;
