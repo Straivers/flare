@@ -7,6 +7,15 @@ import flare.vulkan;
 
 import std.bitmanip : bitfields;
 
+enum Transferability : ubyte {
+    None,
+    Send    = 1 << 0,
+    Receive = 1 << 1,
+    Both    = Send | Receive,
+}
+
+static assert(Transferability.Both == 3);
+
 enum DeviceHeap : ubyte {
     Unknown = 0,
 
@@ -48,6 +57,30 @@ VkMemoryPropertyFlags get_optional_flags(DeviceHeap heap) {
     return conv[heap];
 }
 
+int get_memory_type_index(VulkanDevice device, DeviceHeap heap, uint required_memory_type_bits) {
+    auto memory_types = device.gpu.memory_properties.memoryTypes[0 .. device.gpu.memory_properties.memoryTypeCount];
+
+    int find_index(VkMemoryPropertyFlags flags) {
+        foreach (i, type; memory_types) {
+            const type_bits = (1 << i);
+            const is_correct_type = (required_memory_type_bits & type_bits) != 0;
+            const has_properties = (type.propertyFlags & flags) == flags;
+
+            // Vulkan spec guarantees that types are sorted fewest-bits first.
+            // We will always get the best match.
+            if (is_correct_type & has_properties)
+                return cast(int) i;
+        }
+
+        return -1;
+    }
+
+    const required_flags = get_required_flags(heap);
+    const optional_flags = get_optional_flags(heap);
+    const type = find_index(required_flags | optional_flags);
+    return type < 0 ? find_index(required_flags) : type;
+}
+
 struct DeviceMemory {
     static assert(DeviceMemory.sizeof == 24);
     static assert(DeviceMemory.alignof == 8);
@@ -83,55 +116,20 @@ public:
 }
 
 /// Arbitrates memory allocations for different types
-struct DeviceMemoryAllocator {
+struct RawDeviceMemoryAllocator {
     this(VulkanDevice device) {
         _device = device;
-        vkGetPhysicalDeviceMemoryProperties(_device.gpu.handle, &_memory_properties);
-
-        // _pools = _device.context.memory.make_array!DeviceMemoryPool(_memory_properties.memoryHeapCount);
     }
 
     @disable this(this);
 
     ~this() {
-        // _device.context.memory.dispose(_pools);
     }
 
     VulkanDevice device() { return _device; }
 
-    const(VkPhysicalDeviceMemoryProperties*) memory_properties() return {
-        return &_memory_properties;
-    }
-
     size_t buffer_image_granularity() {
         return device.properties.limits.bufferImageGranularity;
-    }
-
-    int get_memory_type_index(DeviceHeap heap, uint memory_type_bits) {
-        const required_flags = get_required_flags(heap);
-        const optional_flags = get_optional_flags(heap);
-
-        const type = find_type_index(required_flags | optional_flags, memory_type_bits);
-        return type < 0 ? find_type_index(required_flags, memory_type_bits) : type;
-    }
-
-    int find_type_index(VkMemoryPropertyFlags flags, uint memory_type_bits) {
-        int value = -1;
-        foreach (i, memory_type; memory_properties.memoryTypes[0 .. memory_properties.memoryTypeCount]) {
-            const type_bits = (1 << i);
-            const is_correct_type = (memory_type_bits & type_bits) != 0;
-            const has_properties = (memory_type.propertyFlags & flags) == flags;
-
-            if (is_correct_type & has_properties) {
-                // Prefer memory type that has only the requested flags.
-                if((memory_type.propertyFlags & ~flags) == 0)
-                    return cast(int) i;
-
-                value = cast(int) i;
-            }
-        }
-
-        return value;
     }
 
     bool allocate_raw(uint type_index, size_t size, out VkDeviceMemory memory) {
@@ -149,16 +147,23 @@ struct DeviceMemoryAllocator {
 
 private:
     VulkanDevice _device;
-    VkPhysicalDeviceMemoryProperties _memory_properties;
-
-    // DeviceMemoryPool[] _pools;
 }
 
-struct LinearPool {
+interface DeviceMemoryAllocator {
+    VulkanDevice device();
+
+    bool allocate(const ref VkMemoryRequirements reqs, bool is_linear, out DeviceMemory allocation);
+
+    bool deallocate(DeviceMemory allocation);
+
+    void clear();
+}
+
+final class LinearPool : DeviceMemoryAllocator {
     enum default_block_size = cast(uint) 64.mib;
 
 public:
-    this(DeviceMemoryAllocator* device_memory, Allocator management_allocator, uint type_index, DeviceHeap heap) {
+    this(RawDeviceMemoryAllocator* device_memory, Allocator management_allocator, uint type_index, DeviceHeap heap) {
         _device_memory = device_memory;
         _management_memory = management_allocator;
         _type_index = type_index;
@@ -167,14 +172,16 @@ public:
         _add_block(0);
     }
 
-    @disable this(this);
-
     ~this() {
         while (!_blocks.is_empty())
             _remove_last_block();
     }
 
-    bool allocate(const ref VkMemoryRequirements reqs, bool is_linear, out DeviceMemory allocation) {
+    override VulkanDevice device() {
+        return _device_memory.device;
+    }
+
+    override bool allocate(const ref VkMemoryRequirements reqs, bool is_linear, out DeviceMemory allocation) {
         assert(reqs.size < uint.max);
 
         auto block = _blocks[0];
@@ -214,7 +221,11 @@ public:
         return false;
     }
 
-    void clear() {
+    override bool deallocate(DeviceMemory allocation) {
+        return true;
+    }
+
+    override void clear() {
         while (_blocks.length > 1)
             _remove_last_block();
 
@@ -280,7 +291,7 @@ private:
         _management_memory.dispose(block);
     }
 
-    DeviceMemoryAllocator* _device_memory;
+    RawDeviceMemoryAllocator* _device_memory;
     Allocator _management_memory;
 
     uint _type_index;

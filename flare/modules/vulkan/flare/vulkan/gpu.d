@@ -14,6 +14,7 @@ struct VulkanGpuInfo {
     alias queue_families this;
 
     VkPhysicalDeviceProperties properties;
+    VkPhysicalDeviceMemoryProperties memory_properties;
 }
 
 struct QueueFamilies {
@@ -62,6 +63,7 @@ bool select_gpu(VulkanContext ctx, ref VulkanDeviceCriteria criteria, out Vulkan
             );
 
             vkGetPhysicalDeviceProperties(device, &result.properties);
+            vkGetPhysicalDeviceMemoryProperties(device, &result.memory_properties);
 
             return true;
         }

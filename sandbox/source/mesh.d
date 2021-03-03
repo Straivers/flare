@@ -2,7 +2,7 @@ module mesh;
 
 import mem.buffer;
 import mem.device;
-/+
+
 import flare.core.math.vector : float2, float3;
 import flare.core.handle : Handle32, HandlePool;
 import flare.vulkan;
@@ -36,7 +36,7 @@ struct MeshInfo {
 
 public:
     Vertex[] vertices;
-    ushort indices;
+    ushort[] indices;
     DeviceHeap heap;
 }
 
@@ -44,8 +44,8 @@ enum mesh_handle_name = "vulkan_static_mesh_handle";
 alias MeshId = Handle32!mesh_handle_name;
 
 struct Mesh {
-    DeviceMemory vertices;
-    DeviceMemory indices;
+    DeviceBufferSlice vertices;
+    DeviceBufferSlice indices;
     uint num_indices;
 }
 
@@ -75,4 +75,3 @@ private:
     MeshPool _static_meshes;
     // DeviceMemory _device_memory;
 }
-+/

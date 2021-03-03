@@ -13,6 +13,9 @@ void main() {
 
     // run_app!Sandbox(settings);
     run_app!Test(settings);
+
+    import mem.buffer;
+    allocate_buffer(null, BufferAllocInfo());
 }
 
 import flare.core.math.vector;
