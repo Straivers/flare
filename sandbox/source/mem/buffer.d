@@ -3,7 +3,6 @@ module mem.buffer;
 import flare.core.handle: Handle32, HandlePool;
 import flare.core.memory: Allocator;
 import flare.vulkan;
-import mem.device;
 
 enum buffer_handle_name = "vulkan_buffer_handle_name";
 alias BufferHandle = Handle32!buffer_handle_name;
@@ -199,7 +198,7 @@ private:
         void* mapped_ptr;
 
         alias memory this;
-        mem.device.DeviceMemory memory;
+        DeviceMemory memory;
     }
 
     struct _BufferInfo {

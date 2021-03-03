@@ -1,6 +1,5 @@
 module meshes;
 
-import mem.device;
 import mem.buffer;
 import flare.vulkan;
 import flare.core.math.vector : float2, float3;

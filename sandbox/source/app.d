@@ -18,7 +18,6 @@ void main() {
 import flare.core.math.vector;
 import flare.vulkan;
 import renderpass;
-import mem.device;
 import mem.buffer;
 import meshes;
 import flare.vulkan_renderer.display_manager;
