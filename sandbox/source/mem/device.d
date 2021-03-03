@@ -116,14 +116,9 @@ public:
 }
 
 /// Arbitrates memory allocations for different types
-struct RawDeviceMemoryAllocator {
+final class RawDeviceMemoryAllocator {
     this(VulkanDevice device) {
         _device = device;
-    }
-
-    @disable this(this);
-
-    ~this() {
     }
 
     VulkanDevice device() { return _device; }

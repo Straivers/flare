@@ -13,68 +13,16 @@ void main() {
 
     // run_app!Sandbox(settings);
     run_app!Test(settings);
-
-    import mem.buffer;
-    allocate_buffer(null, BufferAllocInfo());
 }
 
 import flare.core.math.vector;
 import flare.vulkan;
 import renderpass;
 import mem.device;
-
-struct Mesh {
-    Vertex[] vertices;
-    ushort[] indices;
-
-nothrow:
-    size_t vertices_size() const {
-        return Vertex.sizeof * vertices.length;
-    }
-
-    size_t indices_size() const {
-        return ushort.sizeof * indices.length;
-    }
-
-    size_t size() const {
-        return Vertex.sizeof * vertices.length + ushort.sizeof * indices.length;
-    }
-}
-
-struct Vertex {
-    float2 position;
-    float3 colour;
-
-nothrow:
-    static VkVertexInputBindingDescription binding_description() {
-        VkVertexInputBindingDescription desc = {
-            binding: 0,
-            stride: Vertex.sizeof,
-            inputRate: VK_VERTEX_INPUT_RATE_VERTEX
-        };
-
-        return desc;
-    }
-
-    static VkVertexInputAttributeDescription[2] attrib_description() {
-        VkVertexInputAttributeDescription[2] descs = [
-            {
-                binding: 0,
-                location: 0,
-                format: VK_FORMAT_R32G32_SFLOAT,
-                offset: Vertex.position.offsetof,
-            },
-            {
-                binding: 0,
-                location: 1,
-                format: VK_FORMAT_R32G32B32_SFLOAT,
-                offset: Vertex.colour.offsetof,
-            }
-        ];
-
-        return descs;
-    }
-}
+import mem.buffer;
+import meshes;
+import flare.vulkan_renderer.display_manager;
+import std.stdio;
 
 immutable mesh = Mesh(
     [
@@ -104,9 +52,6 @@ struct RenderContext {
 
 class Test : FlareApp {
     import flare.core.memory: AllocatorApi, BuddyAllocator, mib;
-    import flare.vulkan : ContextOptions, init_vulkan, VulkanContext, VkVersion, VK_LAYER_KHRONOS_VALIDATION_NAME, SwapchainImage;
-    import flare.vulkan_renderer.display_manager : DisplayId, VulkanDisplayManager, VulkanDisplayProperties, KeyCode, ButtonState;
-    import std.stdio : writefln, writeln;
 
 public:
     this(ref FlareAppSettings settings) {
@@ -169,12 +114,13 @@ public:
                     }
 
                     if (!frames.render_pass.handle) {
+                        VkVertexInputAttributeDescription[2] attrs = Vertex.attribute_descriptions;
                         RenderPassSpec rps = {
                             swapchain_attachment: AttachmentSpec(swapchain.format, [0, 0, 0, 1]),
                             vertex_shader: load_shader(src.manager.device, "shaders/vert.spv"),
                             fragment_shader: load_shader(src.manager.device, "shaders/frag.spv"),
                             bindings: Vertex.binding_description,
-                            attributes: Vertex.attrib_description
+                            attributes: attrs
                         };
 
                         create_renderpass_1(src.manager.device, rps, frames.render_pass);
@@ -226,20 +172,28 @@ public:
 
         _command_pool = create_graphics_command_pool(_display_manager.device);
 
-        /*
-        _resource_manager = new DeviceResourceManager(_display_manager.device);
+        _device_memory = new RawDeviceMemoryAllocator(_display_manager.device);
 
-        const mesh_info = {
-            vertices: triangle_vertices,
-            indices: triangle_indices,
-            type: ResourceType.write_static
-        };
+        auto tid = get_type_index(&_device_memory, DeviceHeap.Dynamic, BufferAllocInfo(64, BufferType.Mesh, Transferability.Receive));
+        _memory_pool = new LinearPool(&_device_memory, _display_manager.device.context.memory, tid, DeviceHeap.Dynamic);
+        _buffers = new BufferManager(_memory_pool);
+        create_mesh_buffers(_buffers, mesh, _mesh);
 
-        _mesh_id = _resource_manager.create_static_mesh(mesh_info);
-        */
+        auto v = cast(Vertex[]) _buffers.map(_mesh.vertices);
+        v[] = mesh.vertices;
+        _buffers.unmap(_mesh.vertices);
+
+        auto i = cast(ushort[]) _buffers.map(_mesh.indices);
+        i[] = mesh.indices;
+        _buffers.unmap(_mesh.indices);
     }
 
     override void on_shutdown() {
+        _buffers.destroy_buffer(_mesh.vertices);
+        _buffers.destroy_buffer(_mesh.indices);
+        _memory_pool.clear();
+        destroy(_memory_pool);
+        destroy(_device_memory);
         destroy(_command_pool);
         destroy(_display_manager);
     }
@@ -283,6 +237,7 @@ public:
                     // vk.CmdBindIndexBuffer(commands, mesh_buffer.handle, mesh.vertices_size, VK_INDEX_TYPE_UINT16);
                     // vk.CmdDrawIndexed(commands, cast(uint) mesh.indices.length, 1, 0, 0, 0);
 
+                    record_mesh_draw(device.dispatch_table, commands, _buffers, _mesh);
                     // record_mesh_draw(_resource_manager, commands, _mesh_id);
                         // ---- Approx. ----
                         // auto mesh = _resource_manager.get(_mesh_id);
@@ -324,4 +279,9 @@ private:
     VulkanDisplayManager _display_manager;
 
     CommandPool _command_pool;
+    RawDeviceMemoryAllocator _device_memory;
+    LinearPool _memory_pool;
+    BufferManager _buffers;
+
+    GpuMesh _mesh;
 }

@@ -96,7 +96,7 @@ public:
     }
 
     DisplayId create(ref VulkanDisplayProperties properties) nothrow {
-        auto swapchain = _swapchains.allocate(
+        auto swapchain = _swapchains.make(
                 this,
                 properties.display_properties.user_data,
                 properties.display_properties.callbacks.on_create,
@@ -153,7 +153,7 @@ public:
             if (data.overridden_on_destroy)
                 data.overridden_on_destroy(_user_source(src, data));
 
-            self._swapchains.deallocate(data);
+            self._swapchains.dispose(data);
         };
 
         properties.display_properties.callbacks.on_resize = (src, width, height) nothrow {

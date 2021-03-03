@@ -4,7 +4,7 @@ import flare.core.memory.measures;
 import flare.core.memory.allocators.common;
 import flare.core.memory.allocators.allocator;
 
-import core.stdc.string: memset;
+import core.stdc.string : memset;
 
 struct MemoryPool {
 public nothrow:
@@ -47,7 +47,19 @@ public nothrow:
         }
     }
 
+    this(Allocator allocator, size_t block_size, size_t num_blocks) {
+        _base_allocator = allocator;
+        this(_base_allocator.allocate(block_size * num_blocks), block_size);
+    }
+
     @disable this(this);
+
+    ~this() {
+        if (_base_allocator) {
+            auto mem = _start[0 .. _block_size * _num_blocks];
+            _base_allocator.deallocate(mem);
+        }
+    }
 
     void[] managed_memory() nothrow {
         return _start[0 .. _num_blocks * _block_size];
@@ -106,6 +118,8 @@ private:
     struct _Block {
         uint next_index;
     }
+
+    Allocator _base_allocator;
 
     size_t _alignment;
     size_t _block_size;
@@ -250,20 +264,7 @@ public nothrow:
         pool_size =         The number of elements to have in the pool.
     */
     this(Allocator base_allocator, size_t pool_size) {
-        _base_allocator = base_allocator;
-
-        auto memory = _base_allocator.allocate(pool_size * object_size!T);
-        assert(memory);
-
-        _pool = MemoryPool(memory, object_size!T);
-    }
-
-    @disable this(this);
-
-    ~this() {
-        auto mem = _pool.managed_memory;
-        if (_base_allocator)
-            _base_allocator.deallocate(mem);
+        _pool = MemoryPool(base_allocator, object_size!T, pool_size);
     }
 
     /// The alignment of every allocation from this pool, in bytes.
@@ -292,9 +293,8 @@ public nothrow:
     Returns: A pointer to the object if allocation was successful, or null if it
              failed.
     */
-    PtrType!T allocate(Args...)(auto scope ref Args args) {
-        auto object_pointer = cast(PtrType!T) _pool.allocate(object_size!T);
-        return emplace(object_pointer, args);
+    PtrType!T make(Args...)(auto scope ref Args args) {
+        return flare.core.memory.allocators.allocator.make!T(_pool, args);
     }
 
     /**
@@ -305,18 +305,11 @@ public nothrow:
 
     Params:
         object = The object of the object to deallocate.
-
-    Returns: `true` if the object was successfully returned to the allocator,
-             `false` otherwise.
     */
-    bool deallocate(ref PtrType!T object) {
-        assert(owns(object) != Ternary.no);
-
-        auto mem = (cast(void*) object)[0 .. object_size!T];
-        return _pool.deallocate(mem);
+    void dispose(ref PtrType!T object) {
+        return flare.core.memory.allocators.allocator.dispose(_pool, object);
     }
 
 private:
-    Allocator _base_allocator;
     MemoryPool _pool;
 }
