@@ -7,6 +7,7 @@ import flare.vulkan.dispatch;
 import flare.vulkan.gpu;
 import flare.vulkan.h;
 import flare.vulkan.memory;
+import flare.vulkan.sync: FencePool, SemaphorePool;
 
 nothrow:
 
@@ -23,7 +24,13 @@ nothrow public:
     VulkanGpuInfo gpu;
     alias gpu this;
 
+    
+    FencePool fence_pool;
+    SemaphorePool semaphore_pool;
+
     ~this() {
+        destroy(fence_pool);
+        destroy(semaphore_pool);
         _dispatch.DestroyDevice();
     }
 
@@ -74,6 +81,9 @@ nothrow private:
                 _dispatch.GetDeviceQueue(gpu.queue_families[i], 0, _queues[i].queue);
                 _queues[i].family = gpu.queue_families[i];
             }
+        
+        fence_pool = FencePool(this, _context.memory);
+        semaphore_pool = SemaphorePool(this, _context.memory);
     }
 }
 
@@ -119,22 +129,10 @@ VulkanDevice create_device(ref VulkanContext ctx, ref VulkanGpuInfo gpu) {
 private:
 
 VkDeviceQueueCreateInfo[] create_queue_create_infos(in VulkanGpuInfo device_info, ref ScopedArena mem) {
-    import std.algorithm: swap, uniq, count, filter;
+    import std.algorithm : count, filter, sort, uniq;
 
     uint[device_info.queue_families.length] all_families = device_info.queue_families;
-
-    bool sorted;
-    while (!sorted) {
-        sorted = true;
-        for (int i = 0; i + 1 < all_families.length; i++) {
-            if (all_families[i] > all_families[i + 1]) {
-                swap(all_families[i], all_families[i + 1]);
-                sorted = false;
-            }
-        }
-    }
-
-    auto families = all_families[].filter!(i => i != uint.max).uniq();
+    auto families = all_families[].sort().filter!(i => i != uint.max).uniq();
     auto dwcis = mem.make_array!VkDeviceQueueCreateInfo(families.save().count());
     auto priority = mem.make_array!float(1);
     priority[0] = 1;
