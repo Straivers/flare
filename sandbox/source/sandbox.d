@@ -33,6 +33,8 @@ struct RenderContext {
 
     RenderPass1 render_pass;
     VkFramebuffer[] frame_buffers;
+
+    @disable this(this);
 }
 
 class Sandbox : FlareApp {
@@ -49,10 +51,10 @@ public:
             memory: new AllocatorApi!BuddyAllocator(new void[](16.mib)),
             parent_logger: &log,
             layers: [VK_LAYER_KHRONOS_VALIDATION_NAME],
-            extensions: VulkanDisplayManager.required_instance_extensions
+            extensions: VulkanDisplayManager!RenderContext.required_instance_extensions
         };
 
-        _display_manager = new VulkanDisplayManager(&log, init_vulkan(options));
+        _display_manager = new VulkanDisplayManager!RenderContext(&log, init_vulkan(options));
 
         {
             DisplayProperties properties = {
@@ -63,59 +65,60 @@ public:
                 is_resizable: true,
             };
 
-            VulkanCallbacks callbacks = {
+            VulkanCallbacks!RenderContext callbacks = {
                 callbacks: {
-                    on_key: (src, key, state) nothrow {
+                    on_key: (mgr, id, usr, key, state) nothrow {
                         if (key == KeyCode.Escape && state == ButtonState.Released)
-                            src.manager.close(src.display_id);
+                            mgr.close(id);
                     },
-                    on_create: (src) nothrow {
-                        auto vk_mgr = cast(VulkanDisplayManager) src.manager;
-                        auto frames = cast(RenderContext*) vk_mgr.get_user_data(src.display_id);
+                    on_create: (mgr, id, usr) nothrow {
+                        auto vk_mgr = cast(VulkanDisplayManager!RenderContext) mgr;
+                        auto context = &vk_mgr.get_typed_user_data(id);
+                        assert(cast(void*) context == usr);
 
-                        foreach (ref frame_resources; frames.resources) with (frame_resources) {
+                        foreach (ref frame_resources; context.resources) with (frame_resources) {
                             fence = vk_mgr.device.fence_pool.acquire(true);
                             begin_semaphore = vk_mgr.device.semaphore_pool.acquire();
                             done_semaphore = vk_mgr.device.semaphore_pool.acquire();
                         }
                     },
-                    on_destroy: (src) nothrow {
-                        auto vk_mgr = cast(VulkanDisplayManager) src.manager;
-                        auto frames = cast(RenderContext*) vk_mgr.get_user_data(src.display_id);
+                    on_destroy: (mgr, id, usr) nothrow {
+                        auto vk_mgr = cast(VulkanDisplayManager!RenderContext) mgr;
+                        auto context = &vk_mgr.get_typed_user_data(id);
+                        assert(cast(void*) context == usr);
 
-                        foreach (ref frame_resources; frames.resources) with (frame_resources) {
+                        foreach (ref frame_resources; context.resources) with (frame_resources) {
                             vk_mgr.device.fence_pool.release(fence);
                             vk_mgr.device.semaphore_pool.release(begin_semaphore);
                             vk_mgr.device.semaphore_pool.release(done_semaphore);
                         }
 
-                        destroy_renderpass(vk_mgr.device, frames.render_pass);
+                        if (context.render_pass.handle)
+                            destroy_renderpass(vk_mgr.device, context.render_pass);
                     }
                 },
-                on_swapchain_create: (src, swapchain) nothrow {
-                    auto frames = cast(RenderContext*) src.manager.get_user_data(src.display_id);
-
-                    if (frames.render_pass.handle && frames.render_pass.swapchain_attachment.format != swapchain.format) {
-                        destroy_renderpass(src.manager.device, frames.render_pass);
+                on_swapchain_create: (mgr, id, context, swapchain) nothrow {
+                    if (context.render_pass.handle && context.render_pass.swapchain_attachment.format != swapchain.format) {
+                        destroy_renderpass(mgr.device, context.render_pass);
                     }
 
-                    if (!frames.render_pass.handle) {
+                    if (!context.render_pass.handle) {
                         VkVertexInputAttributeDescription[2] attrs = Vertex.attribute_descriptions;
                         RenderPassSpec rps = {
                             swapchain_attachment: AttachmentSpec(swapchain.format, [0, 0, 0, 1]),
-                            vertex_shader: load_shader(src.manager.device, "shaders/vert.spv"),
-                            fragment_shader: load_shader(src.manager.device, "shaders/frag.spv"),
+                            vertex_shader: load_shader(mgr.device, "shaders/vert.spv"),
+                            fragment_shader: load_shader(mgr.device, "shaders/frag.spv"),
                             bindings: Vertex.binding_description,
                             attributes: attrs
                         };
 
-                        create_renderpass_1(src.manager.device, rps, frames.render_pass);
+                        create_renderpass_1(mgr.device, rps, context.render_pass);
                     }
 
-                    frames.frame_buffers = src.manager.device.context.memory.make_array!VkFramebuffer(swapchain.images.length);
-                    foreach (i, ref fb; frames.frame_buffers) {
+                    context.frame_buffers = mgr.device.context.memory.make_array!VkFramebuffer(swapchain.images.length);
+                    foreach (i, ref fb; context.frame_buffers) {
                         VkFramebufferCreateInfo framebuffer_ci = {
-                            renderPass: frames.render_pass.handle,
+                            renderPass: context.render_pass.handle,
                             attachmentCount: 1,
                             pAttachments: &swapchain.views[i],
                             width: swapchain.image_size.width,
@@ -123,18 +126,16 @@ public:
                             layers: 1
                         };
 
-                        src.manager.device.dispatch_table.CreateFramebuffer(framebuffer_ci, fb);
+                        mgr.device.dispatch_table.CreateFramebuffer(framebuffer_ci, fb);
                     }
                 },
-                on_swapchain_resize: (src, swapchain) nothrow {
-                    auto frames = cast(RenderContext*) src.manager.get_user_data(src.display_id);
+                on_swapchain_resize: (mgr, id, context, swapchain) nothrow {
+                    foreach (fb; context.frame_buffers)
+                        mgr.device.dispatch_table.DestroyFramebuffer(fb);
 
-                    foreach (fb; frames.frame_buffers)
-                        src.manager.device.dispatch_table.DestroyFramebuffer(fb);
-
-                    foreach (i, ref fb; frames.frame_buffers) {
+                    foreach (i, ref fb; context.frame_buffers) {
                         VkFramebufferCreateInfo framebuffer_ci = {
-                            renderPass: frames.render_pass.handle,
+                            renderPass: context.render_pass.handle,
                             attachmentCount: 1,
                             pAttachments: &swapchain.views[i],
                             width: swapchain.image_size.width,
@@ -142,18 +143,16 @@ public:
                             layers: 1
                         };
 
-                        src.manager.device.dispatch_table.CreateFramebuffer(framebuffer_ci, fb);
+                        mgr.device.dispatch_table.CreateFramebuffer(framebuffer_ci, fb);
                     }
                 },
-                on_swapchain_destroy: (src, swapchain) nothrow {
-                    auto frames = cast(RenderContext*) src.manager.get_user_data(src.display_id);
-
-                    foreach (fb; frames.frame_buffers)
-                        src.manager.device.dispatch_table.DestroyFramebuffer(fb);
+                on_swapchain_destroy: (mgr, id, context, swapchain) nothrow {
+                    foreach (fb; context.frame_buffers)
+                        mgr.device.dispatch_table.DestroyFramebuffer(fb);
                 }
             };
 
-            _display_id = _display_manager.create(properties, callbacks, new RenderContext());
+            _display_id = _display_manager.create(properties, callbacks);
         }
 
         _command_pool = create_graphics_command_pool(_display_manager.device);
@@ -191,10 +190,10 @@ public:
         while (_display_manager.is_live(_display_id)) {
             _display_manager.process_events(false);
 
+            auto frames = &_display_manager.get_typed_user_data(_display_id);
+
             if (_display_manager.is_close_requested(_display_id)) {
                 // clean up command buffers
-                auto frames = cast(RenderContext*) _display_manager.get_user_data(_display_id);
-
                 foreach (ref resources; frames.resources)
                     wait(device, resources.fence);
 
@@ -202,7 +201,6 @@ public:
                 _display_manager.destroy(_display_id);
             }
             else if (_display_manager.is_visible(_display_id)) {
-                auto frames = cast(RenderContext*) _display_manager.get_user_data(_display_id);
                 const frame_id = frames.frame_counter % frames.resources.length;
                 auto frame = &frames.resources[frame_id];
                 SwapchainImage swapchain_image;
@@ -243,7 +241,7 @@ public:
 
 private:
     DisplayId _display_id;
-    VulkanDisplayManager _display_manager;
+    VulkanDisplayManager!RenderContext _display_manager;
 
     CommandPool _command_pool;
     RawDeviceMemoryAllocator _device_memory;

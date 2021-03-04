@@ -9,20 +9,11 @@ import flare.display.display;
 version (Windows)
     import flare.display.win32;
 
-/**
-An EventSource is a convenience struct that is passed to display callbacks.
-*/
-struct EventSource {
-    DisplayManager manager;
-    DisplayId display_id;
-    void* user_data;
-}
+alias OnCreate = void function(DisplayManager, DisplayId, void* user_data) nothrow;
+alias OnDestroy = void function(DisplayManager, DisplayId, void* user_data) nothrow;
+alias OnResize = void function(DisplayManager, DisplayId, void* user_data, ushort width, ushort height) nothrow;
 
-alias OnCreate = void function(EventSource) nothrow;
-alias OnDestroy = void function(EventSource) nothrow;
-alias OnResize = void function(EventSource, ushort width, ushort height) nothrow;
-
-alias OnKey = void function(EventSource, KeyCode, ButtonState) nothrow;
+alias OnKey = void function(DisplayManager, DisplayId, void* user_data, KeyCode, ButtonState) nothrow;
 
 struct Callbacks {
     /**
@@ -157,22 +148,22 @@ protected:
 
     void _on_create(DisplayId id) {
         auto display = _displays.get(id);
-        display.callbacks.try_call!"on_create"(EventSource(this, id, display.user_data));
+        display.callbacks.try_call!"on_create"(this, id, get_user_data(id));
     }
 
     void _on_destroy(DisplayId id) {
         auto display = _displays.get(id);
-        display.callbacks.try_call!"on_destroy"(EventSource(this, id, display.user_data));
+        display.callbacks.try_call!"on_destroy"(this, id, get_user_data(id));
     }
 
     void _on_resize(DisplayId id, ushort width, ushort height) {
         auto display = _displays.get(id);
-        display.callbacks.try_call!"on_resize"(EventSource(this, id, display.user_data), width, height);
+        display.callbacks.try_call!"on_resize"(this, id, get_user_data(id), width, height);
     }
 
     void _on_key(DisplayId id, KeyCode key, ButtonState state) {
         auto display = _displays.get(id);
-        display.callbacks.try_call!"on_key"(EventSource(this, id, display.user_data), key, state);
+        display.callbacks.try_call!"on_key"(this, id, get_user_data(id), key, state);
     }
 
 private:

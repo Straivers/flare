@@ -7,21 +7,15 @@ import flare.vulkan;
 public import flare.display.input;
 public import flare.display;
 
-struct VulkanEventSource {
-    VulkanDisplayManager manager;
-    DisplayId display_id;
-    void* user_data;
-}
-
-alias OnSwapchainCreate = void function(VulkanEventSource, Swapchain*) nothrow;
-alias OnSwapchainDestroy = void function(VulkanEventSource, Swapchain*) nothrow;
-alias onSwapchainResize = void function(VulkanEventSource, Swapchain*) nothrow;
-
 /*
 Create() -> OsCreate() -> VulkanInit() -> on_create() -> SwapchainCreate() -> on_swapchain_create()
 Destroy() -> on_swapchain_destroy() -> SwapchainDestroy() -> on_destroy() -> OsDestroy()
 */
-struct VulkanCallbacks {
+struct VulkanCallbacks(UserData) {
+    alias OnSwapchainCreate = void function(VulkanDisplayManager!UserData, DisplayId, UserData*, Swapchain*) nothrow;
+    alias OnSwapchainDestroy = void function(VulkanDisplayManager!UserData, DisplayId, UserData*, Swapchain*) nothrow;
+    alias onSwapchainResize = void function(VulkanDisplayManager!UserData, DisplayId, UserData*, Swapchain*) nothrow;
+
     Callbacks callbacks;
     alias callbacks this;
 
@@ -44,7 +38,7 @@ struct VulkanCallbacks {
     onSwapchainResize on_swapchain_resize;
 }
 
-final class VulkanDisplayManager : DisplayManager {
+final class VulkanDisplayManager(UserData) : DisplayManager {
 
     /// Vulkan instance extensions required by the renderer.
     static immutable required_instance_extensions = [
@@ -87,17 +81,16 @@ public:
     }
 
     override void* get_user_data(DisplayId id) nothrow {
-        return (cast(SwapchainData*) super.get_user_data(id)).overridden_user_data;
+        return &get_typed_user_data(id);
     }
 
-    override DisplayId create(ref DisplayProperties properties, Callbacks callbacks, void* user_data) nothrow {
-        return create(properties, VulkanCallbacks(callbacks), user_data);
+    ref UserData get_typed_user_data(DisplayId id) nothrow {
+        return (cast(SwapchainData*) super.get_user_data(id)).vk_user_data;
     }
 
-    DisplayId create(ref DisplayProperties properties, VulkanCallbacks callbacks, void* user_data) nothrow {
+    DisplayId create(ref DisplayProperties properties, VulkanCallbacks!UserData callbacks) nothrow {
         auto swapchain = _swapchains.make(
                 this,
-                user_data,
                 callbacks.on_swapchain_create,
                 callbacks.on_swapchain_destroy,
                 callbacks.on_swapchain_resize);
@@ -121,7 +114,7 @@ protected:
 
         if (properties.image_size != VkExtent2D()) {
             create_swapchain(_device, data.surface, properties, data.swapchain);
-            data.try_call!"on_swapchain_create"(_vk_source(id, data), &data.swapchain);
+            data.try_call!"on_swapchain_create"(this, id, &data.vk_user_data, &data.swapchain);
         }
         else
             _sys_logger.trace("Attempted to create 0-size swapchain. Deferring operation.");
@@ -130,7 +123,7 @@ protected:
     override void _on_destroy(DisplayId id) {
         auto data = cast(SwapchainData*) super.get_user_data(id);
 
-        data.try_call!"on_swapchain_destroy"(_vk_source(id, data), &data.swapchain);
+        data.try_call!"on_swapchain_destroy"(this, id, &data.vk_user_data, &data.swapchain);
         
         destroy_swapchain(_device, data.swapchain);
         vkDestroySurfaceKHR(_instance.instance, data.surface, null);
@@ -148,16 +141,15 @@ private:
     struct SwapchainData {
         VulkanDisplayManager manager;
 
-        // Overrides needed for swapchain management
-        void* overridden_user_data;
-
         // Callbacks for swapchain events
-        OnSwapchainCreate on_swapchain_create;
-        OnSwapchainDestroy on_swapchain_destroy;
-        onSwapchainResize on_swapchain_resize;
+        VulkanCallbacks!UserData.OnSwapchainCreate on_swapchain_create;
+        VulkanCallbacks!UserData.OnSwapchainDestroy on_swapchain_destroy;
+        VulkanCallbacks!UserData.onSwapchainResize on_swapchain_resize;
 
         VkSurfaceKHR surface;
         Swapchain swapchain;
+
+        UserData vk_user_data;
 
         void try_call(string name, Args...)(Args args) {
             mixin("if(" ~ name ~ ") " ~ name ~ "(args);");
@@ -195,7 +187,7 @@ private:
             // dfmt on
 
             create_swapchain(_device, data.surface, properties, data.swapchain);
-            data.try_call!"on_swapchain_create"(_vk_source(id, data), &data.swapchain);
+            data.try_call!"on_swapchain_create"(this, id, &data.vk_user_data, &data.swapchain);
         }
         else if (!was_zero_size && !is_zero_size) {
             // dfmt off
@@ -207,7 +199,7 @@ private:
             // dfmt on
 
             resize_swapchain(_device, data.surface, properties, data.swapchain);
-            data.try_call!"on_swapchain_resize"(_vk_source(id, data), &data.swapchain);
+            data.try_call!"on_swapchain_resize"(this, id, &data.vk_user_data, &data.swapchain);
         }
         else if (!was_zero_size && is_zero_size) {
             // dfmt off
@@ -218,12 +210,8 @@ private:
             // dfmt on
 
             destroy_swapchain(_device, data.swapchain);
-            data.try_call!"on_swapchain_destroy"(_vk_source(id, data), &data.swapchain);
+            data.try_call!"on_swapchain_destroy"(this, id, &data.vk_user_data, &data.swapchain);
         }
-    }
-
-    VulkanEventSource _vk_source(DisplayId id, SwapchainData* data) nothrow {
-        return VulkanEventSource(this, id, data.overridden_user_data);
     }
 
     VulkanContext _instance;
