@@ -131,10 +131,11 @@ extern (Windows) LRESULT window_procedure(HWND hwnd, uint msg, WPARAM wp, LPARAM
     }
 
     auto display = cast(DisplayImpl*) GetWindowLongPtr(hwnd, GWLP_USERDATA);
-    auto state = &display.manager.get_state(display.id);
 
     if (!display)
         return DefWindowProc(hwnd, msg, wp, lp);
+
+    auto state = &display.manager.get_state(display.id);
 
     switch (msg) {
     case WM_SIZE: {

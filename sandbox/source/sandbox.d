@@ -73,7 +73,7 @@ public:
                         auto frames = cast(RenderContext*) vk_mgr.get_user_data(src.display_id);
 
                         foreach (ref frame_resources; frames.resources) with (frame_resources) {
-                            fence = vk_mgr.device.fence_pool.acquire();
+                            fence = vk_mgr.device.fence_pool.acquire(true);
                             begin_semaphore = vk_mgr.device.semaphore_pool.acquire();
                             done_semaphore = vk_mgr.device.semaphore_pool.acquire();
                         }
@@ -201,11 +201,9 @@ public:
                 _display_manager.destroy(_display_id);
             }
             else if (_display_manager.is_visible(_display_id)) {
-
                 auto frames = cast(RenderContext*) _display_manager.get_user_data(_display_id);
                 const frame_id = frames.frame_counter % frames.resources.length;
                 auto frame = &frames.resources[frame_id];
-
                 SwapchainImage swapchain_image;
                 _display_manager.get_next_image(_display_id, swapchain_image, frame.begin_semaphore);
 
