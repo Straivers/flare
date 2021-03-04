@@ -82,8 +82,7 @@ public:
     void swap_buffers(DisplayId id, VkSemaphore present_semaphore) {
         auto data = cast(SwapchainData*) super.get_user_data(id);
         if (!flare.vulkan.swap_buffers(_device, &data.swapchain, present_semaphore)) {
-            auto src = EventSource(this, id, data.overridden_user_data);
-            _resize_impl(src, data);
+            _resize_impl(id, data);
         }
     }
 
@@ -99,69 +98,50 @@ public:
         auto swapchain = _swapchains.make(
                 this,
                 user_data,
-                callbacks.on_create,
-                callbacks.on_destroy,
-                callbacks.on_resize,
                 callbacks.on_swapchain_create,
                 callbacks.on_swapchain_destroy,
                 callbacks.on_swapchain_resize);
 
-        callbacks.on_create = (src) nothrow {
-            auto data = cast(SwapchainData*) src.user_data;
-            auto self = data.manager;
-
-            data.manager = self;
-            data.surface = create_surface(self._instance, data.manager.get_os_handle(src.display_id));
-
-            if (!self._device)
-                self._init_device(data.surface);
-
-            if (data.overridden_on_create)
-                data.overridden_on_create(_user_source(src, data));
-
-            SwapchainProperties properties;
-            get_swapchain_properties(self._device, data.surface, properties);
-
-            if (properties.image_size != VkExtent2D()) {
-                create_swapchain(self._device, data.surface, properties, data.swapchain);
-
-                if (data.on_swapchain_create)
-                    data.on_swapchain_create(_vk_source(src.display_id, data), &data.swapchain);
-            }
-            // else
-            //     self._sys_logger.trace("Attempted to create 0-size swapchain. Deferring operation.");
-        };
-
-        callbacks.on_destroy = (src) nothrow {
-            auto data = cast(SwapchainData*) src.user_data;
-            auto self = data.manager;
-
-            if (data.on_swapchain_destroy)
-                data.on_swapchain_destroy(_vk_source(src.display_id, data), &data.swapchain);
-
-            // dfmt off
-            // self._sys_logger.trace(
-            //     "Destroying swapchain %s and surface %s for window %s.",
-            //     data.swapchain.handle, data.surface, src.display_id.int_value);
-            // dfmt on
-
-            destroy_swapchain(self._device, data.swapchain);
-            vkDestroySurfaceKHR(self._instance.instance, data.surface, null);
-
-            if (data.overridden_on_destroy)
-                data.overridden_on_destroy(_user_source(src, data));
-
-            self._swapchains.dispose(data);
-        };
-
-        callbacks.on_resize = (src, width, height) nothrow {
-            auto data = cast(SwapchainData*) src.user_data;
-            auto self = data.manager;
-
-            self._resize_impl(src, data);
-        };
-
         return super.create(properties, callbacks, swapchain);
+    }
+
+protected:
+    override void _on_create(DisplayId id) {
+        auto data = cast(SwapchainData*) super.get_user_data(id);
+
+        data.surface = create_surface(_instance, get_os_handle(id));
+
+        if (!_device)
+            _init_device(data.surface);
+
+        super._on_create(id);
+
+        SwapchainProperties properties;
+        get_swapchain_properties(_device, data.surface, properties);
+
+        if (properties.image_size != VkExtent2D()) {
+            create_swapchain(_device, data.surface, properties, data.swapchain);
+            data.try_call!"on_swapchain_create"(_vk_source(id, data), &data.swapchain);
+        }
+        // else
+        //     _sys_logger.trace("Attempted to create 0-size swapchain. Deferring operation.");
+    }
+
+    override void _on_destroy(DisplayId id) {
+        auto data = cast(SwapchainData*) super.get_user_data(id);
+
+        data.try_call!"on_swapchain_destroy"(_vk_source(id, data), &data.swapchain);
+        
+        destroy_swapchain(_device, data.swapchain);
+        vkDestroySurfaceKHR(_instance.instance, data.surface, null);
+        _swapchains.dispose(data);
+
+        super._on_destroy(id);
+    }
+
+    override void _on_resize(DisplayId id, ushort width, ushort height) {
+        _resize_impl(id, cast(SwapchainData*) super.get_user_data(id));
+        super._on_resize(id, width, height);
     }
 
 private:
@@ -170,9 +150,6 @@ private:
 
         // Overrides needed for swapchain management
         void* overridden_user_data;
-        OnCreate overridden_on_create;
-        OnDestroy overridden_on_destroy;
-        OnResize overridden_on_resize;
 
         // Callbacks for swapchain events
         OnSwapchainCreate on_swapchain_create;
@@ -181,6 +158,10 @@ private:
 
         VkSurfaceKHR surface;
         Swapchain swapchain;
+
+        void try_call(string name, Args...)(Args args) {
+            mixin("if(" ~ name ~ ") " ~ name ~ "(args);");
+        }
     }
 
     void _init_device(VkSurfaceKHR surface) nothrow {
@@ -198,64 +179,51 @@ private:
             assert(0, "No suitable GPU was detected.");
     }
 
-    void _resize_impl(ref EventSource src, SwapchainData* data) nothrow {
+    void _resize_impl(DisplayId id, SwapchainData* data) nothrow {
         SwapchainProperties properties;
         get_swapchain_properties(_device, data.surface, properties);
 
         const is_zero_size = properties.image_size == VkExtent2D();
         const was_zero_size = data.swapchain.image_size == VkExtent2D();
 
-        if (data.overridden_on_resize)
-            data.overridden_on_resize(_user_source(src, data), cast(ushort) properties.image_size.width, cast(ushort) properties.image_size.height);
-
         if (was_zero_size && !is_zero_size) {
             // dfmt off
             // _sys_logger.trace(
             //     "Resizing swapchain for window %8#0x from (0, 0) to (%s, %s); creating swapchain.",
-            //     src.display_id.int_value,
+            //     id.int_value,
             //     properties.image_size.width, properties.image_size.height);
             // dfmt on
 
             create_swapchain(_device, data.surface, properties, data.swapchain);
-
-            if (data.on_swapchain_create)
-                data.on_swapchain_create(_vk_source(src.display_id, data), &data.swapchain);
+            data.try_call!"on_swapchain_create"(_vk_source(id, data), &data.swapchain);
         }
         else if (!was_zero_size && !is_zero_size) {
             // dfmt off
             // _sys_logger.trace(
             //     "Resizing swapchain for window %8#0x from (%s, %s) to (%s, %s); recreating swapchain.",
-            //     src.display_id.int_value,
+            //     id.int_value,
             //     data.swapchain.image_size.width, data.swapchain.image_size.height,
             //     properties.image_size.width, properties.image_size.height);
             // dfmt on
 
             resize_swapchain(_device, data.surface, properties, data.swapchain);
-
-            if (data.on_swapchain_resize)
-                data.on_swapchain_resize(_vk_source(src.display_id, data), &data.swapchain);
+            data.try_call!"on_swapchain_resize"(_vk_source(id, data), &data.swapchain);
         }
         else if (!was_zero_size && is_zero_size) {
             // dfmt off
             // _sys_logger.trace(
             //     "Resizing swapchain for window %8#0x from (%s, %s) to (0, 0); destroying swapchain.",
-            //     src.display_id.int_value,
+            //     id.int_value,
             //     data.swapchain.image_size.width, data.swapchain.image_size.height);
             // dfmt on
 
             destroy_swapchain(_device, data.swapchain);
-
-            if (data.on_swapchain_destroy)
-                data.on_swapchain_destroy(_vk_source(src.display_id, data), &data.swapchain);
+            data.try_call!"on_swapchain_destroy"(_vk_source(id, data), &data.swapchain);
         }
     }
 
-    static EventSource _user_source(ref EventSource src, SwapchainData* data) nothrow {
-        return EventSource(src.manager, src.display_id, data.overridden_user_data);
-    }
-
-    static VulkanEventSource _vk_source(DisplayId id, SwapchainData* data) nothrow {
-        return VulkanEventSource(data.manager, id, data.overridden_user_data);
+    VulkanEventSource _vk_source(DisplayId id, SwapchainData* data) nothrow {
+        return VulkanEventSource(this, id, data.overridden_user_data);
     }
 
     VulkanContext _instance;

@@ -96,6 +96,10 @@ struct Callbacks {
     Callback called when a keyboard event occurs within the window.
     */
     OnKey on_key;
+
+    void try_call(string name, Args...)(Args args) {
+        mixin("if(" ~ name ~ ") " ~ name ~ "(args);");
+    }
 }
 
 struct DisplayState {
@@ -190,9 +194,30 @@ public nothrow:
 package:
     Logger* _sys_logger;
 
+    pragma(inline, true);
     void dispatch_event(string event, Args...)(DisplayId id, Args args) {
+        mixin("_" ~ event ~ "(id, args);");
+    }
+
+protected:
+    void _on_create(DisplayId id) {
         auto display = _displays.get(id);
-        mixin("if (display.callbacks." ~ event ~ ") display.callbacks." ~ event ~ "(EventSource(this, id, display.user_data), args);");
+        display.callbacks.try_call!"on_create"(EventSource(this, id, display.user_data));
+    }
+
+    void _on_destroy(DisplayId id) {
+        auto display = _displays.get(id);
+        display.callbacks.try_call!"on_destroy"(EventSource(this, id, display.user_data));
+    }
+
+    void _on_resize(DisplayId id, ushort width, ushort height) {
+        auto display = _displays.get(id);
+        display.callbacks.try_call!"on_resize"(EventSource(this, id, display.user_data), width, height);
+    }
+
+    void _on_key(DisplayId id, KeyCode key, ButtonState state) {
+        auto display = _displays.get(id);
+        display.callbacks.try_call!"on_key"(EventSource(this, id, display.user_data), key, state);
     }
 
 private:
