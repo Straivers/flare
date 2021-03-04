@@ -192,14 +192,14 @@ public nothrow:
     }
 
 package:
-    Logger* _sys_logger;
-
     pragma(inline, true);
     void dispatch_event(string event, Args...)(DisplayId id, Args args) {
         mixin("_" ~ event ~ "(id, args);");
     }
 
 protected:
+    Logger* _sys_logger;
+
     void _on_create(DisplayId id) {
         auto display = _displays.get(id);
         display.callbacks.try_call!"on_create"(EventSource(this, id, display.user_data));
