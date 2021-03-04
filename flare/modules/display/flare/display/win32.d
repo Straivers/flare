@@ -11,6 +11,11 @@ pragma(lib, "user32");
 
 immutable wndclass_name = "flare_window_class\0"w;
 
+/**
+Callbacks needed by the event loop to signal changes in window state. This
+allows the os implementation to work independently of any particular display
+manager implementation.
+*/
 struct ImplCallbacks {
     DisplayState* delegate(DisplayId) nothrow get_state;
     void delegate(DisplayId) nothrow on_create;
@@ -20,7 +25,7 @@ struct ImplCallbacks {
 }
 
 struct DisplayImpl {
-    ImplCallbacks callbacks;
+    ImplCallbacks* callbacks;
     CursorIcon cursor_icon;
 
     HWND hwnd;
@@ -72,7 +77,7 @@ struct OsWindowManager {
         AdjustWindowRectEx(&rect, style, FALSE, 0);
 
         display.id = id;
-        display.callbacks = callbacks;
+        display.callbacks = &callbacks;
         display.cursor_icon = properties.cursor_icon;
 
         CreateWindowEx(

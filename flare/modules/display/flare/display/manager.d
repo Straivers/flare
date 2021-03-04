@@ -54,6 +54,12 @@ public nothrow:
         _sys_logger = sys_logger;
         _displays = DisplayPool(allocator);
         _os.initialize();
+
+        impl_callbacks.get_state = &_get_mutable_state;
+        impl_callbacks.on_create = &_on_create;
+        impl_callbacks.on_destroy = &_on_destroy;
+        impl_callbacks.on_resize = &_on_resize;
+        impl_callbacks.on_key = &_on_key;
     }
 
     void process_events(bool should_wait = false) {
@@ -77,14 +83,6 @@ public nothrow:
         auto display = _displays.get(id);
         display.callbacks = callbacks;
         display.user_data = user_data;
-
-        ImplCallbacks impl_callbacks = {
-            get_state: &_get_mutable_state,
-            on_create: &_on_create,
-            on_destroy: &_on_destroy,
-            on_resize: &_on_resize,
-            on_key: &_on_key,
-        };
 
         _sys_logger.info("Initalizing new OS window into slot %8#0x: %s (w: %s, h: %s)", id.int_value, properties.title, properties.width, properties.height);
         _os.create_window(impl_callbacks, id, properties, display.os_impl);
@@ -175,6 +173,8 @@ private:
         Callbacks callbacks;
         void* user_data;
     }
+
+    ImplCallbacks impl_callbacks;
 
     OsWindowManager _os;
     size_t _num_allocated;
