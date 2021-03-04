@@ -62,6 +62,7 @@ public nothrow:
     this(Logger* sys_logger, Allocator allocator) {
         _sys_logger = sys_logger;
         _displays = DisplayPool(allocator);
+        _os.initialize();
     }
 
     void process_events(bool should_wait = false) {

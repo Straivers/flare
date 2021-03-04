@@ -3,7 +3,6 @@ module flare.display.win32;
 version (Windows):
 
 import core.sys.windows.windows;
-import flare.core.logger : Logger;
 import flare.core.os.types : OsWindow;
 import flare.display.input;
 import flare.display.display;
@@ -45,28 +44,26 @@ struct DisplayImpl {
 }
 
 struct OsWindowManager {
+    void initialize() nothrow {
+        WNDCLASSEXW wc = {
+            cbSize: WNDCLASSEXW.sizeof,
+            style: CS_OWNDC | CS_VREDRAW | CS_HREDRAW,
+            lpfnWndProc: &window_procedure,
+            hInstance: GetModuleHandle(null),
+            hCursor: translate(CursorIcon.Pointer),
+            hbrBackground: GetStockObject(BLACK_BRUSH),
+            lpszClassName: &wndclass_name[0],
+        };
+
+        const err = RegisterClassExW(&wc);
+        assert(err != 0, "Failed to register window class!");
+    }
+
     OsWindow get_os_handle(ref DisplayImpl impl) nothrow {
         return impl.hwnd;
     }
 
     void create_window(ref ImplCallbacks callbacks, DisplayId id, ref DisplayProperties properties, out DisplayImpl display) nothrow {
-        if (!_registered_wndclass) {
-            WNDCLASSEXW wc = {
-                cbSize: WNDCLASSEXW.sizeof,
-                style: CS_OWNDC | CS_VREDRAW | CS_HREDRAW,
-                lpfnWndProc: &window_procedure,
-                hInstance: GetModuleHandle(null),
-                hCursor: translate(CursorIcon.Pointer),
-                hbrBackground: GetStockObject(BLACK_BRUSH),
-                lpszClassName: &wndclass_name[0],
-            };
-
-            const err = RegisterClassExW(&wc);
-            assert(err != 0, "Failed to register window class");
-
-            _registered_wndclass = true;
-        }
-
         auto style = WS_OVERLAPPEDWINDOW;
         if (!properties.is_resizable)
             style ^= WS_SIZEBOX;
@@ -119,8 +116,6 @@ struct OsWindowManager {
         while (PeekMessage(&msg, null, 0, 0, PM_REMOVE) != 0)
             send(msg);
     }
-
-    private bool _registered_wndclass;
 }
 
 void dispatch(string name, Args...)(DisplayImpl* impl, auto ref Args args) {
