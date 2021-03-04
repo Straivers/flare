@@ -37,10 +37,10 @@ enum CursorIcon : ubyte {
 }
 
 enum DisplayMode : ubyte {
-    Windowed = 1,
-    Hidden = 1 << 1,
-    Maximized = 1 << 2,
-    Minimized = 1 << 3,
+    Hidden      = 1 << 0,
+    Windowed    = 1 << 1,
+    Maximized   = 1 << 2,
+    Minimized   = 1 << 3,
     // Fullscreen,
 }
 

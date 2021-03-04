@@ -59,6 +59,7 @@ public:
                 title: app_settings.name,
                 width: app_settings.main_window_width,
                 height: app_settings.main_window_height,
+                mode: DisplayMode.Windowed,
                 is_resizable: true,
             };
 

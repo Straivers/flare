@@ -50,6 +50,7 @@ struct OsWindowManager {
                 lpfnWndProc: &window_procedure,
                 hInstance: GetModuleHandle(null),
                 hCursor: translate(CursorIcon.Pointer),
+                hbrBackground: GetStockObject(BLACK_BRUSH),
                 lpszClassName: &wndclass_name[0],
             };
 
