@@ -144,7 +144,7 @@ public:
             // dfmt off
             self._sys_logger.trace(
                 "Destroying swapchain %s and surface %s for window %s.",
-                data.swapchain.handle, data.surface, cast(uint) src.display_id);
+                data.swapchain.handle, data.surface, src.display_id.int_value);
             // dfmt on
 
             destroy_swapchain(self._device, data.swapchain);
@@ -214,7 +214,7 @@ private:
             // dfmt off
             _sys_logger.trace(
                 "Resizing swapchain for window %8#0x from (0, 0) to (%s, %s); creating swapchain.",
-                cast(uint) src.display_id,
+                src.display_id.int_value,
                 properties.image_size.width, properties.image_size.height);
             // dfmt on
 
@@ -227,7 +227,7 @@ private:
             // dfmt off
             _sys_logger.trace(
                 "Resizing swapchain for window %8#0x from (%s, %s) to (%s, %s); recreating swapchain.",
-                cast(uint) src.display_id,
+                src.display_id.int_value,
                 data.swapchain.image_size.width, data.swapchain.image_size.height,
                 properties.image_size.width, properties.image_size.height);
             // dfmt on
@@ -241,7 +241,7 @@ private:
             // dfmt off
             _sys_logger.trace(
                 "Resizing swapchain for window %8#0x from (%s, %s) to (0, 0); destroying swapchain.",
-                cast(uint) src.display_id,
+                src.display_id.int_value,
                 data.swapchain.image_size.width, data.swapchain.image_size.height);
             // dfmt on
 

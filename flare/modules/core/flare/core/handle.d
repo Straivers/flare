@@ -9,10 +9,10 @@ align(4) struct Handle32(string name) {
     void[4] value;
 
     T opCast(T : bool)() const {
-        return (cast(uint) this) == 0;
+        return value == value.init;
     }
 
-    T opCast(T: uint)() const {
+    uint int_value() const {
         return *(cast(uint*) &value[0]);
     }
 }
@@ -144,10 +144,8 @@ public:
         assert(slot.handle == _handle, "Detected destruction of invalid handle.");
 
         static if (hasElaborateDestructor!SlotData) {
-            static if (is(SlotData == class))
+            static if (is(SlotData == class) || is(SlotData == interface))
                 destroy(slot.data_ptr);
-            else static if (is(SlotData == interface))
-                destroy(cast(Object) slot.data_ptr);
             else
                 destroy(*slot.data_ptr);
         }

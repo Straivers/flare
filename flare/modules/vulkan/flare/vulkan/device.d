@@ -40,8 +40,8 @@ nothrow public:
     Queue transfer() { return _queues[QueueType.Transfer]; }
     // dfmt on
 
-    VkDevice handle() const {
-        return cast(VkDevice) _dispatch.device;
+    VkDevice handle() {
+        return _dispatch.device;
     }
 
     inout(VulkanContext) context() inout {

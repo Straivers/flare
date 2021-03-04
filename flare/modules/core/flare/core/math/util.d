@@ -39,7 +39,7 @@ T ilog2(T)(T i) nothrow if (isIntegral!T) {
     return i == 0 ? 1 : bsr(i) + !is_power_of_two(i);
 }
 
-size_t truncate_to_power_of_two(size_t n) nothrow {
+T truncate_to_power_of_two(T)(T n) nothrow {
     import core.bitop : bsr;
 
     assert(n > 0);
@@ -50,7 +50,17 @@ size_t truncate_to_power_of_two(size_t n) nothrow {
     return 1 << bsr(n);
 }
 
-size_t round_to_next(size_t value, size_t base) nothrow {
+T round_to_next(T)(T value, T base) nothrow {
     const rem = value % base;
+    assert(value + (base - rem) > value, "Overflow error on rounding.");
     return rem ? value + (base - rem) : value;
+}
+
+To checked_cast(To, From)(From from) {
+    static if (From.sizeof < To.sizeof)
+        return from;
+    else {
+        assert(from <= To.max);
+        return cast(To) from;
+    }
 }

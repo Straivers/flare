@@ -156,42 +156,6 @@ private:
 }
 
 /**
-Resizes an array to a new_length elements. If `length > array.length`, new
-elements are initialized to `T.init`. Resizing to a length of 0 will deallocate
-the array.
-
-Params:
-    allocator   = The allocator that the array was allocated from.
-    array       = The array to be resized. May be `null`.
-    new_length  = The length of the array after resizing. May be `0`.
-
-Returns: `true` if the array was resized, `false` otherwise. The array will not
-         be modified if the operation fails.
-*/
-bool resize_array(T, A)(auto ref A allocator, ref T[] array, size_t new_length) nothrow {
-    import std.algorithm: min;
-
-    static assert(!hasMember!(T, "opPostMove"), "Move construction on array reallocation not supported!");
-
-    const common_length = min(array.length, new_length);
-
-    if (new_length < common_length) {
-        foreach (ref object; array[common_length .. $])
-            destroy(object);
-    }
-
-    auto array_ = cast(void[]) array;
-    if (!allocator.reallocate(array_, T.sizeof * new_length))
-        return false;
-    array = cast(T[]) array_;
-
-    if (common_length < new_length)
-        array[common_length .. $] = T.init;
-
-    return true;
-}
-
-/**
 Resizes an array to `new_length` elements, calling `init_obj` on newly
 allocated objects, and `clear_obj` on objects to be deallocated.
 
@@ -210,8 +174,8 @@ bool resize_array(T, A)(
         auto ref A allocator,
         ref T[] array,
         size_t new_length,
-        scope void delegate(size_t, ref T) nothrow init_obj,
-        scope void delegate(size_t, ref T) nothrow clear_obj) nothrow {
+        scope void delegate(size_t, ref T) nothrow init_obj = null,
+        scope void delegate(size_t, ref T) nothrow clear_obj = null) nothrow {
     import std.algorithm: min;
 
     static assert(!hasMember!(T, "opPostMove"), "Move construction on array reallocation not supported!");
@@ -221,17 +185,17 @@ bool resize_array(T, A)(
 
     const common_length = min(array.length, new_length);
 
-    if (new_length < array.length) {
+    if (new_length < array.length && clear_obj) {
         foreach (i, ref object; array[new_length .. $])
             clear_obj(i, object);
     }
 
-    auto array_ = cast(void[]) array;
+    void[] array_ = array;
     if (!allocator.reallocate(array_, T.sizeof * new_length))
         return false;
     array = cast(T[]) array_;
 
-    if (common_length < new_length) {
+    if (common_length < new_length && init_obj) {
         foreach (i, ref object; array[common_length .. $])
             init_obj(i, object);
     }

@@ -127,7 +127,7 @@ version (Windows) {
             assert(false, "Failed to determine system timer frequency.");
         perf_counter_frequency_hz = hz;
         
-        perf_counter_frequency_msecs = (cast(real) perf_counter_frequency_hz) / 1000;
+        perf_counter_frequency_msecs = real(perf_counter_frequency_hz) / 1000;
     }
 
     // Because core.sys.windows.windows does not export this function.
@@ -158,11 +158,11 @@ version (Windows) {
         with (system_time)
             return TimeStamp(
                     wYear,
-                    cast(ubyte) wMonth,
-                    cast(ubyte) wDay,
-                    cast(ubyte) wHour,
-                    cast(ubyte) wMinute,
-                    cast(ubyte) wSecond,
+                    wMonth,
+                    wDay,
+                    wHour,
+                    wMinute,
+                    wSecond,
                     wMilliseconds
             );
     }

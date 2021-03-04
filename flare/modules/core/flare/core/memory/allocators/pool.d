@@ -38,6 +38,7 @@ public nothrow:
 
         _block_size = block_size;
         _num_blocks = memory.length / _block_size;
+        assert(_num_blocks <= _Block.next_index.max);
 
         foreach (i; 0 .. memory.length / _block_size) {
             assert(i < uint.max);
@@ -86,7 +87,7 @@ public nothrow:
         auto block = cast(_Block*) (_start + _freelist_index * _block_size);
         _freelist_index = block.next_index;
 
-        return memset(cast(void*) block, 0, size)[0 .. size];
+        return memset(block, 0, size)[0 .. size];
     }
 
     bool deallocate(void[] memory) {

@@ -117,7 +117,7 @@ public:
 
             VkBuffer buffer;
             _vk.CreateBuffer(big_buffer_ci, buffer);
-            return _alloc_mem(buffer, infos.length);
+            return _alloc_mem(buffer, cast(uint) infos.length);
         } ();
 
         uint counting_size;
@@ -192,7 +192,7 @@ public:
 private:
     struct _AllocInfo {
         VkBuffer buffer;
-        ushort count;
+        uint count;
         ushort times_mapped;
 
         void* mapped_ptr;
@@ -209,9 +209,9 @@ private:
 
     DispatchTable* _vk() { return _allocator.device.dispatch_table; }
 
-    _AllocInfo* _alloc_mem(VkBuffer buffer, size_t num_subdivisions = 1) {
+    _AllocInfo* _alloc_mem(VkBuffer buffer, uint num_subdivisions = 1) {
         assert(num_subdivisions < ushort.max);
-        auto alloc = _allocations.make(buffer, cast(ushort) num_subdivisions);
+        auto alloc = _allocations.make(buffer, num_subdivisions);
 
         VkMemoryRequirements reqs;
         _vk.GetBufferMemoryRequirements(buffer, reqs);

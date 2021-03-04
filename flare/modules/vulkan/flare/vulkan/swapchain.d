@@ -56,7 +56,7 @@ struct Swapchain {
 
     VkResult state;
 
-    ushort current_frame_index;
+    uint current_frame_index;
 }
 
 struct SwapchainImage {
@@ -164,7 +164,7 @@ void acquire_next_image(VulkanDevice device, Swapchain* swapchain, VkSemaphore a
     const err = device.dispatch_table.AcquireNextImageKHR(swapchain.handle, ulong.max, acquire_sempahore, null, index);
     swapchain.state = err;
 
-    swapchain.current_frame_index = cast(ushort) index;
+    swapchain.current_frame_index = index;
 
     image.index = index;
     image.handle = swapchain.images[index];

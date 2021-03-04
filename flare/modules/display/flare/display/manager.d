@@ -134,9 +134,9 @@ public nothrow:
         auto id = _displays.make();
         _num_allocated++;
 
-        _sys_logger.info("Initalizing new OS window into slot %8#0x: %s (w: %s, h: %s)", cast(uint) id, properties.title, properties.width, properties.height);
+        _sys_logger.info("Initalizing new OS window into slot %8#0x: %s (w: %s, h: %s)", id.int_value, properties.title, properties.width, properties.height);
         _os.create_window(this, id, properties, *_displays.get(id));
-        _sys_logger.info("Initialization for window %8#0x completed.", cast(uint) id);
+        _sys_logger.info("Initialization for window %8#0x completed.", id.int_value);
 
         return id;
     }
@@ -146,7 +146,7 @@ public nothrow:
     }
 
     void destroy(DisplayId id) nothrow {
-        _sys_logger.info("Destroying window %8#0x.", cast(uint) id);
+        _sys_logger.info("Destroying window %8#0x.", id.int_value);
 
         _os.destroy_window(_displays.get(id));
         _displays.dispose(id);

@@ -1,7 +1,7 @@
 module flare.vulkan.memory;
 
 import flare.core.list : intrusive_list;
-import flare.core.math.util : max, round_to_next;
+import flare.core.math.util : checked_cast, max, round_to_next;
 import flare.core.memory : Allocator, dispose, make, mib;
 import flare.vulkan;
 
@@ -155,7 +155,7 @@ interface DeviceMemoryAllocator {
 }
 
 final class LinearPool : DeviceMemoryAllocator {
-    enum default_block_size = cast(uint) 64.mib;
+    enum uint default_block_size = 64.mib;
 
 public:
     this(RawDeviceMemoryAllocator* device_memory, Allocator management_allocator, uint type_index, DeviceHeap heap) {
@@ -177,36 +177,36 @@ public:
     }
 
     override bool allocate(const ref VkMemoryRequirements reqs, bool is_linear, out DeviceMemory allocation) {
-        assert(reqs.size < uint.max);
-
         auto block = _blocks[0];
 
         const needs_big_alignment = block.was_last_alloc_linear == is_linear;
         const real_alignment = max(reqs.alignment, needs_big_alignment ? reqs.alignment : _device_memory.buffer_image_granularity);
-        const aligned_top = round_to_next(block.top, real_alignment);
+        const aligned_top = checked_cast!uint(round_to_next(block.top, real_alignment));
         assert(aligned_top < uint.max);
+
+        const size = checked_cast!uint(reqs.size);
 
         if (block.size - aligned_top >= reqs.size) {
             // Allocation can be serviced from current block.
 
             allocation.handle = block.handle;
-            allocation.offset = cast(uint) aligned_top;
-            allocation.size = cast(uint) reqs.size;
+            allocation.offset = aligned_top;
+            allocation.size = checked_cast!uint(reqs.size);
             allocation.heap = _heap;
 
-            block.top = cast(uint) (aligned_top + reqs.size);
+            block.top = checked_cast!uint(aligned_top + reqs.size);
             block.was_last_alloc_linear = is_linear;
             return true;
         }
-        else if (auto new_block = _add_block(cast(uint) reqs.size)) {
+        else if (auto new_block = _add_block(size)) {
             // Allocation will not fit in current block, so make a new one.
 
             allocation.handle = new_block.handle;
             allocation.offset = new_block.top;
-            allocation.size = cast(uint) reqs.size;
+            allocation.size = size;
             allocation.heap = _heap;
 
-            new_block.top = cast(uint) reqs.size;
+            new_block.top = size;
             assert(reqs.size < default_block_size || new_block.size == reqs.size);
 
             block.was_last_alloc_linear = is_linear;

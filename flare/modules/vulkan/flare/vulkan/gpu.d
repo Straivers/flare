@@ -71,7 +71,7 @@ bool select_gpu(VulkanContext ctx, ref VulkanDeviceCriteria criteria, out Vulkan
 
 private:
 
-bool select_queue_families(VkPhysicalDevice device, ref ScopedArena mem, in VulkanDeviceCriteria criteria, out QueueFamilies selection) {
+bool select_queue_families(VkPhysicalDevice device, ref ScopedArena mem, ref VulkanDeviceCriteria criteria, out QueueFamilies selection) {
     import std.algorithm : min;
 
     auto queue_families = () {
@@ -89,17 +89,18 @@ bool select_queue_families(VkPhysicalDevice device, ref ScopedArena mem, in Vulk
     // This algorithm starts from the end and works its way to the front. I.e.
     // if there are multiple graphics queues, the first one will be selected.
 
-    foreach_reverse (index, ref queue; queue_families) {
+    foreach_reverse (i, ref queue; queue_families) {
+        const index = cast(uint) i;
         // If we require graphics queues and have yet to find one
         if (criteria.graphics_queue && selection[QueueType.Graphics] == uint.max) {
             if ((queue.queueFlags & VK_QUEUE_GRAPHICS_BIT) != 0)
-                selection[QueueType.Graphics] = cast(uint) index;
+                selection[QueueType.Graphics] = index;
         }
 
         // If we require compute queues and haven't found a compute-only queue
         if (criteria.compute_queue && !(selection[QueueType.Graphics] != uint.max || found_compute_only_queue)) {
             if ((queue.queueFlags & VK_QUEUE_COMPUTE_BIT) != 0) {
-                selection[QueueType.Compute] = cast(uint) index;
+                selection[QueueType.Compute] = index;
 
                 found_compute_only_queue = queue.queueFlags == VK_QUEUE_COMPUTE_BIT
                     || queue.queueFlags == (VK_QUEUE_COMPUTE_BIT | VK_QUEUE_TRANSFER_BIT);
@@ -109,7 +110,7 @@ bool select_queue_families(VkPhysicalDevice device, ref ScopedArena mem, in Vulk
         // If we require transfer-only queues and haven't found any
         if (criteria.transfer_queue && !(selection[QueueType.Transfer] != uint.max || found_transfer_only_queue)) {
             if ((queue.queueFlags & VK_QUEUE_TRANSFER_BIT) != 0) {
-                selection[QueueType.Transfer] = cast(uint) index;
+                selection[QueueType.Transfer] = index;
 
                 found_transfer_only_queue = (queue.queueFlags & (VK_QUEUE_GRAPHICS_BIT | VK_QUEUE_COMPUTE_BIT)) == 0;
             }
@@ -118,9 +119,9 @@ bool select_queue_families(VkPhysicalDevice device, ref ScopedArena mem, in Vulk
         // If we require a display queue that is also a graphics queue
         if (criteria.display_target && !(selection[QueueType.Present] != uint.max && found_graphics_present_queue)) {
             VkBool32 can_present;
-            vkGetPhysicalDeviceSurfaceSupportKHR(device, cast(uint) index, cast(VkSurfaceKHR) criteria.display_target, &can_present);
+            vkGetPhysicalDeviceSurfaceSupportKHR(device, index, criteria.display_target, &can_present);
             if (can_present == VK_TRUE) {
-                selection[QueueType.Present] = cast(uint) index;
+                selection[QueueType.Present] = index;
                 found_graphics_present_queue = (queue.queueFlags & VK_QUEUE_GRAPHICS_BIT) != 0;
             }
         }
