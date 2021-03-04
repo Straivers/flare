@@ -6,7 +6,7 @@ import std.traits : hasMember, hasElaborateDestructor;
 
 public import std.typecons: Ternary;
 
-interface Allocator {
+abstract class Allocator {
 
 nothrow:
     /// The default alignment used by the allocator.
@@ -63,6 +63,9 @@ nothrow:
     */
     bool deallocate(ref void[] memory);
 
+    /// ditto
+    bool deallocate(void[] memory) { return deallocate(memory); }
+
     /**
     OPTIONAL
 
@@ -100,7 +103,7 @@ nothrow:
 }
 
 final class AllocatorApi(T) : Allocator {
-public:
+nothrow public:
     this(Args...)(Args args) {
         _impl = T(args);
     }
@@ -125,6 +128,8 @@ public:
         return _impl.allocate(size);
     }
 
+    alias deallocate = Allocator.deallocate;
+
     override bool deallocate(ref void[] memory) {
         static if (hasMember!(T, "deallocate"))
             return _impl.deallocate(memory);
@@ -148,45 +153,6 @@ public:
     
 private:
     T _impl;
-}
-
-/**
-Allocates the memory for an object of type `T` then initializes it with the
-provided arguments (if any) in-place. If memory allocation or object
-initialization fails, returns `null`.
-*/
-PtrType!T make(T, A, Args...)(auto ref A allocator, auto ref Args args) {
-    assert(allocator.alignment >= object_alignment!T, "Non-default alignment not currently supported ");
-    auto memory = allocator.allocate(object_size!T);
-
-    if (!memory)
-        return null;
-
-    scope (failure)
-        allocator.deallocate(memory);
-
-    auto typed = () @trusted { return cast(T[]) memory; } ();
-    assert(typed.length == 1);
-    return emplace!T(typed, args);
-}
-
-/**
-Allocates a default-initialized array of the given length.
-*/
-T[] make_array(T, A)(auto ref A allocator, size_t length) {
-    if (!length)
-        return null;
-
-    auto memory = allocator.allocate(T.sizeof * length);
-
-    if (!memory)
-        return null;
-
-    auto typed = () @trusted { return cast(T[]) memory; } ();
-    typed[] = T.init;
-
-    assert(typed.length == length, "DLang assumption about void[] -> T[] violated.");
-    return typed;
 }
 
 /**
@@ -273,60 +239,7 @@ bool resize_array(T, A)(
     return true;
 }
 
-/**
-Destroys an object or array and returns the memory it occupied to the allocator.
-Note that it is undefined behavior for to free an object with an allocator that
-does not own its memory.
-*/
-void dispose(T, A)(auto ref A allocator, auto ref T* object) {
-    if (!object)
-        return;
-
-    static if (hasElaborateDestructor!T)
-        destroy(*object);
-
-    auto memory = (cast(void*) object)[0 .. object_size!T];
-    assert(allocator.owns(memory) != Ternary.no);
-    allocator.deallocate(memory);
-
-    static if (__traits(isRef, object))
-        object = null;
-}
-
-/// Ditto
-void dispose(T, A)(auto ref A allocator, auto ref T object)
-if (is(T == class) || is(T == interface)) {
-    if(!object)
-        return;
-
-    static if (is(T == interface))
-        auto obj = cast(Object) object;
-    else
-        alias obj = object;
-
-    destroy(obj);
-
-    auto memory = (cast(void*) object)[0 .. object_size!T];
-    assert(allocator.owns(memory) != Ternary.no);
-    allocator.deallocate(memory);
-
-    static if (__traits(isRef, object))
-        object = null;
-}
-
-/// Ditto
-void dispose(T, A)(auto ref A allocator, auto ref T[] array) {
-    static if (hasElaborateDestructor!T)
-        foreach (ref element; array)
-            destroy(element);
-
-    assert(allocator.owns(array) != Ternary.no);
-    auto untyped = cast(void[]) array;
-    allocator.deallocate(untyped);
-
-    static if (__traits(isRef, array))
-        array = null;
-}
+public import std.experimental.allocator: make, make_array = makeArray, dispose;
 
 version (unittest) {
     void test_allocate_api(AllocatorType)(ref AllocatorType allocator) {
@@ -385,7 +298,9 @@ version (unittest) {
         assert(allocator.reallocate(m, 0));
     }
 
-    void test_resize_api(AllocatorType)(ref AllocatorType allocator) {
+    /// Set can_grow to indicate that resize() may grow an allocation even where
+    /// `size == optimal_alloc_size(s)`
+    void test_resize_api(bool can_grow = false, AllocatorType)(ref AllocatorType allocator) {
         auto empty = [];
         assert(!allocator.resize(empty, 1));
         assert(!allocator.resize(empty, 0));
@@ -408,7 +323,8 @@ version (unittest) {
         assert(m.ptr == s);
 
         // Failed resize (limits)
-        assert(!allocator.resize(m, allocator.get_optimal_alloc_size(1) + 1));
+        static if (!can_grow)
+            assert(!allocator.resize(m, allocator.get_optimal_alloc_size(1) + 1));
 
         static if (hasMember!(AllocatorType, "deallocate")) {
             allocator.deallocate(m);

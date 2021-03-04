@@ -66,7 +66,7 @@ uint get_type_index(RawDeviceMemoryAllocator* allocator, DeviceHeap heap, Buffer
     return get_memory_type_index(allocator.device, heap, reqs.memoryTypeBits);
 }
 
-final class BufferManager {
+struct BufferManager {
     import flare.core.math.util : round_to_next;
     import flare.core.memory.allocators.pool: ObjectPool;
 
@@ -78,6 +78,8 @@ public:
         _allocations = ObjectPool!_AllocInfo(_allocator.device.context.memory, max_live_buffers);
         _handles = _BufferPool(_allocator.device.context.memory);
     }
+
+    @disable this(this);
 
     BufferHandle create_buffer(ref BufferAllocInfo alloc_i) {
         VkBufferCreateInfo buffer_ci;
@@ -129,8 +131,6 @@ public:
     void destroy_buffer(BufferHandle handle) {
         if (auto info = _handles.get(handle)) {
             info.alloc.count--;
-
-            import std.stdio; writeln(info.alloc.count);
 
             if (info.alloc.count == 0) {
                 if (info.alloc.times_mapped > 0)

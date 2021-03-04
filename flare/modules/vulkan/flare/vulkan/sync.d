@@ -1,116 +1,97 @@
 module flare.vulkan.sync;
 
+import flare.core.array : Array;
+import flare.core.memory : Allocator;
 import flare.vulkan.device;
+import flare.vulkan.dispatch;
 import flare.vulkan.h;
 
 nothrow:
 
-VkSemaphore create_semaphore(VulkanDevice device) {
-    VkSemaphoreCreateInfo ci;
-    VkSemaphore semaphore;
-
-    device.dispatch_table.CreateSemaphore(ci, semaphore);
-    return semaphore;
+bool wait(bool all = true)(VulkanDevice device, VkFence[] fences...) {
+    return device.dispatch_table.WaitForFences(fences, all ? VK_TRUE : VK_FALSE, ulong.max) == VK_SUCCESS;
 }
 
-void destroy_semaphore(VulkanDevice device, VkSemaphore semaphore) {
-    device.dispatch_table.DestroySemaphore(semaphore);
-}
-
-VkFence create_fence(VulkanDevice device, bool start_signalled = false) {
-    VkFenceCreateInfo ci;
-
-    if (start_signalled)
-        ci.flags = VK_FENCE_CREATE_SIGNALED_BIT;
-
-    VkFence fence;
-    device.dispatch_table.CreateFence(ci, fence);
-    return fence;
-}
-
-bool is_signalled(VulkanDevice device, VkFence fence) {
-    return device.dispatch_table.GetFenceStatus(fence) == VK_SUCCESS;
-}
-
-void destroy_fence(VulkanDevice device, VkFence fence) {
-    device.dispatch_table.DestroyFence(fence);
-}
-
-void reset_fence(VulkanDevice device, VkFence fence) {
-    reset_fences(device, fence);
-}
-
-void reset_fences(VulkanDevice device, VkFence[] fences...) {
+void reset(VulkanDevice device, VkFence[] fences...) {
     device.dispatch_table.ResetFences(fences);
 }
 
-bool wait_fence(VulkanDevice device, VkFence fence, ulong timeout = ulong.max) {
-    return wait_fences(device, true, timeout, fence);
+void wait_and_reset(bool all = true)(VulkanDevice device, VkFence[] fences...) {
+    if (wait!all(device, fences))
+        reset(device, fences);
 }
 
-bool wait_fences(VulkanDevice device, bool wait_all, ulong timeout, VkFence[] fences...) {
-    return device.dispatch_table.WaitForFences(fences, wait_all, timeout) == VK_SUCCESS;
-}
-
-bool wait_and_reset_fence(VulkanDevice device, VkFence fence, ulong timeout = ulong.max) {
-    const success = wait_fence(device, fence, timeout);
-
-    if (success)
-        reset_fence(device, fence);
-
-    return success;
-}
-
-alias FencePool = SyncPool!(VkFence, create_fence, destroy_fence);
-alias SemaphorePool = SyncPool!(VkSemaphore, create_semaphore, destroy_semaphore);
-
-struct SyncPool(SyncObject, alias create_fn, alias destroy_fn)
-if (is(SyncObject == VkFence) || is(SyncObject == VkSemaphore)) {
-    import flare.core.array : Array;
-    import flare.core.memory : Allocator;
-
-    this(VulkanDevice device, Allocator allocator, uint min_objects = 64) {
-        _device = device;
-        _available_objects = Array!SyncObject(allocator, min_objects);
-
-        foreach (i; 0 .. _available_objects.length)
-            _available_objects[i] = create_fn(_device);
-        
-        debug _num_live_objects = min_objects;
+struct FencePool {
+nothrow:
+    this(VulkanDevice device, Allocator allocator) {
+        _vk = device.dispatch_table;
+        _fences = Array!VkFence(allocator);
     }
+
+    @disable this(this);
 
     ~this() {
-        debug assert(_available_objects.length == _num_live_objects);
+        foreach (fence; _fences[])
+            _vk.DestroyFence(fence);
 
-        foreach (i; 0 .. _available_objects.length)
-            destroy_fn(_device, _available_objects[i]);
-
-        destroy(_available_objects);
+        destroy(_fences);
     }
 
-    size_t pool_size() {
-        return _available_objects.length;
-    }
-
-    SyncObject acquire() {
-        if (_available_objects.length)
-            return _available_objects.pop_back();
+    VkFence acquire(bool start_signalled = false) {
+        if (_fences.length && !start_signalled)
+            return _fences.pop_back();
         
-        debug _num_live_objects++;
-        return create_fn(_device);
+        VkFenceCreateInfo ci;
+
+        if (start_signalled)
+            ci.flags = VK_FENCE_CREATE_SIGNALED_BIT;
+        
+        VkFence fence;
+        _vk.CreateFence(ci, fence);
+        return fence;
     }
 
-    void release(SyncObject sync_object) {
-        static if (is(SyncObject == VkFence))
-            if (is_signalled(_device, sync_object))
-                reset_fence(_device, sync_object);
-
-        _available_objects.push_back(sync_object);
+    void release(VkFence fence) {
+        if (_vk.GetFenceStatus(fence) != VK_SUCCESS)
+            _vk.ResetFences(fence);
+        _fences.push_back(fence);
     }
 
 private:
-    VulkanDevice _device;
-    Array!SyncObject _available_objects;
+    DispatchTable* _vk;
+    Array!VkFence _fences;
+}
 
-    debug size_t _num_live_objects;
+struct SemaphorePool {
+nothrow:
+    this(VulkanDevice device, Allocator allocator) {
+        _vk = device.dispatch_table;
+        _semaphores = Array!VkSemaphore(allocator);
+    }
+
+    @disable this(this);
+
+    ~this() {
+        foreach (fence; _semaphores[])
+            _vk.DestroySemaphore(fence);
+        destroy(_semaphores);
+    }
+
+    VkSemaphore acquire() {
+        if (_semaphores.length)
+            return _semaphores.pop_back();
+        
+        VkSemaphoreCreateInfo ci;
+        VkSemaphore semaphore;
+        _vk.CreateSemaphore(ci, semaphore);
+        return semaphore;
+    }
+
+    void release(VkSemaphore semaphore) {
+        _semaphores.push_back(semaphore);
+    }
+
+private:
+    DispatchTable* _vk;
+    Array!VkSemaphore _semaphores;
 }

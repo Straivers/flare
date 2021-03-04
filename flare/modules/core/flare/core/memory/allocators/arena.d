@@ -1,5 +1,6 @@
 module flare.core.memory.allocators.arena;
 
+import flare.core.memory.allocators.allocator;
 import flare.core.memory.allocators.common;
 
 struct Arena {
@@ -12,7 +13,17 @@ public nothrow:
         _end = _start + memory.length;
     }
 
+    this(Allocator allocator, size_t size) {
+        _base_allocator = allocator;
+        this(_base_allocator.allocate(size));
+    }
+
     @disable this(this);
+
+    ~this() {
+        if (_base_allocator)
+            _base_allocator.deallocate(managed_memory);
+    }
 
     size_t alignment() const {
         return _alignment;
@@ -63,8 +74,17 @@ public nothrow:
         if (memory == null || size == 0)
             return false;
 
+        const requested_size = get_optimal_alloc_size(size);
+        const current_size = get_optimal_alloc_size(memory.length);
+
         // If the new size fits in the old allocation
-        if (get_optimal_alloc_size(size) <= get_optimal_alloc_size(memory.length)) {
+        if (requested_size <= current_size) {
+            memory = memory.ptr[0 .. size];
+            return true;
+        }
+
+        if ((_top == memory.ptr + current_size) && (memory.ptr + requested_size) <= _end) {
+            _top = memory.ptr + requested_size;
             memory = memory.ptr[0 .. size];
             return true;
         }
@@ -91,6 +111,8 @@ public nothrow:
     }
 
 private:
+    Allocator _base_allocator;
+
     size_t _alignment;
     void* _top, _start, _end;
 }
@@ -102,7 +124,7 @@ unittest {
 
     test_allocate_api(arena);
     test_reallocate_api(arena);
-    test_resize_api(arena);
+    test_resize_api!true(arena);
 
     {
         // Fixed-order deallocation

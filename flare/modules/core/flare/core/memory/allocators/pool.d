@@ -89,6 +89,10 @@ public nothrow:
         return memset(cast(void*) block, 0, size)[0 .. size];
     }
 
+    bool deallocate(void[] memory) {
+        return deallocate(memory);
+    }
+
     bool deallocate(ref void[] memory) {
         assert(owns(memory) == Ternary.yes);
 

@@ -21,18 +21,17 @@ final class VulkanDevice {
     enum max_queues_per_family = 16;
 
 nothrow public:
-    VulkanGpuInfo gpu;
-    alias gpu this;
-
-    
-    FencePool fence_pool;
-    SemaphorePool semaphore_pool;
-
     ~this() {
         destroy(fence_pool);
         destroy(semaphore_pool);
-        _dispatch.DestroyDevice();
+        destroy(_dispatch);
     }
+
+    VulkanGpuInfo gpu;
+    alias gpu this;
+
+    FencePool fence_pool;
+    SemaphorePool semaphore_pool;
 
     // dfmt off
     Queue compute() { return _queues[QueueType.Compute]; }

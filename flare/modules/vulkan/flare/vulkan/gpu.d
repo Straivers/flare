@@ -38,12 +38,11 @@ struct VulkanDeviceCriteria {
 
 bool select_gpu(VulkanContext ctx, ref VulkanDeviceCriteria criteria, out VulkanGpuInfo result) {
     uint n_devices;
+    VkPhysicalDevice[128] device_storage;
     vkEnumeratePhysicalDevices(ctx.instance, &n_devices, null);
-    auto devices = ctx.memory.make_array!VkPhysicalDevice(n_devices);
-    scope (exit) ctx.memory.dispose(devices);
-    vkEnumeratePhysicalDevices(ctx.instance, &n_devices, devices.ptr);
+    vkEnumeratePhysicalDevices(ctx.instance, &n_devices, device_storage.ptr);
 
-    foreach (device; devices) {
+    foreach (device; device_storage[0 .. n_devices]) {
         auto mem = scoped_arena(ctx.memory, 64.kib);
 
         QueueFamilies selection;

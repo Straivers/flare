@@ -1,67 +1,13 @@
 module sandbox;
 
-/*
-
 import flare.application;
 import flare.core.math.vector;
-import flare.core.memory;
-import flare.display.manager;
-import flare.display.input;
-import flare.vulkan_renderer;
 import flare.vulkan;
-import pipeline;
-import std.stdio;
-
-struct Mesh {
-    Vertex[] vertices;
-    ushort[] indices;
-
-    size_t vertices_size() const {
-        return Vertex.sizeof * vertices.length;
-    }
-
-    size_t indices_size() const {
-        return ushort.sizeof * indices.length;
-    }
-
-    size_t size() const {
-        return Vertex.sizeof * vertices.length + ushort.sizeof * indices.length;
-    }
-}
-
-struct Vertex {
-    float2 position;
-    float3 colour;
-
-    static VkVertexInputBindingDescription binding_description() {
-        VkVertexInputBindingDescription desc = {
-            binding: 0,
-            stride: Vertex.sizeof,
-            inputRate: VK_VERTEX_INPUT_RATE_VERTEX
-        };
-
-        return desc;
-    }
-
-    static VkVertexInputAttributeDescription[2] attrib_description() {
-        VkVertexInputAttributeDescription[2] descs = [
-            {
-                binding: 0,
-                location: 0,
-                format: VK_FORMAT_R32G32_SFLOAT,
-                offset: Vertex.position.offsetof,
-            },
-            {
-                binding: 0,
-                location: 1,
-                format: VK_FORMAT_R32G32B32_SFLOAT,
-                offset: Vertex.colour.offsetof,
-            }
-        ];
-
-        return descs;
-    }
-}
+import flare.core.memory;
+import renderpass;
+import mem.buffer;
+import meshes;
+import flare.vulkan_renderer.display_manager;
 
 immutable mesh = Mesh(
     [
@@ -79,206 +25,231 @@ immutable mesh = Mesh(
     ]
 );
 
-final class Sandbox : FlareApp {
+struct RenderContext {
+    ulong frame_counter;
+
+    FrameResources[3] resources;
+    VkCommandBuffer[3] pending_command_buffers;
+
+    RenderPass1 render_pass;
+    VkFramebuffer[] frame_buffers;
+}
+
+class Sandbox : FlareApp {
+    import flare.core.memory: AllocatorApi, BuddyAllocator, mib;
+
+public:
     this(ref FlareAppSettings settings) {
         super(settings);
     }
 
     override void on_init() {
-        {
-            ContextOptions options = {
-                api_version: VkVersion(1, 2, 0),
-                memory: new AllocatorApi!BuddyAllocator(new void[](16.mib)),
-                parent_logger: &log,
-                layers: [VK_LAYER_KHRONOS_VALIDATION_NAME],
-                extensions: VulkanRenderer.required_instance_extensions
-            };
+        ContextOptions options = {
+            api_version: VkVersion(1, 2, 0),
+            memory: new AllocatorApi!BuddyAllocator(new void[](16.mib)),
+            parent_logger: &log,
+            layers: [VK_LAYER_KHRONOS_VALIDATION_NAME],
+            extensions: VulkanDisplayManager.required_instance_extensions
+        };
 
-            vulkan = init_vulkan(options);
-        }
-
-        renderer = new VulkanRenderer(vulkan);
-        display_manager = new DisplayManager(vulkan.memory);
+        _display_manager = new VulkanDisplayManager(&log, init_vulkan(options));
 
         {
-            DisplayProperties settings = {
-                title: app_settings.name,
-                width: app_settings.main_window_width,
-                height: app_settings.main_window_height,
-                is_resizable: true,
-                renderer: renderer,
-                input_callbacks: {
-                    on_key: (mgr, id, key, state, user) nothrow {
-                        if (key == KeyCode.Escape)
-                            mgr.close(id);
+            VulkanDisplayProperties display_properties = {
+                display_properties: {
+                    title: app_settings.name,
+                    width: app_settings.main_window_width,
+                    height: app_settings.main_window_height,
+                    is_resizable: true,
+                    user_data: new RenderContext(),
+                    callbacks: {
+                        on_key: (src, key, state) nothrow {
+                            if (key == KeyCode.Escape && state == ButtonState.Released)
+                                src.manager.close(src.display_id);
+                        },
+                        on_create: (src) nothrow {
+                            auto vk_mgr = cast(VulkanDisplayManager) src.manager;
+                            auto frames = cast(RenderContext*) vk_mgr.get_user_data(src.display_id);
 
-                        if (key == KeyCode.H)
-                            mgr.change_window_mode(id, DisplayMode.Minimized);
+                            foreach (ref frame_resources; frames.resources) with (frame_resources) {
+                                fence = vk_mgr.device.fence_pool.acquire();
+                                begin_semaphore = vk_mgr.device.semaphore_pool.acquire();
+                                done_semaphore = vk_mgr.device.semaphore_pool.acquire();
+                            }
+                        },
+                        on_destroy: (src) nothrow {
+                            auto vk_mgr = cast(VulkanDisplayManager) src.manager;
+                            auto frames = cast(RenderContext*) vk_mgr.get_user_data(src.display_id);
 
-                        if (key == KeyCode.S && !mgr.is_visible(id))
-                            mgr.change_window_mode(id, DisplayMode.Windowed);
+                            foreach (ref frame_resources; frames.resources) with (frame_resources) {
+                                vk_mgr.device.fence_pool.release(fence);
+                                vk_mgr.device.semaphore_pool.release(begin_semaphore);
+                                vk_mgr.device.semaphore_pool.release(done_semaphore);
+                            }
 
-                        if (key == KeyCode.R)
-                            mgr.resize(id, 1280, 720);
-
-                        if (key == KeyCode.T)
-                            mgr.resize(id, 1920, 1080);
+                            destroy_renderpass(vk_mgr.device, frames.render_pass);
+                        }
                     }
+                },
+                on_swapchain_create: (src, swapchain) nothrow {
+                    auto frames = cast(RenderContext*) src.manager.get_user_data(src.display_id);
+
+                    if (frames.render_pass.handle && frames.render_pass.swapchain_attachment.format != swapchain.format) {
+                        destroy_renderpass(src.manager.device, frames.render_pass);
+                    }
+
+                    if (!frames.render_pass.handle) {
+                        VkVertexInputAttributeDescription[2] attrs = Vertex.attribute_descriptions;
+                        RenderPassSpec rps = {
+                            swapchain_attachment: AttachmentSpec(swapchain.format, [0, 0, 0, 1]),
+                            vertex_shader: load_shader(src.manager.device, "shaders/vert.spv"),
+                            fragment_shader: load_shader(src.manager.device, "shaders/frag.spv"),
+                            bindings: Vertex.binding_description,
+                            attributes: attrs
+                        };
+
+                        create_renderpass_1(src.manager.device, rps, frames.render_pass);
+                    }
+
+                    frames.frame_buffers = src.manager.device.context.memory.make_array!VkFramebuffer(swapchain.images.length);
+                    foreach (i, ref fb; frames.frame_buffers) {
+                        VkFramebufferCreateInfo framebuffer_ci = {
+                            renderPass: frames.render_pass.handle,
+                            attachmentCount: 1,
+                            pAttachments: &swapchain.views[i],
+                            width: swapchain.image_size.width,
+                            height: swapchain.image_size.height,
+                            layers: 1
+                        };
+
+                        src.manager.device.dispatch_table.CreateFramebuffer(framebuffer_ci, fb);
+                    }
+                },
+                on_swapchain_resize: (src, swapchain) nothrow {
+                    auto frames = cast(RenderContext*) src.manager.get_user_data(src.display_id);
+
+                    foreach (fb; frames.frame_buffers)
+                        src.manager.device.dispatch_table.DestroyFramebuffer(fb);
+
+                    foreach (i, ref fb; frames.frame_buffers) {
+                        VkFramebufferCreateInfo framebuffer_ci = {
+                            renderPass: frames.render_pass.handle,
+                            attachmentCount: 1,
+                            pAttachments: &swapchain.views[i],
+                            width: swapchain.image_size.width,
+                            height: swapchain.image_size.height,
+                            layers: 1
+                        };
+
+                        src.manager.device.dispatch_table.CreateFramebuffer(framebuffer_ci, fb);
+                    }
+                },
+                on_swapchain_destroy: (src, swapchain) nothrow {
+                    auto frames = cast(RenderContext*) src.manager.get_user_data(src.display_id);
+
+                    foreach (fb; frames.frame_buffers)
+                        src.manager.device.dispatch_table.DestroyFramebuffer(fb);
                 }
             };
 
-            display = display_manager.create(settings);
+            _display_id = _display_manager.create(display_properties);
         }
 
-        auto device = renderer.get_logical_device();
+        _command_pool = create_graphics_command_pool(_display_manager.device);
 
-        auto swapchain_id = display_manager.get_swapchain(display);
-        auto swap_chain = renderer.get_swapchain(swapchain_id);
+        _device_memory = new RawDeviceMemoryAllocator(_display_manager.device);
 
-        shaders[0] = device.load_shader("shaders/vert.spv");
-        shaders[1] = device.load_shader("shaders/frag.spv");
-        pipeline_layout = device.create_pipeline_layout();
+        auto tid = get_type_index(&_device_memory, DeviceHeap.Dynamic, BufferAllocInfo(64, BufferType.Mesh, Transferability.Receive));
+        _memory_pool = new LinearPool(&_device_memory, _display_manager.device.context.memory, tid, DeviceHeap.Dynamic);
+        _buffers = BufferManager(_memory_pool);
+        create_mesh_buffers(_buffers, mesh, _mesh);
 
-        VkVertexInputBindingDescription[1] binding_descriptions = [Vertex.binding_description];
-        VkVertexInputAttributeDescription[2] attrib_descriptions = Vertex.attrib_description;
+        auto v = cast(Vertex[]) _buffers.map(_mesh.vertices);
+        v[] = mesh.vertices;
+        _buffers.unmap(_mesh.vertices);
 
-        pipeline = device.create_graphics_pipeline(*swap_chain, renderer.get_renderpass(swapchain_id), shaders[0], shaders[1], binding_descriptions[], attrib_descriptions[], pipeline_layout);
-
-        transfer_command_pool = create_transfer_command_pool(device);
-
-        staging_allocator = VulkanStackAllocator(device.memory);
-        auto staging_buffer = staging_allocator.create_buffer(VK_BUFFER_USAGE_TRANSFER_SRC_BIT, ResourceUsage.transfer, 32.mib);
-
-        mesh_allocator = VulkanStackAllocator(device.memory);
-        mesh_buffer = mesh_allocator.create_buffer(VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, ResourceUsage.write_static, mesh.size);
-
-        auto staging_mem = MappedMemory(device.memory, staging_buffer);
-        auto vertex_range = staging_mem.put(mesh.vertices);
-        auto index_range = staging_mem.put(mesh.indices);
-        destroy(staging_mem);
-
-        BufferTransferOp[2] ops = [
-            {
-                src: vertex_range,
-                dst: mesh_buffer[0 .. mesh.vertices_size],
-                src_queue_family: device.transfer_family,
-                dst_queue_family: device.graphics_family,
-                src_flags: VK_ACCESS_MEMORY_WRITE_BIT,
-                dst_flags: VK_ACCESS_VERTEX_ATTRIBUTE_READ_BIT,
-            },
-            {
-                src: index_range,
-                dst: mesh_buffer[mesh.vertices_size .. $],
-                src_queue_family: device.transfer_family,
-                dst_queue_family: device.graphics_family,
-                src_flags: VK_ACCESS_MEMORY_WRITE_BIT,
-                dst_flags: VK_ACCESS_VERTEX_ATTRIBUTE_READ_BIT    
-            }
-        ];
-
-        auto transfer_command_buffer = transfer_command_pool.allocate();
-        do_transfers(device.dispatch_table, device.transfer, transfer_command_buffer, ops);
-
-        device.wait_idle(device.transfer);
-        staging_allocator.destroy_buffer(staging_buffer);
-        transfer_command_pool.free(transfer_command_buffer);
+        auto i = cast(ushort[]) _buffers.map(_mesh.indices);
+        i[] = mesh.indices;
+        _buffers.unmap(_mesh.indices);
     }
 
     override void on_shutdown() {
-        auto device = renderer.get_logical_device();
-        device.wait_idle();
-
-        foreach (shader; shaders)
-            device.dispatch_table.DestroyShaderModule(shader);
-
-        device.dispatch_table.DestroyPipeline(pipeline);
-        device.dispatch_table.DestroyPipelineLayout(pipeline_layout);
-
-        destroy(staging_allocator);
-        destroy(transfer_command_pool);
-
-        mesh_allocator.destroy_buffer(mesh_buffer);
-        destroy(mesh_allocator);
-
-        destroy(renderer);
-        destroy(vulkan);
+        _buffers.destroy_buffer(_mesh.vertices);
+        _buffers.destroy_buffer(_mesh.indices);
+        _memory_pool.clear();
+        destroy(_memory_pool);
+        destroy(_device_memory);
+        destroy(_command_pool);
+        destroy(_display_manager);
     }
 
     override void run() {
-        while (display_manager.num_active_displays > 0) {
-            display_manager.process_events(false);
+        auto device = _display_manager.device;
+        // auto vk = device.dispatch_table;
 
-            if (display_manager.is_close_requested(display))
-                display_manager.destroy(display);
-            else if (display_manager.is_visible(display)) {
-                auto swapchain = display_manager.get_swapchain(display);
-                auto frame = renderer.get_frame(swapchain);
-                auto cmd = renderer.get_graphics_command_buffer();
-                auto vk = renderer.get_logical_device().dispatch_table;
+        while (_display_manager.is_live(_display_id)) {
+            _display_manager.process_events(false);
 
+            if (_display_manager.is_close_requested(_display_id)) {
+                // clean up command buffers
+                auto frames = cast(RenderContext*) _display_manager.get_user_data(_display_id);
+
+                foreach (ref resources; frames.resources)
+                    wait(device, resources.fence);
+
+                _command_pool.free(frames.pending_command_buffers);
+                _display_manager.destroy(_display_id);
+            }
+            else if (_display_manager.is_visible(_display_id)) {
+
+                auto frames = cast(RenderContext*) _display_manager.get_user_data(_display_id);
+                const frame_id = frames.frame_counter % frames.resources.length;
+                auto frame = &frames.resources[frame_id];
+
+                SwapchainImage swapchain_image;
+                _display_manager.get_next_image(_display_id, swapchain_image, frame.begin_semaphore);
+
+                auto commands = _command_pool.allocate();
                 {
-                    VkCommandBufferBeginInfo info;
-                    vk.BeginCommandBuffer(cmd, info);
+                    record_preamble(device, frames.render_pass, commands, frames.frame_buffers[swapchain_image.index], swapchain_image.image_size);
+                    record_mesh_draw(device.dispatch_table, commands, _buffers, _mesh);
+                    record_postamble(device, frames.render_pass, commands);
                 }
-
                 {
-                    VkViewport viewport = {
-                        x: 0,
-                        y: 0,
-                        width: frame.image_size.width,
-                        height: frame.image_size.height,
-                        minDepth: 0.0f,
-                        maxDepth: 1.0f
+                    uint wait_stage = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+                    VkSubmitInfo submit_i = {
+                        waitSemaphoreCount: 1,
+                        pWaitSemaphores: &frame.begin_semaphore,
+                        pWaitDstStageMask: &wait_stage,
+                        commandBufferCount: 1,
+                        pCommandBuffers: &commands,
+                        signalSemaphoreCount: 1,
+                        pSignalSemaphores: &frame.done_semaphore
                     };
-                    vk.CmdSetViewport(cmd, viewport);
+
+                    wait_and_reset(device, frame.fence);
+
+                    if (auto pending = frames.pending_command_buffers[frame_id])
+                        _command_pool.free(pending);
+
+                    _command_pool.submit(device.graphics, frame.fence, submit_i);
+                    frames.pending_command_buffers[frame_id] = commands;
                 }
 
-                {
-                    VkClearValue clear_color;
-                    clear_color.color.float32 = [0, 0, 0, 1.0];
-
-                    VkRenderPassBeginInfo render_pass_info = {
-                        renderPass: renderer.get_renderpass(swapchain),
-                        framebuffer: frame.framebuffer,
-                        renderArea: VkRect2D(VkOffset2D(0, 0), frame.image_size),
-                        clearValueCount: 1,
-                        pClearValues: &clear_color
-                    };
-                    vk.CmdBeginRenderPass(cmd, render_pass_info, VK_SUBPASS_CONTENTS_INLINE);
-                }
-
-                vk.CmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline);
-
-                VkBuffer[1] vert_buffers = [mesh_buffer.handle];
-                VkDeviceSize[1] offsets = [0];
-                vk.CmdBindVertexBuffers(cmd, vert_buffers, offsets);
-                vk.CmdBindIndexBuffer(cmd, mesh_buffer.handle, mesh.vertices_size, VK_INDEX_TYPE_UINT16);
-
-                vk.CmdDrawIndexed(cmd, cast(uint) mesh.indices.length, 1, 0, 0, 0);
-                vk.CmdEndRenderPass(cmd);
-                vk.EndCommandBuffer(cmd);
-
-                renderer.submit(swapchain, frame, cmd);
-                renderer.swap_buffers(swapchain);
+                _display_manager.swap_buffers(_display_id, frame.done_semaphore);
+                frames.frame_counter++;
             }
         }
     }
 
-    DisplayId display;
-    DisplayManager display_manager;
+private:
+    DisplayId _display_id;
+    VulkanDisplayManager _display_manager;
 
-    VulkanContext vulkan;
-    VulkanRenderer renderer;
+    CommandPool _command_pool;
+    RawDeviceMemoryAllocator _device_memory;
+    LinearPool _memory_pool;
+    BufferManager _buffers;
 
-    VkShaderModule[2] shaders;
-    VkPipeline pipeline;
-    VkPipelineLayout pipeline_layout;
-
-    VulkanStackAllocator mesh_allocator;
-    VulkanStackAllocator staging_allocator;
-
-    Buffer mesh_buffer;
-
-    CommandPool transfer_command_pool;
+    GpuMesh _mesh;
 }
-*/

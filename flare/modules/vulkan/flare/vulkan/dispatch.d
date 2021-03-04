@@ -14,10 +14,16 @@ struct DispatchTable {
         }
     }
 
+    @disable this(this);
+
+    ~this() {
+        if (_device)
+            vkDestroyDevice(_device, _allocator);
+    }
+
     VkDevice device() const { return cast(VkDevice) _device; }
 
     // dfmt off
-    void DestroyDevice() { vkDestroyDevice(_device, _allocator); }
     VkResult DeviceWaitIdle() { return check!vkDeviceWaitIdle(_device); }
     
     VkResult CreateSemaphore(in VkSemaphoreCreateInfo create_info, out VkSemaphore semaphore) { return check!vkCreateSemaphore(_device, &create_info, _allocator, &semaphore); }

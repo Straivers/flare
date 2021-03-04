@@ -41,7 +41,7 @@ struct GpuMesh {
     ushort num_indices;
 }
 
-void create_mesh_buffers(BufferManager buffers, in Mesh info, out GpuMesh mesh) {
+void create_mesh_buffers(ref BufferManager buffers, in Mesh info, out GpuMesh mesh) {
     BufferAllocInfo[2] alloc_i = [{
         size: cast(uint) (info.vertices.length * Vertex.sizeof),
         type: BufferType.Vertex,
@@ -60,7 +60,7 @@ void create_mesh_buffers(BufferManager buffers, in Mesh info, out GpuMesh mesh) 
     mesh.num_indices = cast(ushort) info.indices.length;
 }
 
-void record_mesh_draw(DispatchTable* vk, VkCommandBuffer cmd, BufferManager buffers, ref GpuMesh mesh) {
+void record_mesh_draw(DispatchTable* vk, VkCommandBuffer cmd, ref BufferManager buffers, ref GpuMesh mesh) {
     VkBuffer[1] v = [buffers.get(mesh.vertices).handle];
     VkDeviceSize[1] o = [buffers.get(mesh.vertices).offset];
 

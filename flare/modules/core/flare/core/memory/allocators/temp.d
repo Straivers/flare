@@ -18,11 +18,12 @@ struct ScopedArena {
     final class Impl : Allocator {
         Arena arena;
 
-        this(void[] memory) nothrow {
+    nothrow:
+        this(void[] memory) {
             arena = Arena(memory);
         }
 
-        ~this() nothrow {
+        ~this() {
             destroy(arena);
         }
 
@@ -41,6 +42,8 @@ struct ScopedArena {
         override void[] allocate(size_t size) {
             return arena.allocate(size);
         }
+
+        alias deallocate = Allocator.deallocate;
 
         override bool deallocate(ref void[] memory) {
             return arena.deallocate(memory);
@@ -83,5 +86,5 @@ unittest {
 
     test_allocate_api(temp);
     test_reallocate_api(temp);
-    test_resize_api(temp);
+    test_resize_api!true(temp);
 }
