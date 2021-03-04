@@ -12,23 +12,12 @@ pragma(lib, "user32");
 
 immutable wndclass_name = "flare_window_class\0"w;
 
-enum DisplayState : ubyte {
-    Uninitialized,
-    Initializing,
-    Initialized
-}
-
 struct DisplayImpl {
-    DisplayMode mode;
     DisplayManager manager;
-    Callbacks callbacks;
     CursorIcon cursor_icon;
 
     HWND hwnd;
-    DisplayState state;
     DisplayId id;
-
-    void* user_data;
 
     bool is_close_requested;
     bool has_cursor;
@@ -49,7 +38,7 @@ struct DisplayImpl {
 }
 
 struct OsWindowManager {
-    OsWindow get_os_handle(DisplayImpl* impl) nothrow {
+    OsWindow get_os_handle(ref DisplayImpl impl) nothrow {
         return impl.hwnd;
     }
 
@@ -78,13 +67,9 @@ struct OsWindowManager {
         AdjustWindowRectEx(&rect, style, FALSE, 0);
 
         display.id = id;
-        display.mode = properties.mode;
         display.manager = manager;
-        display.callbacks = properties.callbacks;
         display.cursor_icon = properties.cursor_icon;
-        display.user_data = properties.user_data;
 
-        display.state = DisplayState.Initializing;
         CreateWindowEx(
             0,
             wndclass_name.ptr,
@@ -98,14 +83,13 @@ struct OsWindowManager {
             &display
         );
         display.set_mode(properties.mode);
-        display.state = DisplayState.Initialized;
     }
 
-    void close_window(DisplayImpl* impl) nothrow {
+    void close_window(ref DisplayImpl impl) nothrow {
         PostMessage(impl.hwnd, WM_CLOSE, 0, 0);
     }
 
-    void destroy_window(DisplayImpl* impl) nothrow {
+    void destroy_window(ref DisplayImpl impl) nothrow {
         DestroyWindow(impl.hwnd);
     }
 
@@ -132,8 +116,7 @@ struct OsWindowManager {
 }
 
 void dispatch(string name, Args...)(DisplayImpl* impl, auto ref Args args) {
-    mixin("if (impl.callbacks." ~ name ~ ")
-        impl.callbacks." ~ name ~ "(EventSource(impl.manager, impl.id, impl.user_data), args);");
+    impl.manager.dispatch_event!name(impl.id, args);
 }
 
 extern (Windows) LRESULT window_procedure(HWND hwnd, uint msg, WPARAM wp, LPARAM lp) nothrow {
@@ -148,6 +131,7 @@ extern (Windows) LRESULT window_procedure(HWND hwnd, uint msg, WPARAM wp, LPARAM
     }
 
     auto display = cast(DisplayImpl*) GetWindowLongPtr(hwnd, GWLP_USERDATA);
+    auto state = &display.manager.get_state(display.id);
 
     if (!display)
         return DefWindowProc(hwnd, msg, wp, lp);
@@ -156,13 +140,13 @@ extern (Windows) LRESULT window_procedure(HWND hwnd, uint msg, WPARAM wp, LPARAM
     case WM_SIZE: {
             switch (wp) {
             case SIZE_MINIMIZED:
-                display.mode = DisplayMode.Minimized;
+                state.mode = DisplayMode.Minimized;
                 break;
             case SIZE_MAXIMIZED:
-                display.mode = DisplayMode.Maximized;
+                state.mode = DisplayMode.Maximized;
                 break;
             default:
-                display.mode = DisplayMode.Windowed;
+                state.mode = DisplayMode.Windowed;
                 break;
             }
 
@@ -174,7 +158,7 @@ extern (Windows) LRESULT window_procedure(HWND hwnd, uint msg, WPARAM wp, LPARAM
         return 0;
 
     case WM_CLOSE:
-        display.is_close_requested = true;
+        state.is_close_requested = true;
         return 0;
 
     case WM_DESTROY:
@@ -183,7 +167,7 @@ extern (Windows) LRESULT window_procedure(HWND hwnd, uint msg, WPARAM wp, LPARAM
 
     case WM_MOUSEMOVE:
         if (!display.has_cursor) {
-            display.has_cursor = true;
+            state.has_cursor = true;
 
             TRACKMOUSEEVENT tme = {
                 cbSize: TRACKMOUSEEVENT.sizeof,

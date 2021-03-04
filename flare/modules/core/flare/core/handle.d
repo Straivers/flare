@@ -106,6 +106,10 @@ public:
         return _slots.length;
     }
 
+    size_t num_allocated() const {
+        return _first_free_slot - _freelist_length;
+    }
+
     Ternary owns(Handle handle) const {
         const _handle = _Handle(handle);
 
@@ -120,7 +124,7 @@ public:
     }
 
     static if (!is(SlotData == void)) {
-        PtrType!SlotData get(Handle handle) {
+        inout(PtrType!SlotData) get(Handle handle) inout {
             assert(owns(handle) == Ternary.yes);
             const _handle = _Handle(handle);
             return _slots[_handle.index_or_next].slot_data;
@@ -169,7 +173,7 @@ private:
         static if (!is(SlotData == void)) {
             void[object_size!SlotData] data;
 
-            auto slot_data() {
+            auto slot_data() inout {
                 return cast(PtrType!SlotData) data.ptr;
             }
         }

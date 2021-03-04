@@ -21,8 +21,9 @@ alias onSwapchainResize = void function(VulkanEventSource, Swapchain*) nothrow;
 Create() -> OsCreate() -> VulkanInit() -> on_create() -> SwapchainCreate() -> on_swapchain_create()
 Destroy() -> on_swapchain_destroy() -> SwapchainDestroy() -> on_destroy() -> OsDestroy()
 */
-struct VulkanDisplayProperties {
-    DisplayProperties display_properties;
+struct VulkanCallbacks {
+    Callbacks callbacks;
+    alias callbacks this;
 
     /**
     Called after a swapchain is created. If this is called during a display
@@ -90,25 +91,22 @@ public:
         return (cast(SwapchainData*) super.get_user_data(id)).overridden_user_data;
     }
 
-    override DisplayId create(ref DisplayProperties properties) nothrow {
-        auto vk_props = VulkanDisplayProperties(properties);
-        return create(vk_props);
+    override DisplayId create(ref DisplayProperties properties, Callbacks callbacks, void* user_data) nothrow {
+        return create(properties, VulkanCallbacks(callbacks), user_data);
     }
 
-    DisplayId create(ref VulkanDisplayProperties properties) nothrow {
+    DisplayId create(ref DisplayProperties properties, VulkanCallbacks callbacks, void* user_data) nothrow {
         auto swapchain = _swapchains.make(
                 this,
-                properties.display_properties.user_data,
-                properties.display_properties.callbacks.on_create,
-                properties.display_properties.callbacks.on_destroy,
-                properties.display_properties.callbacks.on_resize,
-                properties.on_swapchain_create,
-                properties.on_swapchain_destroy,
-                properties.on_swapchain_resize);
+                user_data,
+                callbacks.on_create,
+                callbacks.on_destroy,
+                callbacks.on_resize,
+                callbacks.on_swapchain_create,
+                callbacks.on_swapchain_destroy,
+                callbacks.on_swapchain_resize);
 
-        properties.display_properties.user_data = swapchain;
-
-        properties.display_properties.callbacks.on_create = (src) nothrow {
+        callbacks.on_create = (src) nothrow {
             auto data = cast(SwapchainData*) src.user_data;
             auto self = data.manager;
 
@@ -130,11 +128,11 @@ public:
                 if (data.on_swapchain_create)
                     data.on_swapchain_create(_vk_source(src.display_id, data), &data.swapchain);
             }
-            else
-                self._sys_logger.trace("Attempted to create 0-size swapchain. Deferring operation.");
+            // else
+            //     self._sys_logger.trace("Attempted to create 0-size swapchain. Deferring operation.");
         };
 
-        properties.display_properties.callbacks.on_destroy = (src) nothrow {
+        callbacks.on_destroy = (src) nothrow {
             auto data = cast(SwapchainData*) src.user_data;
             auto self = data.manager;
 
@@ -142,9 +140,9 @@ public:
                 data.on_swapchain_destroy(_vk_source(src.display_id, data), &data.swapchain);
 
             // dfmt off
-            self._sys_logger.trace(
-                "Destroying swapchain %s and surface %s for window %s.",
-                data.swapchain.handle, data.surface, src.display_id.int_value);
+            // self._sys_logger.trace(
+            //     "Destroying swapchain %s and surface %s for window %s.",
+            //     data.swapchain.handle, data.surface, src.display_id.int_value);
             // dfmt on
 
             destroy_swapchain(self._device, data.swapchain);
@@ -156,14 +154,14 @@ public:
             self._swapchains.dispose(data);
         };
 
-        properties.display_properties.callbacks.on_resize = (src, width, height) nothrow {
+        callbacks.on_resize = (src, width, height) nothrow {
             auto data = cast(SwapchainData*) src.user_data;
             auto self = data.manager;
 
             self._resize_impl(src, data);
         };
 
-        return super.create(properties.display_properties);
+        return super.create(properties, callbacks, swapchain);
     }
 
 private:
@@ -212,10 +210,10 @@ private:
 
         if (was_zero_size && !is_zero_size) {
             // dfmt off
-            _sys_logger.trace(
-                "Resizing swapchain for window %8#0x from (0, 0) to (%s, %s); creating swapchain.",
-                src.display_id.int_value,
-                properties.image_size.width, properties.image_size.height);
+            // _sys_logger.trace(
+            //     "Resizing swapchain for window %8#0x from (0, 0) to (%s, %s); creating swapchain.",
+            //     src.display_id.int_value,
+            //     properties.image_size.width, properties.image_size.height);
             // dfmt on
 
             create_swapchain(_device, data.surface, properties, data.swapchain);
@@ -225,11 +223,11 @@ private:
         }
         else if (!was_zero_size && !is_zero_size) {
             // dfmt off
-            _sys_logger.trace(
-                "Resizing swapchain for window %8#0x from (%s, %s) to (%s, %s); recreating swapchain.",
-                src.display_id.int_value,
-                data.swapchain.image_size.width, data.swapchain.image_size.height,
-                properties.image_size.width, properties.image_size.height);
+            // _sys_logger.trace(
+            //     "Resizing swapchain for window %8#0x from (%s, %s) to (%s, %s); recreating swapchain.",
+            //     src.display_id.int_value,
+            //     data.swapchain.image_size.width, data.swapchain.image_size.height,
+            //     properties.image_size.width, properties.image_size.height);
             // dfmt on
 
             resize_swapchain(_device, data.surface, properties, data.swapchain);
@@ -239,10 +237,10 @@ private:
         }
         else if (!was_zero_size && is_zero_size) {
             // dfmt off
-            _sys_logger.trace(
-                "Resizing swapchain for window %8#0x from (%s, %s) to (0, 0); destroying swapchain.",
-                src.display_id.int_value,
-                data.swapchain.image_size.width, data.swapchain.image_size.height);
+            // _sys_logger.trace(
+            //     "Resizing swapchain for window %8#0x from (%s, %s) to (0, 0); destroying swapchain.",
+            //     src.display_id.int_value,
+            //     data.swapchain.image_size.width, data.swapchain.image_size.height);
             // dfmt on
 
             destroy_swapchain(_device, data.swapchain);

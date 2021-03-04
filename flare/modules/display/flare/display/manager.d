@@ -71,11 +71,7 @@ struct DisplayProperties {
     ushort height;
     bool is_resizable;
     DisplayMode mode;
-
-    void* user_data;
     CursorIcon cursor_icon;
-
-    Callbacks callbacks;
 }
 
 struct Callbacks {
@@ -102,6 +98,14 @@ struct Callbacks {
     OnKey on_key;
 }
 
+struct DisplayState {
+    DisplayMode mode;
+    bool is_close_requested;
+    bool has_cursor;
+    ushort width;
+    ushort height;
+}
+
 class DisplayManager {
     import flare.core.os.types: OsWindow;
 
@@ -119,38 +123,44 @@ public nothrow:
     }
 
     size_t num_active_displays() {
-        return _num_allocated;
+        return _displays.num_allocated;
     }
 
     OsWindow get_os_handle(DisplayId id) {
-        return _os.get_os_handle(_displays.get(id));
+        return _os.get_os_handle(_displays.get(id).os_impl);
     }
 
     void* get_user_data(DisplayId id) {
         return _displays.get(id).user_data;
     }
 
-    DisplayId create(ref DisplayProperties properties) nothrow {
+    DisplayId create(ref DisplayProperties properties, Callbacks callbacks, void* user_data) nothrow {
         auto id = _displays.make();
-        _num_allocated++;
+        auto display = _displays.get(id);
+        display.callbacks = callbacks;
+        display.user_data = user_data;
 
         _sys_logger.info("Initalizing new OS window into slot %8#0x: %s (w: %s, h: %s)", id.int_value, properties.title, properties.width, properties.height);
-        _os.create_window(this, id, properties, *_displays.get(id));
+        _os.create_window(this, id, properties, display.os_impl);
         _sys_logger.info("Initialization for window %8#0x completed.", id.int_value);
 
         return id;
     }
 
     void close(DisplayId id) nothrow {
-        _os.close_window(_displays.get(id));
+        _os.close_window(_displays.get(id).os_impl);
     }
 
     void destroy(DisplayId id) nothrow {
         _sys_logger.info("Destroying window %8#0x.", id.int_value);
 
-        _os.destroy_window(_displays.get(id));
+        _os.destroy_window(_displays.get(id).os_impl);
         _displays.dispose(id);
         _num_allocated--;
+    }
+
+    ref inout(DisplayState) get_state(DisplayId id) inout nothrow {
+        return _displays.get(id).state;
     }
 
     bool is_live(DisplayId id) nothrow {
@@ -158,32 +168,42 @@ public nothrow:
     }
 
     bool is_visible(DisplayId id) nothrow {
-        auto display = _displays.get(id);
-        return (display.mode & (DisplayMode.Hidden | DisplayMode.Minimized)) == 0;
+        return (get_state(id).mode & (DisplayMode.Hidden | DisplayMode.Minimized)) == 0;
     }
 
     bool is_close_requested(DisplayId id) nothrow {
-        return _displays.get(id).is_close_requested;
+        return get_state(id).is_close_requested;
     }
 
     void resize(DisplayId id, ushort width, ushort height) nothrow {
-        _displays.get(id).resize(width, height);
+        _displays.get(id).os_impl.resize(width, height);
     }
 
     void retitle(DisplayId id, in char[] title) nothrow {
-        _displays.get(id).retitle(title);
+        _displays.get(id).os_impl.retitle(title);
     }
 
     void change_window_mode(DisplayId id, DisplayMode mode) nothrow {
-        _displays.get(id).set_mode(mode);
+        _displays.get(id).os_impl.set_mode(mode);
     }
 
-protected:
+package:
     Logger* _sys_logger;
 
-private:
-    alias DisplayPool = HandlePool!(DisplayImpl, display_handle_name, max_open_displays);
+    void dispatch_event(string event, Args...)(DisplayId id, Args args) {
+        auto display = _displays.get(id);
+        mixin("if (display.callbacks." ~ event ~ ") display.callbacks." ~ event ~ "(EventSource(this, id, display.user_data), args);");
+    }
 
+private:
+    alias DisplayPool = HandlePool!(_Display, display_handle_name, max_open_displays);
+
+    struct _Display {
+        DisplayState state;
+        DisplayImpl os_impl;
+        Callbacks callbacks;
+        void* user_data;
+    }
 
     OsWindowManager _os;
     size_t _num_allocated;

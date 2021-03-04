@@ -55,40 +55,40 @@ public:
         _display_manager = new VulkanDisplayManager(&log, init_vulkan(options));
 
         {
-            VulkanDisplayProperties display_properties = {
-                display_properties: {
-                    title: app_settings.name,
-                    width: app_settings.main_window_width,
-                    height: app_settings.main_window_height,
-                    is_resizable: true,
-                    user_data: new RenderContext(),
-                    callbacks: {
-                        on_key: (src, key, state) nothrow {
-                            if (key == KeyCode.Escape && state == ButtonState.Released)
-                                src.manager.close(src.display_id);
-                        },
-                        on_create: (src) nothrow {
-                            auto vk_mgr = cast(VulkanDisplayManager) src.manager;
-                            auto frames = cast(RenderContext*) vk_mgr.get_user_data(src.display_id);
+            DisplayProperties properties = {
+                title: app_settings.name,
+                width: app_settings.main_window_width,
+                height: app_settings.main_window_height,
+                is_resizable: true,
+            };
 
-                            foreach (ref frame_resources; frames.resources) with (frame_resources) {
-                                fence = vk_mgr.device.fence_pool.acquire();
-                                begin_semaphore = vk_mgr.device.semaphore_pool.acquire();
-                                done_semaphore = vk_mgr.device.semaphore_pool.acquire();
-                            }
-                        },
-                        on_destroy: (src) nothrow {
-                            auto vk_mgr = cast(VulkanDisplayManager) src.manager;
-                            auto frames = cast(RenderContext*) vk_mgr.get_user_data(src.display_id);
+            VulkanCallbacks callbacks = {
+                callbacks: {
+                    on_key: (src, key, state) nothrow {
+                        if (key == KeyCode.Escape && state == ButtonState.Released)
+                            src.manager.close(src.display_id);
+                    },
+                    on_create: (src) nothrow {
+                        auto vk_mgr = cast(VulkanDisplayManager) src.manager;
+                        auto frames = cast(RenderContext*) vk_mgr.get_user_data(src.display_id);
 
-                            foreach (ref frame_resources; frames.resources) with (frame_resources) {
-                                vk_mgr.device.fence_pool.release(fence);
-                                vk_mgr.device.semaphore_pool.release(begin_semaphore);
-                                vk_mgr.device.semaphore_pool.release(done_semaphore);
-                            }
-
-                            destroy_renderpass(vk_mgr.device, frames.render_pass);
+                        foreach (ref frame_resources; frames.resources) with (frame_resources) {
+                            fence = vk_mgr.device.fence_pool.acquire();
+                            begin_semaphore = vk_mgr.device.semaphore_pool.acquire();
+                            done_semaphore = vk_mgr.device.semaphore_pool.acquire();
                         }
+                    },
+                    on_destroy: (src) nothrow {
+                        auto vk_mgr = cast(VulkanDisplayManager) src.manager;
+                        auto frames = cast(RenderContext*) vk_mgr.get_user_data(src.display_id);
+
+                        foreach (ref frame_resources; frames.resources) with (frame_resources) {
+                            vk_mgr.device.fence_pool.release(fence);
+                            vk_mgr.device.semaphore_pool.release(begin_semaphore);
+                            vk_mgr.device.semaphore_pool.release(done_semaphore);
+                        }
+
+                        destroy_renderpass(vk_mgr.device, frames.render_pass);
                     }
                 },
                 on_swapchain_create: (src, swapchain) nothrow {
@@ -152,7 +152,7 @@ public:
                 }
             };
 
-            _display_id = _display_manager.create(display_properties);
+            _display_id = _display_manager.create(properties, callbacks, new RenderContext());
         }
 
         _command_pool = create_graphics_command_pool(_display_manager.device);
