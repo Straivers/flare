@@ -5,7 +5,7 @@ import flare.core.memory;
 import flare.vulkan;
 
 public import flare.display.input;
-public import flare.display.manager;
+public import flare.display;
 
 struct VulkanEventSource {
     VulkanDisplayManager manager;

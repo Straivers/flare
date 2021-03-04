@@ -127,7 +127,7 @@ public:
         inout(PtrType!SlotData) get(Handle handle) inout {
             assert(owns(handle) == Ternary.yes);
             const _handle = _Handle(handle);
-            return _slots[_handle.index_or_next].slot_data;
+            return cast(inout) _slots[_handle.index_or_next].slot_data;
         }
     }
 

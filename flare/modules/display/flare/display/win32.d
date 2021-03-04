@@ -6,20 +6,27 @@ import core.sys.windows.windows;
 import flare.core.logger : Logger;
 import flare.core.os.types : OsWindow;
 import flare.display.input;
-import flare.display.manager;
+import flare.display.display;
 
 pragma(lib, "user32");
 
 immutable wndclass_name = "flare_window_class\0"w;
 
+struct ImplCallbacks {
+    DisplayState* delegate(DisplayId) nothrow get_state;
+    void delegate(DisplayId) nothrow on_create;
+    void delegate(DisplayId) nothrow on_destroy;
+    void delegate(DisplayId, ushort, ushort) nothrow on_resize;
+    void delegate(DisplayId, KeyCode, ButtonState) nothrow on_key;
+}
+
 struct DisplayImpl {
-    DisplayManager manager;
+    ImplCallbacks callbacks;
     CursorIcon cursor_icon;
 
     HWND hwnd;
     DisplayId id;
 
-    bool is_close_requested;
     bool has_cursor;
 
     void set_mode(DisplayMode mode) nothrow {
@@ -42,7 +49,7 @@ struct OsWindowManager {
         return impl.hwnd;
     }
 
-    void create_window(DisplayManager manager, DisplayId id, ref DisplayProperties properties, out DisplayImpl display) nothrow {
+    void create_window(ref ImplCallbacks callbacks, DisplayId id, ref DisplayProperties properties, out DisplayImpl display) nothrow {
         if (!_registered_wndclass) {
             WNDCLASSEXW wc = {
                 cbSize: WNDCLASSEXW.sizeof,
@@ -68,7 +75,7 @@ struct OsWindowManager {
         AdjustWindowRectEx(&rect, style, FALSE, 0);
 
         display.id = id;
-        display.manager = manager;
+        display.callbacks = callbacks;
         display.cursor_icon = properties.cursor_icon;
 
         CreateWindowEx(
@@ -126,7 +133,7 @@ extern (Windows) LRESULT window_procedure(HWND hwnd, uint msg, WPARAM wp, LPARAM
         SetWindowLongPtr(hwnd, GWLP_USERDATA, cast(LONG_PTR) display);
 
         display.hwnd = hwnd;
-        dispatch!"on_create"(display);
+        display.callbacks.on_create(display.id);
 
         return TRUE;
     }
@@ -136,7 +143,7 @@ extern (Windows) LRESULT window_procedure(HWND hwnd, uint msg, WPARAM wp, LPARAM
     if (!display)
         return DefWindowProc(hwnd, msg, wp, lp);
 
-    auto state = &display.manager.get_state(display.id);
+    auto state = display.callbacks.get_state(display.id);
 
     switch (msg) {
     case WM_SIZE: {
@@ -155,7 +162,7 @@ extern (Windows) LRESULT window_procedure(HWND hwnd, uint msg, WPARAM wp, LPARAM
             const width = LOWORD(lp);
             const height = HIWORD(lp);
 
-            dispatch!"on_resize"(display, width, height);
+            display.callbacks.on_resize(display.id, width, height);
         }
         return 0;
 
@@ -164,7 +171,7 @@ extern (Windows) LRESULT window_procedure(HWND hwnd, uint msg, WPARAM wp, LPARAM
         return 0;
 
     case WM_DESTROY:
-        dispatch!"on_destroy"(display);
+        display.callbacks.on_destroy(display.id);
         return 0;
 
     case WM_MOUSEMOVE:
@@ -183,12 +190,12 @@ extern (Windows) LRESULT window_procedure(HWND hwnd, uint msg, WPARAM wp, LPARAM
 
     case WM_KEYDOWN:
     case WM_SYSKEYDOWN:
-        dispatch!"on_key"(display, keycode_table[wp], ButtonState.Pressed);
+        display.callbacks.on_key(display.id, keycode_table[wp], ButtonState.Pressed);
         return 0;
 
     case WM_KEYUP:
     case WM_SYSKEYUP:
-        dispatch!"on_key"(display, keycode_table[wp], ButtonState.Released);
+        display.callbacks.on_key(display.id, keycode_table[wp], ButtonState.Released);
         return 0;
 
     default:

@@ -2,50 +2,12 @@ module flare.display.manager;
 
 import flare.core.logger: Logger;
 import flare.core.memory: Allocator, Ternary;
-import flare.core.handle: HandlePool, Handle32;
-import flare.display.win32;
+import flare.core.handle: HandlePool;
 import flare.display.input: KeyCode, ButtonState;
+import flare.display.display;
 
 version (Windows)
     import flare.display.win32;
-
-/// The icon over the cursor. User defiend icons are currently not supported,
-/// and using those flags will cause an error.
-enum CursorIcon : ubyte {
-    /// ⭦
-    Pointer,
-    /// ⌛
-    Wait,
-    /// Ꮖ
-    IBeam,
-    /// ⭤
-    ResizeHorizontal,
-    /// ⭥
-    ResizeVertical,
-    /// ⤡
-    ResizeNorthwestSoutheast,
-    /// ⤢
-    ResizeCornerNortheastSouthwest,
-    ///
-    UserDefined1 = 128,
-    ///
-    UserDefined2,
-    ///
-    UserDefined3,
-    ///
-    UserDefined4
-}
-
-enum DisplayMode : ubyte {
-    Hidden      = 1 << 0,
-    Windowed    = 1 << 1,
-    Maximized   = 1 << 2,
-    Minimized   = 1 << 3,
-    // Fullscreen,
-}
-
-enum display_handle_name = "flare_handle32_display_id";
-alias DisplayId = Handle32!display_handle_name;
 
 /**
 An EventSource is a convenience struct that is passed to display callbacks.
@@ -61,18 +23,6 @@ alias OnDestroy = void function(EventSource) nothrow;
 alias OnResize = void function(EventSource, ushort width, ushort height) nothrow;
 
 alias OnKey = void function(EventSource, KeyCode, ButtonState) nothrow;
-
-struct DisplayProperties {
-    enum max_title_length = 255;
-
-    const(char)[] title;
-
-    ushort width;
-    ushort height;
-    bool is_resizable;
-    DisplayMode mode;
-    CursorIcon cursor_icon;
-}
 
 struct Callbacks {
     /**
@@ -100,14 +50,6 @@ struct Callbacks {
     void try_call(string name, Args...)(Args args) {
         mixin("if(" ~ name ~ ") " ~ name ~ "(args);");
     }
-}
-
-struct DisplayState {
-    DisplayMode mode;
-    bool is_close_requested;
-    bool has_cursor;
-    ushort width;
-    ushort height;
 }
 
 class DisplayManager {
@@ -144,8 +86,16 @@ public nothrow:
         display.callbacks = callbacks;
         display.user_data = user_data;
 
+        ImplCallbacks impl_callbacks = {
+            get_state: &_get_mutable_state,
+            on_create: &_on_create,
+            on_destroy: &_on_destroy,
+            on_resize: &_on_resize,
+            on_key: &_on_key,
+        };
+
         _sys_logger.info("Initalizing new OS window into slot %8#0x: %s (w: %s, h: %s)", id.int_value, properties.title, properties.width, properties.height);
-        _os.create_window(this, id, properties, display.os_impl);
+        _os.create_window(impl_callbacks, id, properties, display.os_impl);
         _sys_logger.info("Initialization for window %8#0x completed.", id.int_value);
 
         return id;
@@ -163,7 +113,7 @@ public nothrow:
         _num_allocated--;
     }
 
-    ref inout(DisplayState) get_state(DisplayId id) inout nothrow {
+    ref const(DisplayState) get_state(DisplayId id) const nothrow {
         return _displays.get(id).state;
     }
 
@@ -195,6 +145,10 @@ package:
     pragma(inline, true);
     void dispatch_event(string event, Args...)(DisplayId id, Args args) {
         mixin("_" ~ event ~ "(id, args);");
+    }
+
+    DisplayState* _get_mutable_state(DisplayId id) {
+        return &_displays.get(id).state;
     }
 
 protected:
