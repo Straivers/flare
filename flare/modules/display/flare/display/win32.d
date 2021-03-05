@@ -19,6 +19,7 @@ manager implementation.
 struct ImplCallbacks {
     DisplayState* delegate(DisplayId) nothrow get_state;
     void delegate(DisplayId) nothrow on_create;
+    void delegate(DisplayId) nothrow on_close;
     void delegate(DisplayId) nothrow on_destroy;
     void delegate(DisplayId, ushort, ushort) nothrow on_resize;
     void delegate(DisplayId, KeyCode, ButtonState) nothrow on_key;
@@ -168,6 +169,7 @@ extern (Windows) LRESULT window_procedure(HWND hwnd, uint msg, WPARAM wp, LPARAM
 
     case WM_CLOSE:
         state.is_close_requested = true;
+        display.callbacks.on_close(display.id);
         return 0;
 
     case WM_DESTROY:

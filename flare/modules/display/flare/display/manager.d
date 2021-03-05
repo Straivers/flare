@@ -10,17 +10,36 @@ version (Windows)
     import flare.display.win32;
 
 alias OnCreate = void function(DisplayManager, DisplayId, void* user_data) nothrow;
+alias OnClose = void function(DisplayManager, DisplayId, void* user_data) nothrow;
 alias OnDestroy = void function(DisplayManager, DisplayId, void* user_data) nothrow;
-alias OnResize = void function(DisplayManager, DisplayId, void* user_data, ushort width, ushort height) nothrow;
 
+alias OnResize = void function(DisplayManager, DisplayId, void* user_data, ushort width, ushort height) nothrow;
 alias OnKey = void function(DisplayManager, DisplayId, void* user_data, KeyCode, ButtonState) nothrow;
 
 struct Callbacks {
+    /*
+    NOTE:
+        To add a new callback:
+            1) Create a new alias type for the callback function.
+            2) Add a pointer of that type to the `Callbacks` struct called `$callback_name$`.
+            3) Add a handler called `_$callback_name$(DisplayId, Args...)`.
+            4) Add a delegate of the same type to `ImplCallbacks` for each OS implementation.
+            5) Add a case in the OS layer to call the delegate callback.
+            6) Add `DisplayManager._$callback_name$(DisplayId, Args...)` to the impl callbacks.
+            5) Update any sublcasses that need to make use of the callback.
+    */
+
     /**
     Callback called during window creation. This callback will be called after
     the window has been created, and before the window is visible.
     */
     OnCreate on_create;
+
+    /**
+    Callback called when a user presses the `x` to close a window, or when
+    `DisplayManager.close()` is called.
+    */
+    OnClose on_close;
 
     /**
     Callback called during window destruction. This callback will be called
@@ -55,8 +74,10 @@ public nothrow:
         _displays = DisplayPool(allocator);
         _os.initialize();
 
+        // Handles subclass overrides too.
         impl_callbacks.get_state = &_get_mutable_state;
         impl_callbacks.on_create = &_on_create;
+        impl_callbacks.on_close = &_on_close;
         impl_callbacks.on_destroy = &_on_destroy;
         impl_callbacks.on_resize = &_on_resize;
         impl_callbacks.on_key = &_on_key;
@@ -147,6 +168,11 @@ protected:
     void _on_create(DisplayId id) {
         auto display = _displays.get(id);
         display.callbacks.try_call!"on_create"(this, id, get_user_data(id));
+    }
+
+    void _on_close(DisplayId id) {
+        auto display = _displays.get(id);
+        display.callbacks.try_call!"on_close"(this, id, get_user_data(id));
     }
 
     void _on_destroy(DisplayId id) {

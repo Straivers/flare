@@ -132,7 +132,6 @@ private:
 
     void* _start;
 
-    // _Block* _freelist;
     uint _freelist_index;
 }
 

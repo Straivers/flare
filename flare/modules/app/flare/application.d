@@ -1,6 +1,7 @@
 module flare.application;
 
 import flare.core.logger;
+import flare.core.memory.context;
 
 enum uint flare_version_major = 0;
 enum uint flare_version_minor = 1;
@@ -10,6 +11,7 @@ struct FlareAppSettings {
     const(char)[] name = "Flare Application";
     ushort main_window_width = 1280;
     ushort main_window_height = 720;
+    MemoryContext memory;
 }
 
 abstract class FlareApp {
@@ -25,6 +27,10 @@ abstract class FlareApp {
         destroy(log);
     }
 
+    /**
+    Program initialization that may fail. Read files, initialize libraries, and
+    the like.
+    */
     abstract void on_init();
 
     abstract void on_shutdown();

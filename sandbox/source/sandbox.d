@@ -34,6 +34,8 @@ struct RenderContext {
     RenderPass1 render_pass;
     VkFramebuffer[] frame_buffers;
 
+    CommandPool command_pool;
+
     @disable this(this);
 }
 
@@ -81,6 +83,11 @@ public:
                             begin_semaphore = vk_mgr.device.semaphore_pool.acquire();
                             done_semaphore = vk_mgr.device.semaphore_pool.acquire();
                         }
+
+                        context.command_pool = create_graphics_command_pool(vk_mgr.device);
+                    },
+                    on_close: (mgr, id, usr) nothrow {
+                        mgr.destroy(id);
                     },
                     on_destroy: (mgr, id, usr) nothrow {
                         auto vk_mgr = cast(VulkanDisplayManager!RenderContext) mgr;
@@ -88,6 +95,7 @@ public:
                         assert(cast(void*) context == usr);
 
                         foreach (ref frame_resources; context.resources) with (frame_resources) {
+                            wait(vk_mgr.device, fence);
                             vk_mgr.device.fence_pool.release(fence);
                             vk_mgr.device.semaphore_pool.release(begin_semaphore);
                             vk_mgr.device.semaphore_pool.release(done_semaphore);
@@ -95,6 +103,9 @@ public:
 
                         if (context.render_pass.handle)
                             destroy_renderpass(vk_mgr.device, context.render_pass);
+
+                        context.command_pool.free(context.pending_command_buffers);
+                        destroy(context.command_pool);
                     }
                 },
                 on_swapchain_create: (mgr, id, context, swapchain) nothrow {
@@ -130,6 +141,9 @@ public:
                     }
                 },
                 on_swapchain_resize: (mgr, id, context, swapchain) nothrow {
+                    foreach (frame; context.resources)
+                        wait(mgr.device, frame.fence);
+
                     foreach (fb; context.frame_buffers)
                         mgr.device.dispatch_table.DestroyFramebuffer(fb);
 
@@ -147,6 +161,9 @@ public:
                     }
                 },
                 on_swapchain_destroy: (mgr, id, context, swapchain) nothrow {
+                    foreach (frame; context.resources)
+                        wait(mgr.device, frame.fence);
+
                     foreach (fb; context.frame_buffers)
                         mgr.device.dispatch_table.DestroyFramebuffer(fb);
                 }
@@ -154,8 +171,6 @@ public:
 
             _display_id = _display_manager.create(properties, callbacks);
         }
-
-        _command_pool = create_graphics_command_pool(_display_manager.device);
 
         _device_memory = new RawDeviceMemoryAllocator(_display_manager.device);
 
@@ -185,28 +200,22 @@ public:
 
     override void run() {
         auto device = _display_manager.device;
-        // auto vk = device.dispatch_table;
 
         while (_display_manager.is_live(_display_id)) {
             _display_manager.process_events(false);
 
+            if (!_display_manager.is_live(_display_id))
+                continue;
+
             auto frames = &_display_manager.get_typed_user_data(_display_id);
 
-            if (_display_manager.is_close_requested(_display_id)) {
-                // clean up command buffers
-                foreach (ref resources; frames.resources)
-                    wait(device, resources.fence);
-
-                _command_pool.free(frames.pending_command_buffers);
-                _display_manager.destroy(_display_id);
-            }
-            else if (_display_manager.is_visible(_display_id)) {
+            if (_display_manager.is_visible(_display_id)) {
                 const frame_id = frames.frame_counter % frames.resources.length;
                 auto frame = &frames.resources[frame_id];
                 SwapchainImage swapchain_image;
                 _display_manager.get_next_image(_display_id, swapchain_image, frame.begin_semaphore);
 
-                auto commands = _command_pool.allocate();
+                auto commands = frames.command_pool.allocate();
                 {
                     record_preamble(device, frames.render_pass, commands, frames.frame_buffers[swapchain_image.index], swapchain_image.image_size);
                     record_mesh_draw(device.dispatch_table, commands, _buffers, _mesh);
@@ -227,9 +236,9 @@ public:
                     wait_and_reset(device, frame.fence);
 
                     if (auto pending = frames.pending_command_buffers[frame_id])
-                        _command_pool.free(pending);
+                        frames.command_pool.free(pending);
 
-                    _command_pool.submit(device.graphics, frame.fence, submit_i);
+                    frames.command_pool.submit(device.graphics, frame.fence, submit_i);
                     frames.pending_command_buffers[frame_id] = commands;
                 }
 

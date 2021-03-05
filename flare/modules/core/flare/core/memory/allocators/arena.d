@@ -15,6 +15,7 @@ public nothrow:
 
     this(Allocator allocator, size_t size) {
         _base_allocator = allocator;
+        _alignment = default_alignment;
         this(_base_allocator.allocate(size));
     }
 
