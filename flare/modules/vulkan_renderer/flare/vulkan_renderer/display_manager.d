@@ -90,7 +90,6 @@ public:
 
     DisplayId create(ref DisplayProperties properties, VulkanCallbacks!UserData callbacks) nothrow {
         auto swapchain = _swapchains.make(
-                this,
                 callbacks.on_swapchain_create,
                 callbacks.on_swapchain_destroy,
                 callbacks.on_swapchain_resize);
@@ -139,8 +138,6 @@ protected:
 
 private:
     struct SwapchainData {
-        VulkanDisplayManager manager;
-
         // Callbacks for swapchain events
         VulkanCallbacks!UserData.OnSwapchainCreate on_swapchain_create;
         VulkanCallbacks!UserData.OnSwapchainDestroy on_swapchain_destroy;
@@ -179,36 +176,14 @@ private:
         const was_zero_size = data.swapchain.image_size == VkExtent2D();
 
         if (was_zero_size && !is_zero_size) {
-            // dfmt off
-            _sys_logger.trace(
-                "Resizing swapchain for window %8#0x from (0, 0) to (%s, %s); creating swapchain.",
-                id.int_value,
-                properties.image_size.width, properties.image_size.height);
-            // dfmt on
-
             create_swapchain(_device, data.surface, properties, data.swapchain);
             data.try_call!"on_swapchain_create"(this, id, &data.vk_user_data, &data.swapchain);
         }
         else if (!was_zero_size && !is_zero_size) {
-            // dfmt off
-            _sys_logger.trace(
-                "Resizing swapchain for window %8#0x from (%s, %s) to (%s, %s); recreating swapchain.",
-                id.int_value,
-                data.swapchain.image_size.width, data.swapchain.image_size.height,
-                properties.image_size.width, properties.image_size.height);
-            // dfmt on
-
             resize_swapchain(_device, data.surface, properties, data.swapchain);
             data.try_call!"on_swapchain_resize"(this, id, &data.vk_user_data, &data.swapchain);
         }
         else if (!was_zero_size && is_zero_size) {
-            // dfmt off
-            _sys_logger.trace(
-                "Resizing swapchain for window %8#0x from (%s, %s) to (0, 0); destroying swapchain.",
-                id.int_value,
-                data.swapchain.image_size.width, data.swapchain.image_size.height);
-            // dfmt on
-
             destroy_swapchain(_device, data.swapchain);
             data.try_call!"on_swapchain_destroy"(this, id, &data.vk_user_data, &data.swapchain);
         }
