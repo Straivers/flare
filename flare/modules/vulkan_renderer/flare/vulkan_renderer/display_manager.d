@@ -99,7 +99,7 @@ public:
     }
 
 protected:
-    override void _on_create(DisplayId id) {
+    override void _on_create(DisplayId id, void* aux_data) {
         auto data = cast(SwapchainData*) super.get_user_data(id);
 
         data.surface = create_surface(_instance, get_os_handle(id));
@@ -107,7 +107,7 @@ protected:
         if (!_device)
             _init_device(data.surface);
 
-        super._on_create(id);
+        super._on_create(id, aux_data);
 
         SwapchainProperties properties;
         get_swapchain_properties(_device, data.surface, properties);

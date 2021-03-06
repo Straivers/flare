@@ -50,6 +50,8 @@ struct DisplayProperties {
     bool is_resizable;
     DisplayMode mode;
     CursorIcon cursor_icon;
+
+    void* aux_data;
 }
 
 struct DisplayState {

@@ -9,7 +9,7 @@ import flare.display.display;
 version (Windows)
     import flare.display.win32;
 
-alias OnCreate = void function(DisplayManager, DisplayId, void* user_data) nothrow;
+alias OnCreate = void function(DisplayManager, DisplayId, void* user_data, void* aux_data) nothrow;
 alias OnClose = void function(DisplayManager, DisplayId, void* user_data) nothrow;
 alias OnDestroy = void function(DisplayManager, DisplayId, void* user_data) nothrow;
 
@@ -165,9 +165,9 @@ package:
 protected:
     Logger* _sys_logger;
 
-    void _on_create(DisplayId id) {
+    void _on_create(DisplayId id, void* aux_data) {
         auto display = _displays.get(id);
-        display.callbacks.try_call!"on_create"(this, id, get_user_data(id));
+        display.callbacks.try_call!"on_create"(this, id, get_user_data(id), aux_data);
     }
 
     void _on_close(DisplayId id) {

@@ -18,11 +18,16 @@ manager implementation.
 */
 struct ImplCallbacks {
     DisplayState* delegate(DisplayId) nothrow get_state;
-    void delegate(DisplayId) nothrow on_create;
+    void delegate(DisplayId, void*) nothrow on_create;
     void delegate(DisplayId) nothrow on_close;
     void delegate(DisplayId) nothrow on_destroy;
     void delegate(DisplayId, ushort, ushort) nothrow on_resize;
     void delegate(DisplayId, KeyCode, ButtonState) nothrow on_key;
+}
+
+struct DisplayCreateInfo {
+    DisplayImpl* display;
+    void* create_data;
 }
 
 struct DisplayImpl {
@@ -81,6 +86,8 @@ struct OsWindowManager {
         display.callbacks = &callbacks;
         display.cursor_icon = properties.cursor_icon;
 
+        auto ci = DisplayCreateInfo(&display, properties.aux_data);
+
         CreateWindowEx(
             0,
             wndclass_name.ptr,
@@ -91,7 +98,7 @@ struct OsWindowManager {
             NULL,
             NULL,
             GetModuleHandle(null),
-            &display
+            &ci
         );
         display.set_mode(properties.mode);
     }
@@ -130,11 +137,11 @@ void dispatch(string name, Args...)(DisplayImpl* impl, auto ref Args args) {
 
 extern (Windows) LRESULT window_procedure(HWND hwnd, uint msg, WPARAM wp, LPARAM lp) nothrow {
     if (msg == WM_NCCREATE) {
-        auto display = cast(DisplayImpl*) ((cast(CREATESTRUCT*) lp).lpCreateParams);
-        SetWindowLongPtr(hwnd, GWLP_USERDATA, cast(LONG_PTR) display);
+        auto ci = cast(DisplayCreateInfo*) ((cast(CREATESTRUCT*) lp).lpCreateParams);
+        SetWindowLongPtr(hwnd, GWLP_USERDATA, cast(LONG_PTR) ci.display);
 
-        display.hwnd = hwnd;
-        display.callbacks.on_create(display.id);
+        ci.display.hwnd = hwnd;
+        ci.display.callbacks.on_create(ci.display.id, ci.create_data);
 
         return TRUE;
     }
