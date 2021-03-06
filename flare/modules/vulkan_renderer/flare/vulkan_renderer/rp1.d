@@ -1,4 +1,4 @@
-module renderpass;
+module flare.vulkan_renderer.rp1;
 
 import flare.core.memory;
 import flare.vulkan;
@@ -203,7 +203,27 @@ void destroy_renderpass(VulkanDevice device, ref RenderPass1 renderpass) {
     renderpass = RenderPass1();
 }
 
-void record_preamble(VulkanDevice device, ref RenderPass1 render_pass, VkCommandBuffer cmd, VkFramebuffer fb, VkExtent2D viewport_size) {
+VkShaderModule create_shader(VulkanDevice device, ubyte[] data) {
+    VkShaderModuleCreateInfo sci = {
+        codeSize: data.length,
+        pCode: cast(uint*) data.ptr
+    };
+
+    VkShaderModule shader;
+    device.dispatch_table.CreateShaderModule(sci, shader);
+    return shader;
+}
+
+VkShaderModule load_shader(VulkanDevice device, string path) {
+    import flare.core.os.file: read_file;
+
+    auto bytes = read_file(path, device.context.memory);
+    auto shader = device.create_shader(bytes);
+    device.context.memory.dispose(bytes);
+    return shader;
+}
+
+void record_preamble(VulkanDevice device, ref RenderPass1 render_pass, VkCommandBuffer cmd, VkFramebuffer fb, VkExtent2D viewport_size) nothrow {
     auto viewport_rect = VkRect2D(VkOffset2D(0, 0), VkExtent2D(viewport_size.width, viewport_size.height));
 
     with (device.dispatch_table) {
@@ -244,28 +264,8 @@ void record_preamble(VulkanDevice device, ref RenderPass1 render_pass, VkCommand
     }
 }
 
-void record_postamble(VulkanDevice device, ref RenderPass1 render_pass, VkCommandBuffer cmd) {
+void record_postamble(VulkanDevice device, ref RenderPass1 render_pass, VkCommandBuffer cmd) nothrow {
     auto vk = device.dispatch_table;
     vk.CmdEndRenderPass(cmd);
     vk.EndCommandBuffer(cmd);
-}
-
-VkShaderModule create_shader(VulkanDevice device, ubyte[] data) {
-    VkShaderModuleCreateInfo sci = {
-        codeSize: data.length,
-        pCode: cast(uint*) data.ptr
-    };
-
-    VkShaderModule shader;
-    device.dispatch_table.CreateShaderModule(sci, shader);
-    return shader;
-}
-
-VkShaderModule load_shader(VulkanDevice device, string path) {
-    import flare.core.os.file: read_file;
-
-    auto bytes = read_file(path, device.context.memory);
-    auto shader = device.create_shader(bytes);
-    device.context.memory.dispose(bytes);
-    return shader;
 }

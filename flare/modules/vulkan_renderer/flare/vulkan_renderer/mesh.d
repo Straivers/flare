@@ -1,7 +1,7 @@
-module meshes;
+module flare.vulkan_renderer.mesh;
 
-import mem.buffer;
 import flare.vulkan;
+import flare.vulkan_renderer.buffer;
 import flare.core.math.vector : float2, float3;
 
 struct Vertex {

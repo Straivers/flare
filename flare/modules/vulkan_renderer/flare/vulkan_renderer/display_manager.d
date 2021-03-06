@@ -6,7 +6,7 @@ import flare.vulkan;
 
 public import flare.display.input;
 public import flare.display;
-
+/+
 /*
 Create() -> OsCreate() -> VulkanInit() -> on_create() -> SwapchainCreate() -> on_swapchain_create()
 Destroy() -> on_swapchain_destroy() -> SwapchainDestroy() -> on_destroy() -> OsDestroy()
@@ -138,7 +138,6 @@ protected:
 
 private:
     struct SwapchainData {
-        // Callbacks for swapchain events
         VulkanCallbacks!UserData.OnSwapchainCreate on_swapchain_create;
         VulkanCallbacks!UserData.OnSwapchainDestroy on_swapchain_destroy;
         VulkanCallbacks!UserData.onSwapchainResize on_swapchain_resize;
@@ -193,3 +192,4 @@ private:
     VulkanDevice _device;
     ObjectPool!SwapchainData _swapchains;
 }
++/

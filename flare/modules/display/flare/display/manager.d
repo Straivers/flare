@@ -9,59 +9,6 @@ import flare.display.display;
 version (Windows)
     import flare.display.win32;
 
-alias OnCreate = void function(DisplayManager, DisplayId, void* user_data, void* aux_data) nothrow;
-alias OnClose = void function(DisplayManager, DisplayId, void* user_data) nothrow;
-alias OnDestroy = void function(DisplayManager, DisplayId, void* user_data) nothrow;
-
-alias OnResize = void function(DisplayManager, DisplayId, void* user_data, ushort width, ushort height) nothrow;
-alias OnKey = void function(DisplayManager, DisplayId, void* user_data, KeyCode, ButtonState) nothrow;
-
-struct Callbacks {
-    /*
-    NOTE:
-        To add a new callback:
-            1) Create a new alias type for the callback function.
-            2) Add a pointer of that type to the `Callbacks` struct called `$callback_name$`.
-            3) Add a handler called `_$callback_name$(DisplayId, Args...)`.
-            4) Add a delegate of the same type to `ImplCallbacks` for each OS implementation.
-            5) Add a case in the OS layer to call the delegate callback.
-            6) Add `DisplayManager._$callback_name$(DisplayId, Args...)` to the impl callbacks.
-            5) Update any sublcasses that need to make use of the callback.
-    */
-
-    /**
-    Callback called during window creation. This callback will be called after
-    the window has been created, and before the window is visible.
-    */
-    OnCreate on_create;
-
-    /**
-    Callback called when a user presses the `x` to close a window, or when
-    `DisplayManager.close()` is called.
-    */
-    OnClose on_close;
-
-    /**
-    Callback called during window destruction. This callback will be called
-    before the window is destroyed.
-    */
-    OnDestroy on_destroy;
-
-    /**
-    Callback called during window resizing.
-    */
-    OnResize on_resize;
-
-    /**
-    Callback called when a keyboard event occurs within the window.
-    */
-    OnKey on_key;
-
-    void try_call(string name, Args...)(Args args) {
-        mixin("if(" ~ name ~ ") " ~ name ~ "(args);");
-    }
-}
-
 class DisplayManager {
     import flare.core.os.types: OsWindow;
 
@@ -99,11 +46,15 @@ public nothrow:
         return _displays.get(id).user_data;
     }
 
-    DisplayId create(ref DisplayProperties properties, Callbacks callbacks, void* user_data) nothrow {
+    void set_user_data(DisplayId id, void* new_user_data) {
+        _displays.get(id).user_data = new_user_data;
+    }
+
+    DisplayId create(ref DisplayProperties properties) nothrow {
         auto id = _displays.make();
         auto display = _displays.get(id);
-        display.callbacks = callbacks;
-        display.user_data = user_data;
+        display.callbacks = properties.callbacks;
+        display.user_data = properties.user_data;
 
         _sys_logger.info("Initalizing new OS window into slot %8#0x: %s (w: %s, h: %s)", id.int_value, properties.title, properties.width, properties.height);
         _os.create_window(impl_callbacks, id, properties, display.os_impl);

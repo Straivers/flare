@@ -1,4 +1,4 @@
-module mem.buffer;
+module flare.vulkan_renderer.buffer;
 
 import flare.core.handle: Handle32, HandlePool;
 import flare.core.memory: Allocator;
