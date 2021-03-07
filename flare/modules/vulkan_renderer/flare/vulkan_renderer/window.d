@@ -53,9 +53,15 @@ DisplayId create_vulkan_window(DisplayManager manager, VulkanRenderer renderer, 
         void* aux;
     }
 
-    auto overrides = Overrides(
-        VulkanWindowOverrides(properties.user_data, properties.callbacks.on_create, properties.callbacks.on_resize, properties.callbacks.on_destroy),
-        properties.aux_data);
+    Overrides overrides = {
+        overrides: {
+            user_data: properties.user_data,
+            on_create: properties.callbacks.on_create,
+            on_resize: properties.callbacks.on_resize,
+            on_destroy: properties.callbacks.on_destroy
+        },
+        aux: properties.aux_data
+    };
 
     properties.callbacks.on_create = (mgr, id, user_data, aux) nothrow {
         auto overrides = cast(Overrides*) user_data;

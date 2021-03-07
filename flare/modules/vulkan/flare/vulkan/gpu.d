@@ -14,7 +14,10 @@ enum QueueType : ubyte {
     Count
 }
 
-alias QueueFamilies = uint[QueueType.Count];
+struct QueueFamilies {
+    uint[QueueType.Count] families = [uint.max, uint.max, uint.max, uint.max];
+    alias families this;
+}
 
 struct VulkanGpuInfo {
     VkPhysicalDevice handle;
