@@ -192,9 +192,6 @@ void destroy_renderpass(VulkanDevice device, ref RenderPass1 renderpass) {
     with (device.dispatch_table) {
         DestroyRenderPass(renderpass.handle);
 
-        DestroyShaderModule(renderpass.vertex_shader);
-        DestroyShaderModule(renderpass.fragment_shader);
-
         DestroyPipeline(renderpass.pipeline);
         DestroyPipelineLayout(renderpass.layout);
     }

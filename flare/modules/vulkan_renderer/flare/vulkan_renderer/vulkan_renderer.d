@@ -31,7 +31,7 @@ nothrow:
 
     ~this() {
         destroy(_command_pool);
-        destroy(_renderpass);
+        destroy_renderpass(_device, _renderpass);
         _device.dispatch_table.DestroyShaderModule(_vertex_shader);
         _device.dispatch_table.DestroyShaderModule(_fragment_shader);
 
@@ -90,6 +90,7 @@ nothrow:
         _command_pool.free(window.command_buffers);
 
         destroy_swapchain(_device, window.swapchain);
+        on_swapchain_destroy(window);
         vkDestroySurfaceKHR(_context.instance, window.surface, null);
         _windows.dispose(window);
     }

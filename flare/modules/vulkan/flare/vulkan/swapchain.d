@@ -54,8 +54,6 @@ struct Swapchain {
     VkImage[] images;
     VkImageView[] views;
 
-    VkResult state;
-
     uint current_frame_index;
 }
 
@@ -91,57 +89,16 @@ void get_swapchain_properties(VulkanDevice device, VkSurfaceKHR surface, out Swa
     result.present_mode = _select(modes);
 }
 
-/**
- * Initializes a new swapchain.
- *
- * If a surface has no size (if the window is hidden), this function does nothing.
- */
-void create_swapchain(VulkanDevice device, VkSurfaceKHR surface, in SwapchainProperties properties, out Swapchain swapchain) {
-    assert(properties.image_size != VkExtent2D(), "It is invalid to create a 0-sized swapchain");
-
-    swapchain.properties = properties;
-
-    swapchain.handle = _create_swapchain(device, surface, properties, null);
-    _get_swapchain_images(device, swapchain);
-
-    device.log.trace("Created swapchain (%sw, %sh) ID %s for surface %s.", swapchain.image_size.width, swapchain.image_size.height, swapchain.handle, surface);
-}
-
-/**
- * Recreates a swapchain.
- *
- * If the swapchain was not previously initialized (`create_swapchain()`
- * returned `false` due to a hidden window), `recreate_swapchain()` will create
- * a new swapchain.
- */
-void resize_swapchain(VulkanDevice device, VkSurfaceKHR surface, in SwapchainProperties properties, ref Swapchain swapchain) {
-    assert(swapchain.handle);
-    assert(properties.image_size != VkExtent2D(), "It is invalid to attempt to resize a swapchain to (0, 0)!");
-
-    device.wait_idle();
-
-    Swapchain new_swapchain = {
-        handle: _create_swapchain(device, surface, properties, swapchain.handle),
-        properties: properties,
-    };
-
-    _free_swapchain_images(device, swapchain);
-    device.dispatch_table.DestroySwapchainKHR(swapchain.handle);
-
-    _get_swapchain_images(device, new_swapchain);
-
-    device.log.trace("Swapchain for surface %s has been recreated. It is now %s (%sw, %sh).", surface, new_swapchain.handle, properties.image_size.width, properties.image_size.height);
-
-    swapchain = new_swapchain;
-}
-
 enum SwapchainResizeOp {
     Create,
     Destroy,
     Replace,
 }
 
-SwapchainResizeOp resize_swapchain2(VulkanDevice device, VkSurfaceKHR surface, in SwapchainProperties properties, ref Swapchain swapchain) {
+SwapchainResizeOp resize_swapchain2(VulkanDevice device, VkSurfaceKHR surface, ref Swapchain swapchain) {
+    SwapchainProperties properties;
+    get_swapchain_properties(device, surface, properties);
+
     const is_zero_size = properties.image_size == VkExtent2D();
     const was_zero_size = swapchain.image_size == VkExtent2D();
 
@@ -195,16 +152,12 @@ Returns:
 bool acquire_next_image(VulkanDevice device, Swapchain* swapchain, VkSemaphore acquire_sempahore, out SwapchainImage image) {
     assert(swapchain.handle);
 
-    uint index;
-    const err = device.dispatch_table.AcquireNextImageKHR(swapchain.handle, ulong.max, acquire_sempahore, null, index);
-    swapchain.state = err;
+    const err = device.dispatch_table.AcquireNextImageKHR(swapchain.handle, ulong.max, acquire_sempahore, null, swapchain.current_frame_index);
 
-    swapchain.current_frame_index = index;
-
-    image.index = index;
-    image.handle = swapchain.images[index];
+    image.index = swapchain.current_frame_index;
+    image.handle = swapchain.images[swapchain.current_frame_index];
     image.format = swapchain.format;
-    image.view = swapchain.views[index];
+    image.view = swapchain.views[swapchain.current_frame_index];
     image.image_size = swapchain.image_size;
 
     return err != VK_ERROR_OUT_OF_DATE_KHR;
@@ -233,8 +186,7 @@ bool swap_buffers(VulkanDevice device, Swapchain* swapchain, VkSemaphore present
     };
 
     // FIXME: Bool does not convey enough information
-    const status = device.dispatch_table.QueuePresentKHR(device.graphics, pi);
-    return status == VK_SUCCESS;
+    return device.dispatch_table.QueuePresentKHR(device.graphics, pi) == VK_SUCCESS;
 }
 
 private:

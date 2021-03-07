@@ -69,7 +69,7 @@ DisplayId create_vulkan_window(DisplayManager manager, VulkanRenderer renderer, 
 
     properties.callbacks.on_resize = (mgr, id, user_data, width, height) {
         auto window = cast(VulkanWindow*) user_data;
-        window.out_of_date = true;
+        _resize_swapchain(window);
         window.overrides.on_resize.if_not_null(mgr, id, window.overrides.user_data, width, height);
     };
 
@@ -94,16 +94,8 @@ void get_next_frame(DisplayManager manager, DisplayId id, out VulkanFrame frame)
         frame.acquire = acquire_semaphores[virtual_frame_id];
         frame.present = present_semaphores[virtual_frame_id];
 
-        if (window.out_of_date || !acquire_next_image(renderer.device, &swapchain, frame.acquire, frame.image)) {
-            window.out_of_date = false;
-            SwapchainProperties properties;
-            get_swapchain_properties(renderer.device, surface, properties);
-            final switch (resize_swapchain2(renderer.device, surface, properties, swapchain)) with (SwapchainResizeOp) {
-            case Create:    return renderer.on_swapchain_create(window);
-            case Destroy:   return renderer.on_swapchain_destroy(window);
-            case Replace:   return renderer.on_swapchain_create(window);
-            }
-        }
+        if (!acquire_next_image(renderer.device, &swapchain, frame.acquire, frame.image))
+            _resize_swapchain(window);
     }
 }
 
@@ -111,17 +103,22 @@ void swap_buffers(DisplayManager manager, DisplayId id) {
     auto window = cast(VulkanWindow*) manager.get_user_data(id);
 
     with (window) {
-        if (!flare.vulkan.swap_buffers(renderer.device, &swapchain, present_semaphores[virtual_frame_id])) {
-            SwapchainProperties properties;
-            get_swapchain_properties(renderer.device, surface, properties);
-            final switch (resize_swapchain2(renderer.device, surface, properties, swapchain)) with (SwapchainResizeOp) {
-            case Create:    return renderer.on_swapchain_create(window);
-            case Destroy:   return renderer.on_swapchain_destroy(window);
-            case Replace:   return renderer.on_swapchain_create(window);
-            }
-        }
+        if (!flare.vulkan.swap_buffers(renderer.device, &swapchain, present_semaphores[virtual_frame_id]))
+            _resize_swapchain(window);
 
         double_buffer_id ^= 1;
         virtual_frame_id = (virtual_frame_id + 1) % num_virtual_frames;
+    }
+}
+
+nothrow private:
+
+void _resize_swapchain(VulkanWindow* window) {
+    wait(window.renderer.device, window.fences);
+
+    final switch (resize_swapchain2(window.renderer.device, window.surface, window.swapchain)) with (SwapchainResizeOp) {
+    case Create:    return window.renderer.on_swapchain_create(window);
+    case Destroy:   return window.renderer.on_swapchain_destroy(window);
+    case Replace:   return window.renderer.on_swapchain_resize(window);
     }
 }

@@ -84,7 +84,8 @@ public nothrow:
     }
 
     bool is_visible(DisplayId id) nothrow {
-        return (get_state(id).mode & (DisplayMode.Hidden | DisplayMode.Minimized)) == 0;
+        const mode = get_state(id).mode;
+        return mode == DisplayMode.Windowed || mode == DisplayMode.Maximized;
     }
 
     bool is_close_requested(DisplayId id) nothrow {

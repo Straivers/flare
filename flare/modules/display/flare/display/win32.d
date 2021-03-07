@@ -7,6 +7,7 @@ import flare.core.os.types : OsWindow;
 import flare.display.input;
 import flare.display.display;
 
+pragma(lib, "gdi32");
 pragma(lib, "user32");
 
 immutable wndclass_name = "flare_window_class\0"w;
@@ -167,10 +168,9 @@ extern (Windows) LRESULT window_procedure(HWND hwnd, uint msg, WPARAM wp, LPARAM
                 break;
             }
 
-            const width = LOWORD(lp);
-            const height = HIWORD(lp);
-
-            display.callbacks.on_resize(display.id, width, height);
+            state.width = LOWORD(lp);
+            state.height = HIWORD(lp);
+            display.callbacks.on_resize(display.id, state.width, state.height);
         }
         return 0;
 
