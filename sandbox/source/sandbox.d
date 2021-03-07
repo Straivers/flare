@@ -164,6 +164,16 @@ public:
                 height: app_settings.main_window_height,
                 mode: DisplayMode.Windowed,
                 is_resizable: true,
+                callbacks: {
+                    on_key: (mgr, id, usr, key, state) nothrow {
+                        import std.stdio; debug writeln(key);
+                        if (key == KeyCode.Escape && state == ButtonState.Released)
+                            mgr.close(id);
+                    },
+                    on_close: (mgr, id, user) nothrow {
+                        mgr.destroy(id);
+                    }
+                }
             };
 
             _display_id = create_vulkan_window(_displays, _renderer, properties);
@@ -204,8 +214,6 @@ public:
 
             if (!_displays.is_live(_display_id))
                 continue;
-
-            auto window = cast(VulkanWindow*) _displays.get_user_data(_display_id);
 
             if (_displays.is_visible(_display_id)) {
                 VulkanFrame frame;

@@ -31,6 +31,9 @@ nothrow:
 
     ~this() {
         destroy(_command_pool);
+        destroy(_renderpass);
+        _device.dispatch_table.DestroyShaderModule(_vertex_shader);
+        _device.dispatch_table.DestroyShaderModule(_fragment_shader);
 
         if (_device)
             destroy(_device);
@@ -58,7 +61,7 @@ nothrow:
     // TEMP
 
     VulkanWindow* on_window_create(DisplayId id, ref VulkanWindowOverrides overrides, OsWindow hwnd) {
-        auto window = _windows.make(id, overrides);
+        auto window = _windows.make(id, this, overrides, true);
         window.surface = create_surface(_context, hwnd);
 
         if (!_device)
@@ -67,7 +70,7 @@ nothrow:
         // Swapchain construction deferred to first get_next_frame()
 
         foreach (i; 0 .. window.num_virtual_frames) {
-            window.fences[i] = _device.fence_pool.acquire();
+            window.fences[i] = _device.fence_pool.acquire(true);
             window.acquire_semaphores[i] = _device.semaphore_pool.acquire();
             window.present_semaphores[i] = _device.semaphore_pool.acquire();
         }

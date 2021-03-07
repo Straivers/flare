@@ -22,9 +22,10 @@ struct VulkanWindow {
     enum num_virtual_frames = 3;
 
     DisplayId handle;
+    VulkanRenderer renderer;
     VulkanWindowOverrides overrides;
 
-
+    bool out_of_date;
     Swapchain swapchain;
     VkSurfaceKHR surface;
 
@@ -37,13 +38,12 @@ struct VulkanWindow {
 
     VkSemaphore[num_virtual_frames] acquire_semaphores;
     VkSemaphore[num_virtual_frames] present_semaphores;
-
-    VulkanRenderer renderer;
 }
 
 struct VulkanWindowOverrides {
     void* user_data;
     OnCreate on_create;
+    OnResize on_resize;
     OnDestroy on_destroy;
 }
 
@@ -54,7 +54,7 @@ DisplayId create_vulkan_window(DisplayManager manager, VulkanRenderer renderer, 
     }
 
     auto overrides = Overrides(
-        VulkanWindowOverrides(properties.user_data, properties.callbacks.on_create, properties.callbacks.on_destroy),
+        VulkanWindowOverrides(properties.user_data, properties.callbacks.on_create, properties.callbacks.on_resize, properties.callbacks.on_destroy),
         properties.aux_data);
 
     properties.callbacks.on_create = (mgr, id, user_data, aux) nothrow {
@@ -65,6 +65,12 @@ DisplayId create_vulkan_window(DisplayManager manager, VulkanRenderer renderer, 
         mgr.set_user_data(id, window);
 
         window.overrides.on_create.if_not_null(mgr, id, window.overrides.user_data, overrides.aux);
+    };
+
+    properties.callbacks.on_resize = (mgr, id, user_data, width, height) {
+        auto window = cast(VulkanWindow*) user_data;
+        window.out_of_date = true;
+        window.overrides.on_resize.if_not_null(mgr, id, window.overrides.user_data, width, height);
     };
 
     properties.callbacks.on_destroy = (mgr, id, user_data) nothrow {
@@ -88,13 +94,14 @@ void get_next_frame(DisplayManager manager, DisplayId id, out VulkanFrame frame)
         frame.acquire = acquire_semaphores[virtual_frame_id];
         frame.present = present_semaphores[virtual_frame_id];
 
-        if (!swapchain.handle || !acquire_next_image(renderer.device, &swapchain, frame.acquire, frame.image)) {
+        if (window.out_of_date || !acquire_next_image(renderer.device, &swapchain, frame.acquire, frame.image)) {
+            window.out_of_date = false;
             SwapchainProperties properties;
             get_swapchain_properties(renderer.device, surface, properties);
             final switch (resize_swapchain2(renderer.device, surface, properties, swapchain)) with (SwapchainResizeOp) {
-            case Create: return renderer.on_swapchain_create(window);
-            case Destroy: return renderer.on_swapchain_destroy(window);
-            case Replace: return renderer.on_swapchain_create(window);
+            case Create:    return renderer.on_swapchain_create(window);
+            case Destroy:   return renderer.on_swapchain_destroy(window);
+            case Replace:   return renderer.on_swapchain_create(window);
             }
         }
     }
@@ -108,13 +115,13 @@ void swap_buffers(DisplayManager manager, DisplayId id) {
             SwapchainProperties properties;
             get_swapchain_properties(renderer.device, surface, properties);
             final switch (resize_swapchain2(renderer.device, surface, properties, swapchain)) with (SwapchainResizeOp) {
-            case Create: return renderer.on_swapchain_create(window);
-            case Destroy: return renderer.on_swapchain_destroy(window);
-            case Replace: return renderer.on_swapchain_create(window);
+            case Create:    return renderer.on_swapchain_create(window);
+            case Destroy:   return renderer.on_swapchain_destroy(window);
+            case Replace:   return renderer.on_swapchain_create(window);
             }
         }
 
-        double_buffer_id |= 1;
+        double_buffer_id ^= 1;
         virtual_frame_id = (virtual_frame_id + 1) % num_virtual_frames;
     }
 }
