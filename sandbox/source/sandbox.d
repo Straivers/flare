@@ -107,6 +107,7 @@ public:
             if (_displays.is_visible(_display_id)) {
                 VulkanFrame frame;
                 get_next_frame(_displays, _display_id, frame);
+                wait_and_reset(device, frame.fence);
 
                 {
                     record_preamble(device, *_renderer.rp1, frame.command_buffer, _renderer.fb(frame.image.index), frame.image.image_size);
@@ -124,8 +125,6 @@ public:
                         signalSemaphoreCount: 1,
                         pSignalSemaphores: &frame.present
                     };
-
-                    wait_and_reset(device, frame.fence);
 
                     _renderer.submit(submit_i, frame.fence);
                 }
