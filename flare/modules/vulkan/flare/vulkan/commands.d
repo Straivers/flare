@@ -61,13 +61,16 @@ private:
     }
 }
 
-void create_graphics_command_pool(VulkanDevice device, ref CommandPool pool) nothrow {
+void create_graphics_command_pool(VulkanDevice device, bool transient_buffers, ref CommandPool pool) nothrow {
     VkCommandPool handle;
     {
         VkCommandPoolCreateInfo ci = {
             queueFamilyIndex: device.graphics.family,
             flags: VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT
         };
+
+        if (transient_buffers)
+            ci.flags |= VK_COMMAND_POOL_CREATE_TRANSIENT_BIT;
 
         device.dispatch_table.CreateCommandPool(ci, handle);
     }

@@ -42,8 +42,6 @@ struct RenderPass1 {
 }
 
 void create_renderpass_1(VulkanDevice device, ref RenderPassSpec spec, out RenderPass1 renderpass) {
-    auto tmp = scoped_arena(device.context.memory);
-
     {
         renderpass.swapchain_attachment = spec.swapchain_attachment;
     }

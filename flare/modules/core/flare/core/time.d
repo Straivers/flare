@@ -17,7 +17,7 @@ struct Time {
 struct Duration {
     private long _raw_delta;
 
-    double to_msecs() @safe @nogc pure nothrow {
+    double to_msecs() const @safe @nogc pure nothrow {
         return to_msecs_impl(this);
     }
 }
@@ -136,7 +136,7 @@ version (Windows) {
     Time get_time_impl() @trusted @nogc nothrow {
         long time;
         const qpc_err = QueryPerformanceCounter(&time);
-        assert(qpc_err == 0);
+        assert(qpc_err != 0);
 
         return Time(time);
     }

@@ -6,6 +6,9 @@ import flare.vulkan;
 import flare.core.memory;
 import flare.vulkan_renderer;
 import flare.display;
+import flare.core.time;
+import flare.core.buffer_writer;
+import std.format;
 
 immutable mesh = Mesh(
     [
@@ -95,12 +98,23 @@ public:
 
     override void run() {
         auto device = _renderer.device;
+        auto time = get_time();
+
+        char[256] title_storage;
+        auto writer = TypedWriter!char(title_storage);
 
         while (displays.is_live(_display_id)) {
-            displays.process_events(true);
-
+            displays.process_events();
+            
             if (!displays.is_live(_display_id))
                 continue;
+
+            const old_time = time;
+            time = get_time();
+            const dt = time - old_time;
+            formattedWrite(writer, "%s: %s fps", app_settings.name, 1000 / dt.to_msecs);
+            displays.retitle(_display_id, writer.data);
+            writer.clear();
 
             if (displays.is_visible(_display_id)) {
                 VulkanFrame frame;

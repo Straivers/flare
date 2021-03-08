@@ -163,7 +163,7 @@ private:
         else
             assert(0, "No suitable GPU was detected.");
 
-        create_graphics_command_pool(_device, _command_pool);
+        create_graphics_command_pool(_device, true, _command_pool);
 
         _vertex_shader = load_shader(_device, "shaders/vert.spv");
         _fragment_shader = load_shader(_device, "shaders/frag.spv");
