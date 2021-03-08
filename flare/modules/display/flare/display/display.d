@@ -1,8 +1,9 @@
 module flare.display.display;
 
-import flare.core.handle: Handle32;
-import flare.display.manager;
+import flare.core.handle : Handle32;
+import flare.core.util : CheckedVoidPtr;
 import flare.display.input;
+import flare.display.manager;
 
 /// The icon over the cursor. User defiend icons are currently not supported,
 /// and using those flags will cause an error.
@@ -56,16 +57,16 @@ struct DisplayProperties {
 
     Callbacks callbacks;
 
-    void* user_data;
-    void* aux_data;
+    CheckedVoidPtr user_data;
+    CheckedVoidPtr aux_data;
 }
 
-alias OnCreate = void function(DisplayManager*, DisplayId, void* user_data, void* aux_data) nothrow;
-alias OnClose = void function(DisplayManager*, DisplayId, void* user_data) nothrow;
-alias OnDestroy = void function(DisplayManager*, DisplayId, void* user_data) nothrow;
+alias OnCreate = void function(DisplayManager*, DisplayId, CheckedVoidPtr user_data, CheckedVoidPtr aux_data) nothrow;
+alias OnClose = void function(DisplayManager*, DisplayId, CheckedVoidPtr user_data) nothrow;
+alias OnDestroy = void function(DisplayManager*, DisplayId, CheckedVoidPtr user_data) nothrow;
 
-alias OnResize = void function(DisplayManager*, DisplayId, void* user_data, ushort width, ushort height) nothrow;
-alias OnKey = void function(DisplayManager*, DisplayId, void* user_data, KeyCode, ButtonState) nothrow;
+alias OnResize = void function(DisplayManager*, DisplayId, CheckedVoidPtr user_data, ushort width, ushort height) nothrow;
+alias OnKey = void function(DisplayManager*, DisplayId, CheckedVoidPtr user_data, KeyCode, ButtonState) nothrow;
 
 struct Callbacks {
     /*

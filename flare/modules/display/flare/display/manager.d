@@ -1,10 +1,11 @@
 module flare.display.manager;
 
-import flare.core.logger: Logger;
-import flare.core.memory: Allocator, Ternary;
-import flare.core.handle: HandlePool;
-import flare.display.input: KeyCode, ButtonState;
+import flare.core.handle : HandlePool;
+import flare.core.logger : Logger;
+import flare.core.memory : Allocator, Ternary;
+import flare.core.util : CheckedVoidPtr;
 import flare.display.display;
+import flare.display.input : ButtonState, KeyCode;
 
 version (Windows)
     import flare.display.win32;
@@ -44,11 +45,11 @@ public nothrow:
         return _os.get_os_handle(_displays.get(id).os_impl);
     }
 
-    void* get_user_data(DisplayId id) {
+    CheckedVoidPtr get_user_data(DisplayId id) {
         return _displays.get(id).user_data;
     }
 
-    void set_user_data(DisplayId id, void* new_user_data) {
+    void set_user_data(DisplayId id, CheckedVoidPtr new_user_data) {
         _displays.get(id).user_data = new_user_data;
     }
 
@@ -120,29 +121,29 @@ package:
 protected:
     Logger* _sys_logger;
 
-    void _on_create(DisplayId id, void* aux_data) {
+    void _on_create(DisplayId id, CheckedVoidPtr aux_data) {
         auto display = _displays.get(id);
-        display.callbacks.try_call!"on_create"(&this, id, get_user_data(id), aux_data);
+        display.callbacks.try_call!"on_create"(&this, id, display.user_data, aux_data);
     }
 
     void _on_close(DisplayId id) {
         auto display = _displays.get(id);
-        display.callbacks.try_call!"on_close"(&this, id, get_user_data(id));
+        display.callbacks.try_call!"on_close"(&this, id, display.user_data);
     }
 
     void _on_destroy(DisplayId id) {
         auto display = _displays.get(id);
-        display.callbacks.try_call!"on_destroy"(&this, id, get_user_data(id));
+        display.callbacks.try_call!"on_destroy"(&this, id, display.user_data);
     }
 
     void _on_resize(DisplayId id, ushort width, ushort height) {
         auto display = _displays.get(id);
-        display.callbacks.try_call!"on_resize"(&this, id, get_user_data(id), width, height);
+        display.callbacks.try_call!"on_resize"(&this, id, display.user_data, width, height);
     }
 
     void _on_key(DisplayId id, KeyCode key, ButtonState state) {
         auto display = _displays.get(id);
-        display.callbacks.try_call!"on_key"(&this, id, get_user_data(id), key, state);
+        display.callbacks.try_call!"on_key"(&this, id, display.user_data, key, state);
     }
 
 private:
@@ -152,7 +153,7 @@ private:
         DisplayState state;
         DisplayImpl os_impl;
         Callbacks callbacks;
-        void* user_data;
+        CheckedVoidPtr user_data;
     }
 
     ImplCallbacks impl_callbacks;

@@ -2,6 +2,7 @@ module flare.vulkan_renderer.window;
 
 import flare.core.memory: ObjectPool;
 import flare.core.functions: if_not_null;
+import flare.core.util : CheckedVoidPtr;
 import flare.vulkan;
 import flare.display;
 import flare.vulkan_renderer.vulkan_renderer;
@@ -31,7 +32,7 @@ struct VulkanWindow {
 }
 
 struct VulkanWindowOverrides {
-    void* user_data;
+    CheckedVoidPtr user_data;
     OnCreate on_create;
     OnResize on_resize;
     OnDestroy on_destroy;
@@ -73,7 +74,7 @@ struct VulkanFrameResources {
 DisplayId create_vulkan_window(ref DisplayManager manager, VulkanRenderer renderer, DisplayProperties properties) {
     struct Overrides {
         VulkanWindowOverrides overrides;
-        void* aux;
+        CheckedVoidPtr aux;
     }
 
     Overrides overrides = {
@@ -87,35 +88,35 @@ DisplayId create_vulkan_window(ref DisplayManager manager, VulkanRenderer render
     };
 
     properties.callbacks.on_create = (mgr, id, user_data, aux) nothrow {
-        auto overrides = cast(Overrides*) user_data;
-        auto renderer = cast(VulkanRenderer) aux;
+        auto overrides = user_data.get!Overrides();
+        auto renderer = aux.get!VulkanRenderer();
 
         auto window = renderer.on_window_create(id, overrides.overrides, mgr.get_os_handle(id));
-        mgr.set_user_data(id, window);
+        mgr.set_user_data(id, CheckedVoidPtr(window));
 
         window.overrides.on_create.if_not_null(mgr, id, window.overrides.user_data, overrides.aux);
     };
 
     properties.callbacks.on_resize = (mgr, id, user_data, width, height) {
-        auto window = cast(VulkanWindow*) user_data;
+        auto window = user_data.get!VulkanWindow();
         window.renderer.on_window_resize(window, mgr.get_state(id).vsync);
         window.overrides.on_resize.if_not_null(mgr, id, window.overrides.user_data, width, height);
     };
 
     properties.callbacks.on_destroy = (mgr, id, user_data) nothrow {
-        auto window = cast(VulkanWindow*) user_data;
+        auto window = user_data.get!VulkanWindow();
         window.renderer.on_window_destroy(window);
         window.overrides.on_destroy.if_not_null(mgr, id, window.overrides.user_data);
     };
 
     properties.user_data = &overrides;
-    properties.aux_data = cast(void*) renderer;
+    properties.aux_data = renderer;
 
     return manager.create(properties);
 }
 
 void get_next_frame(ref DisplayManager manager, DisplayId id, out VulkanFrame frame) {
-    auto window = cast(VulkanWindow*) manager.get_user_data(id);
+    auto window = manager.get_user_data(id).get!VulkanWindow();
 
     with (window) {
         frame.fence = fences[virtual_frame_id];
@@ -129,7 +130,7 @@ void get_next_frame(ref DisplayManager manager, DisplayId id, out VulkanFrame fr
 }
 
 void swap_buffers(ref DisplayManager manager, DisplayId id) {
-    auto window = cast(VulkanWindow*) manager.get_user_data(id);
+    auto window = manager.get_user_data(id).get!VulkanWindow();
 
     with (window) {
         if (!flare.vulkan.swap_buffers(renderer.device, &swapchain, present_semaphores[virtual_frame_id]))

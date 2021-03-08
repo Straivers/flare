@@ -4,12 +4,13 @@ nothrow:
 
 alias Hash = Hash64;
 
-struct Hash64 {
-    ubyte[8] value;
+align (8) struct Hash64 {
+    ulong value;
 }
 
-Hash hash_of(const(char)[] str) {
+Hash64 hash_of(const(char)[] str) {
     import std.digest.murmurhash: digest, MurmurHash3;
 
-    return Hash(digest!(MurmurHash3!128)(str)[0 .. Hash.value.length]);
+    auto v = digest!(MurmurHash3!128)(str);
+    return Hash(*(cast(ulong*) v.ptr));
 }

@@ -4,8 +4,9 @@ version (Windows):
 
 import core.sys.windows.windows;
 import flare.core.os.types : OsWindow;
-import flare.display.input;
+import flare.core.util : CheckedVoidPtr;
 import flare.display.display;
+import flare.display.input;
 
 pragma(lib, "gdi32");
 pragma(lib, "user32");
@@ -19,7 +20,7 @@ manager implementation.
 */
 struct ImplCallbacks {
     DisplayState* delegate(DisplayId) nothrow get_state;
-    void delegate(DisplayId, void*) nothrow on_create;
+    void delegate(DisplayId, CheckedVoidPtr) nothrow on_create;
     void delegate(DisplayId) nothrow on_close;
     void delegate(DisplayId) nothrow on_destroy;
     void delegate(DisplayId, ushort, ushort) nothrow on_resize;
@@ -28,7 +29,7 @@ struct ImplCallbacks {
 
 struct DisplayCreateInfo {
     DisplayImpl* display;
-    void* create_data;
+    CheckedVoidPtr create_data;
 }
 
 struct DisplayImpl {
