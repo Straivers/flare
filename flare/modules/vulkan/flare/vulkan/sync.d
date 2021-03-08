@@ -23,8 +23,8 @@ void wait_and_reset(bool all = true)(VulkanDevice device, VkFence[] fences...) {
 
 struct FencePool {
 nothrow:
-    this(VulkanDevice device, Allocator allocator) {
-        _vk = device.dispatch_table;
+    this(DispatchTable* vk, Allocator allocator) {
+        _vk = vk;
         _fences = Array!VkFence(allocator);
     }
 
@@ -64,8 +64,8 @@ private:
 
 struct SemaphorePool {
 nothrow:
-    this(VulkanDevice device, Allocator allocator) {
-        _vk = device.dispatch_table;
+    this(DispatchTable* vk, Allocator allocator) {
+        _vk = vk;
         _semaphores = Array!VkSemaphore(allocator);
     }
 

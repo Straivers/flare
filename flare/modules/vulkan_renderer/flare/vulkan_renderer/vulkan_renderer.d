@@ -61,100 +61,91 @@ nothrow:
     // TEMP
 
     VulkanWindow* on_window_create(DisplayId id, ref VulkanWindowOverrides overrides, OsWindow hwnd) {
-        auto window = _windows.make(id, this, overrides, true);
+        auto window = _windows.make(id, this, overrides);
         window.surface = create_surface(_context, hwnd);
+        // Swapchain creation handled on first resize operation.
 
         if (!_device)
             _initialize(window.surface);
 
-        // Swapchain construction deferred to first get_next_frame()
-
-        foreach (i; 0 .. window.num_virtual_frames) {
-            window.fences[i] = _device.fence_pool.acquire(true);
-            window.acquire_semaphores[i] = _device.semaphore_pool.acquire();
-            window.present_semaphores[i] = _device.semaphore_pool.acquire();
-        }
-
-        _command_pool.allocate(window.command_buffers);
-
+        window.frames.initialize(_device, &_command_pool);
         return window;
     }
 
     void on_window_destroy(VulkanWindow* window) {
-        foreach (i; 0 .. window.num_virtual_frames) {
-            _device.fence_pool.release(window.fences[i]);
-            _device.semaphore_pool.release(window.acquire_semaphores[i]);
-            _device.semaphore_pool.release(window.present_semaphores[i]);
-        }
+        wait(_device, window.fences);
 
-        _command_pool.free(window.command_buffers);
+        window.frames.destroy(_device, &_command_pool);
 
         destroy_swapchain(_device, window.swapchain);
-        on_swapchain_destroy(window);
+        _on_swapchain_destroy(window);
+
         vkDestroySurfaceKHR(_context.instance, window.surface, null);
+
         _windows.dispose(window);
     }
 
-    void on_swapchain_create(VulkanWindow* window) {
-        if (_renderpass.handle && _renderpass.swapchain_attachment.format != window.swapchain.format) {
-            destroy_renderpass(_device, _renderpass);
-        }
-
-        if (!_renderpass.handle) {
-            VkVertexInputAttributeDescription[2] attrs = Vertex.attribute_descriptions;
-            RenderPassSpec rps = {
-                swapchain_attachment: AttachmentSpec(window.swapchain.format, [0, 0, 0, 1]),
-                vertex_shader: _vertex_shader,
-                fragment_shader: _fragment_shader,
-                bindings: Vertex.binding_description,
-                attributes: attrs
-            };
-
-            create_renderpass_1(_device, rps, _renderpass);
-        }
-
-        _framebuffers = _context.memory.make_array!VkFramebuffer(window.swapchain.images.length);
-        foreach (i, ref fb; _framebuffers) {
-            VkFramebufferCreateInfo framebuffer_ci = {
-                renderPass: _renderpass.handle,
-                attachmentCount: 1,
-                pAttachments: &window.swapchain.views[i],
-                width: window.swapchain.image_size.width,
-                height: window.swapchain.image_size.height,
-                layers: 1
-            };
-
-            _device.dispatch_table.CreateFramebuffer(framebuffer_ci, fb);
-        }
-    }
-
-    void on_swapchain_resize(VulkanWindow* window) {
+    void on_window_resize(VulkanWindow* window) {
         wait(_device, window.fences);
 
-        assert(window.swapchain.n_images == _framebuffers.length);
+        final switch (resize_swapchain(_device, window.surface, window.swapchain)) {
+        case SwapchainResizeOp.Create:
+            if (_renderpass.handle && _renderpass.swapchain_attachment.format != window.swapchain.format) {
+                destroy_renderpass(_device, _renderpass);
+            }
 
-        foreach (fb; _framebuffers)
-            _device.dispatch_table.DestroyFramebuffer(fb);
+            if (!_renderpass.handle) {
+                VkVertexInputAttributeDescription[2] attrs = Vertex.attribute_descriptions;
+                RenderPassSpec rps = {
+                    swapchain_attachment: AttachmentSpec(window.swapchain.format, [0, 0, 0, 1]),
+                    vertex_shader: _vertex_shader,
+                    fragment_shader: _fragment_shader,
+                    bindings: Vertex.binding_description,
+                    attributes: attrs
+                };
 
-        foreach (i, ref fb; _framebuffers) {
-            VkFramebufferCreateInfo framebuffer_ci = {
-                renderPass: _renderpass.handle,
-                attachmentCount: 1,
-                pAttachments: &window.swapchain.views[i],
-                width: window.swapchain.image_size.width,
-                height: window.swapchain.image_size.height,
-                layers: 1
-            };
+                create_renderpass_1(_device, rps, _renderpass);
+            }
 
-            _device.dispatch_table.CreateFramebuffer(framebuffer_ci, fb);
+            _framebuffers = _context.memory.make_array!VkFramebuffer(window.swapchain.images.length);
+            foreach (i, ref fb; _framebuffers) {
+                VkFramebufferCreateInfo framebuffer_ci = {
+                    renderPass: _renderpass.handle,
+                    attachmentCount: 1,
+                    pAttachments: &window.swapchain.views[i],
+                    width: window.swapchain.image_size.width,
+                    height: window.swapchain.image_size.height,
+                    layers: 1
+                };
+
+                _device.dispatch_table.CreateFramebuffer(framebuffer_ci, fb);
+            }
+            break;
+
+        case SwapchainResizeOp.Destroy:
+            _on_swapchain_destroy(window);
+            break;
+
+        case SwapchainResizeOp.Replace:
+            assert(window.swapchain.n_images == _framebuffers.length);
+
+            foreach (fb; _framebuffers)
+                _device.dispatch_table.DestroyFramebuffer(fb);
+
+            foreach (i, ref fb; _framebuffers) {
+                VkFramebufferCreateInfo framebuffer_ci = {
+                    renderPass: _renderpass.handle,
+                    attachmentCount: 1,
+                    pAttachments: &window.swapchain.views[i],
+                    width: window.swapchain.image_size.width,
+                    height: window.swapchain.image_size.height,
+                    layers: 1
+                };
+
+                _device.dispatch_table.CreateFramebuffer(framebuffer_ci, fb);
+            } 
+            break;
         }
-    }
-
-    void on_swapchain_destroy(VulkanWindow* window) {
-        wait(_device, window.fences);
-
-        foreach (fb; _framebuffers)
-            _device.dispatch_table.DestroyFramebuffer(fb);
     }
 
 private:
@@ -171,11 +162,16 @@ private:
             _device = _context.create_device(gpu);
         else
             assert(0, "No suitable GPU was detected.");
-        
-        _command_pool = create_graphics_command_pool(_device);
+
+        create_graphics_command_pool(_device, _command_pool);
 
         _vertex_shader = load_shader(_device, "shaders/vert.spv");
         _fragment_shader = load_shader(_device, "shaders/frag.spv");
+    }
+
+    void _on_swapchain_destroy(VulkanWindow* window) {
+        foreach (fb; _framebuffers)
+            _device.dispatch_table.DestroyFramebuffer(fb);
     }
 
     // TEMP

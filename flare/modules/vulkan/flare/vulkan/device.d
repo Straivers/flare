@@ -34,10 +34,10 @@ nothrow public:
     SemaphorePool semaphore_pool;
 
     // dfmt off
-    Queue compute() { return _queues[QueueType.Compute]; }
-    Queue present() { return _queues[QueueType.Present]; }
-    Queue graphics() { return _queues[QueueType.Graphics]; }
-    Queue transfer() { return _queues[QueueType.Transfer]; }
+    Queue compute()  in (gpu.queue_families[QueueType.Compute] != uint.max)  { return _queues[QueueType.Compute]; }
+    Queue present()  in (gpu.queue_families[QueueType.Present] != uint.max)  { return _queues[QueueType.Present]; }
+    Queue graphics() in (gpu.queue_families[QueueType.Graphics] != uint.max) { return _queues[QueueType.Graphics]; }
+    Queue transfer() in (gpu.queue_families[QueueType.Transfer] != uint.max) { return _queues[QueueType.Transfer]; }
     // dfmt on
 
     VkDevice handle() {
@@ -80,9 +80,9 @@ nothrow private:
                 _dispatch.GetDeviceQueue(gpu.queue_families[i], 0, _queues[i].queue);
                 _queues[i].family = gpu.queue_families[i];
             }
-        
-        fence_pool = FencePool(this, _context.memory);
-        semaphore_pool = SemaphorePool(this, _context.memory);
+
+        fence_pool = FencePool(&_dispatch, _context.memory);
+        semaphore_pool = SemaphorePool(&_dispatch, _context.memory);
     }
 }
 
@@ -130,7 +130,7 @@ private:
 VkDeviceQueueCreateInfo[] create_queue_create_infos(in VulkanGpuInfo device_info, ref ScopedArena mem) {
     import std.algorithm : count, filter, sort, uniq;
 
-    uint[device_info.queue_families.length] all_families = device_info.queue_families;
+    QueueFamilies all_families = device_info.queue_families;
     auto families = all_families[].sort().filter!(i => i != uint.max).uniq();
     auto dwcis = mem.make_array!VkDeviceQueueCreateInfo(families.save().count());
     auto priority = mem.make_array!float(1);

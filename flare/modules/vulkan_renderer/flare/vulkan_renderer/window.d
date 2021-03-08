@@ -19,16 +19,26 @@ struct VulkanFrame {
 }
 
 struct VulkanWindow {
-    enum num_virtual_frames = 3;
-
     DisplayId handle;
     VulkanRenderer renderer;
     VulkanWindowOverrides overrides;
 
-    bool out_of_date;
     Swapchain swapchain;
     VkSurfaceKHR surface;
 
+    VulkanFrameResources frames;
+    alias frames this;
+}
+
+struct VulkanWindowOverrides {
+    void* user_data;
+    OnCreate on_create;
+    OnResize on_resize;
+    OnDestroy on_destroy;
+}
+
+struct VulkanFrameResources {
+    enum num_virtual_frames = 3;
 
     size_t virtual_frame_id;
     size_t double_buffer_id;
@@ -38,13 +48,26 @@ struct VulkanWindow {
 
     VkSemaphore[num_virtual_frames] acquire_semaphores;
     VkSemaphore[num_virtual_frames] present_semaphores;
-}
 
-struct VulkanWindowOverrides {
-    void* user_data;
-    OnCreate on_create;
-    OnResize on_resize;
-    OnDestroy on_destroy;
+    void initialize(VulkanDevice device, CommandPool* command_pool) nothrow {
+        foreach (i; 0 .. num_virtual_frames) {
+            fences[i] = device.fence_pool.acquire(true);
+            acquire_semaphores[i] = device.semaphore_pool.acquire();
+            present_semaphores[i] = device.semaphore_pool.acquire();
+        }
+
+        command_pool.allocate(command_buffers);
+    }
+
+    void destroy(VulkanDevice device, CommandPool* command_pool) nothrow {
+        foreach (i; 0 .. num_virtual_frames) {
+            device.fence_pool.release(fences[i]);
+            device.semaphore_pool.release(acquire_semaphores[i]);
+            device.semaphore_pool.release(present_semaphores[i]);
+        }
+
+        command_pool.free(command_buffers);
+    }
 }
 
 DisplayId create_vulkan_window(DisplayManager manager, VulkanRenderer renderer, DisplayProperties properties) {
@@ -75,7 +98,7 @@ DisplayId create_vulkan_window(DisplayManager manager, VulkanRenderer renderer, 
 
     properties.callbacks.on_resize = (mgr, id, user_data, width, height) {
         auto window = cast(VulkanWindow*) user_data;
-        _resize_swapchain(window);
+        window.renderer.on_window_resize(window);
         window.overrides.on_resize.if_not_null(mgr, id, window.overrides.user_data, width, height);
     };
 
@@ -101,7 +124,7 @@ void get_next_frame(DisplayManager manager, DisplayId id, out VulkanFrame frame)
         frame.present = present_semaphores[virtual_frame_id];
 
         if (!acquire_next_image(renderer.device, &swapchain, frame.acquire, frame.image))
-            _resize_swapchain(window);
+            window.renderer.on_window_resize(window);
     }
 }
 
@@ -110,21 +133,9 @@ void swap_buffers(DisplayManager manager, DisplayId id) {
 
     with (window) {
         if (!flare.vulkan.swap_buffers(renderer.device, &swapchain, present_semaphores[virtual_frame_id]))
-            _resize_swapchain(window);
+            window.renderer.on_window_resize(window);
 
         double_buffer_id ^= 1;
         virtual_frame_id = (virtual_frame_id + 1) % num_virtual_frames;
-    }
-}
-
-nothrow private:
-
-void _resize_swapchain(VulkanWindow* window) {
-    wait(window.renderer.device, window.fences);
-
-    final switch (resize_swapchain2(window.renderer.device, window.surface, window.swapchain)) with (SwapchainResizeOp) {
-    case Create:    return window.renderer.on_swapchain_create(window);
-    case Destroy:   return window.renderer.on_swapchain_destroy(window);
-    case Replace:   return window.renderer.on_swapchain_resize(window);
     }
 }

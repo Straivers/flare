@@ -4,11 +4,14 @@ import flare.vulkan.device;
 import flare.vulkan.h;
 import flare.vulkan.memory;
 
-final class CommandPool {
+struct CommandPool {
 nothrow:
     ~this() {
-        _device.dispatch_table.DestroyCommandPool(handle);
+        if (handle)
+            _device.dispatch_table.DestroyCommandPool(handle);
     }
+
+    @disable this(this);
 
     VkCommandPool handle() {
         return _handle;
@@ -58,7 +61,7 @@ private:
     }
 }
 
-CommandPool create_graphics_command_pool(VulkanDevice device) nothrow {
+void create_graphics_command_pool(VulkanDevice device, ref CommandPool pool) nothrow {
     VkCommandPool handle;
     {
         VkCommandPoolCreateInfo ci = {
@@ -69,19 +72,5 @@ CommandPool create_graphics_command_pool(VulkanDevice device) nothrow {
         device.dispatch_table.CreateCommandPool(ci, handle);
     }
 
-    return new CommandPool(device, handle);
-}
-
-CommandPool create_transfer_command_pool(VulkanDevice device) nothrow {
-    VkCommandPool handle;
-    {
-        VkCommandPoolCreateInfo ci = {
-            queueFamilyIndex: device.transfer.family,
-            flags: VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT | VK_COMMAND_POOL_CREATE_TRANSIENT_BIT
-        };
-
-        device.dispatch_table.CreateCommandPool(ci, handle);
-    }
-
-    return new CommandPool(device, handle);
+    pool = CommandPool(device, handle);
 }

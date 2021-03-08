@@ -1,6 +1,6 @@
 module flare.vulkan.gpu;
 
-import flare.core.memory;
+import flare.core.memory : ScopedArena, scoped_arena, make_array, kib;
 import flare.vulkan.context;
 import flare.vulkan.h;
 

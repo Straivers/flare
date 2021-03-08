@@ -1,11 +1,10 @@
 module flare.vulkan.swapchain;
 
 import flare.core.memory;
-import flare.vulkan.commands;
 import flare.vulkan.context;
 import flare.vulkan.device;
 import flare.vulkan.h;
-import flare.vulkan.sync;
+import std.algorithm : find, min, max;
 
 nothrow:
 
@@ -95,7 +94,7 @@ enum SwapchainResizeOp {
     Replace,
 }
 
-SwapchainResizeOp resize_swapchain2(VulkanDevice device, VkSurfaceKHR surface, ref Swapchain swapchain) {
+SwapchainResizeOp resize_swapchain(VulkanDevice device, VkSurfaceKHR surface, ref Swapchain swapchain) {
     SwapchainProperties properties;
     get_swapchain_properties(device, surface, properties);
 
@@ -128,12 +127,10 @@ SwapchainResizeOp resize_swapchain2(VulkanDevice device, VkSurfaceKHR surface, r
 }
 
 void destroy_swapchain(VulkanDevice device, ref Swapchain swapchain) {
-    assert(swapchain.handle);
-
-    device.wait_idle();
-
-    _free_swapchain_images(device, swapchain);
-    device.dispatch_table.DestroySwapchainKHR(swapchain.handle);
+    if (swapchain.handle) {
+        _free_swapchain_images(device, swapchain);
+        device.dispatch_table.DestroySwapchainKHR(swapchain.handle);
+    }
     swapchain = Swapchain();
 }
 
@@ -255,26 +252,16 @@ void _free_swapchain_images(VulkanDevice device, ref Swapchain swapchain) {
 }
 
 VkSurfaceFormatKHR _select(in VkSurfaceFormatKHR[] formats) {
-    foreach (ref format; formats) {
-        if (format.format == VK_FORMAT_B8G8R8A8_SRGB && format.colorSpace == VK_COLOR_SPACE_SRGB_NONLINEAR_KHR)
-            return format;
-    }
-
-    return formats[0];
+    auto format = find!(f => f.format == VK_FORMAT_B8G8R8A8_SRGB && f.colorSpace == VK_COLOR_SPACE_SRGB_NONLINEAR_KHR)(formats);
+    return format.length > 0 ? format[0] : formats[0];
 }
 
 VkPresentModeKHR _select(in VkPresentModeKHR[] modes) {
-    foreach (mode; modes) {
-        if (mode == VK_PRESENT_MODE_MAILBOX_KHR)
-            return mode;
-    }
-
-    return VK_PRESENT_MODE_FIFO_KHR;
+    auto mode = find(modes, VK_PRESENT_MODE_MAILBOX_KHR);
+    return mode.length > 0 ? mode[0] : VK_PRESENT_MODE_FIFO_KHR;
 }
 
 VkExtent2D _image_size(in VkSurfaceCapabilitiesKHR capabilities) {
-    import std.algorithm: min, max;
-
     if (capabilities.currentExtent.width != uint.max)
         return capabilities.currentExtent;
 
@@ -287,8 +274,6 @@ VkExtent2D _image_size(in VkSurfaceCapabilitiesKHR capabilities) {
 }
 
 uint _num_images(in VkSurfaceCapabilitiesKHR capabilities) {
-    import std.algorithm: max;
-
     // If we can have as many as we like, get 3 or more images
     if (capabilities.maxImageCount == 0) 
         return max(capabilities.minImageCount, num_preferred_swap_buffers);
