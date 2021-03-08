@@ -9,7 +9,7 @@ import flare.display.display;
 version (Windows)
     import flare.display.win32;
 
-class DisplayManager {
+struct DisplayManager {
     import flare.core.os.types: OsWindow;
 
     enum max_open_displays = 64;
@@ -29,6 +29,8 @@ public nothrow:
         impl_callbacks.on_resize = &_on_resize;
         impl_callbacks.on_key = &_on_key;
     }
+
+    @disable this(this);
 
     void process_events(bool should_wait = false) {
         _os.process_events(should_wait);
@@ -119,27 +121,27 @@ protected:
 
     void _on_create(DisplayId id, void* aux_data) {
         auto display = _displays.get(id);
-        display.callbacks.try_call!"on_create"(this, id, get_user_data(id), aux_data);
+        display.callbacks.try_call!"on_create"(&this, id, get_user_data(id), aux_data);
     }
 
     void _on_close(DisplayId id) {
         auto display = _displays.get(id);
-        display.callbacks.try_call!"on_close"(this, id, get_user_data(id));
+        display.callbacks.try_call!"on_close"(&this, id, get_user_data(id));
     }
 
     void _on_destroy(DisplayId id) {
         auto display = _displays.get(id);
-        display.callbacks.try_call!"on_destroy"(this, id, get_user_data(id));
+        display.callbacks.try_call!"on_destroy"(&this, id, get_user_data(id));
     }
 
     void _on_resize(DisplayId id, ushort width, ushort height) {
         auto display = _displays.get(id);
-        display.callbacks.try_call!"on_resize"(this, id, get_user_data(id), width, height);
+        display.callbacks.try_call!"on_resize"(&this, id, get_user_data(id), width, height);
     }
 
     void _on_key(DisplayId id, KeyCode key, ButtonState state) {
         auto display = _displays.get(id);
-        display.callbacks.try_call!"on_key"(this, id, get_user_data(id), key, state);
+        display.callbacks.try_call!"on_key"(&this, id, get_user_data(id), key, state);
     }
 
 private:

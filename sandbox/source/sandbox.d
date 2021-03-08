@@ -29,20 +29,18 @@ class Sandbox : FlareApp {
 public:
     this(ref FlareAppSettings settings) {
         super(settings);
-        
-        _displays = new DisplayManager(&log, new AllocatorApi!Arena(new void[](1.mib)));
 
         {
             ContextOptions options = {
                 api_version: VkVersion(1, 2, 0),
-                memory: new AllocatorApi!BuddyAllocator(new void[](16.mib)),
+                memory: memory,
                 parent_logger: &log,
                 layers: [VK_LAYER_KHRONOS_VALIDATION_NAME],
                 extensions: VulkanRenderer.required_instance_extensions
             };
 
             _vulkan = init_vulkan(options);
-            _renderer = new VulkanRenderer(_vulkan, _displays.max_open_displays);
+            _renderer = new VulkanRenderer(_vulkan, displays.max_open_displays);
         }
     }
 
@@ -65,7 +63,7 @@ public:
                 }
             };
 
-            _display_id = create_vulkan_window(_displays, _renderer, properties);
+            _display_id = create_vulkan_window(displays, _renderer, properties);
         }
 
         {
@@ -92,21 +90,21 @@ public:
         _memory_pool.clear();
         destroy(_memory_pool);
         destroy(_device_memory);
-        destroy(_displays);
+        destroy(_renderer);
     }
 
     override void run() {
         auto device = _renderer.device;
 
-        while (_displays.is_live(_display_id)) {
-            _displays.process_events(true);
+        while (displays.is_live(_display_id)) {
+            displays.process_events(true);
 
-            if (!_displays.is_live(_display_id))
+            if (!displays.is_live(_display_id))
                 continue;
 
-            if (_displays.is_visible(_display_id)) {
+            if (displays.is_visible(_display_id)) {
                 VulkanFrame frame;
-                get_next_frame(_displays, _display_id, frame);
+                get_next_frame(displays, _display_id, frame);
                 wait_and_reset(device, frame.fence);
 
                 {
@@ -129,7 +127,7 @@ public:
                     _renderer.submit(submit_i, frame.fence);
                 }
 
-                swap_buffers(_displays, _display_id);
+                swap_buffers(displays, _display_id);
             }
         }
     }
@@ -138,7 +136,6 @@ private:
     VulkanContext _vulkan;
 
     DisplayId _display_id;
-    DisplayManager _displays;
 
     VulkanRenderer _renderer;
 

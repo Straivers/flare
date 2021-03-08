@@ -70,7 +70,7 @@ struct VulkanFrameResources {
     }
 }
 
-DisplayId create_vulkan_window(DisplayManager manager, VulkanRenderer renderer, DisplayProperties properties) {
+DisplayId create_vulkan_window(ref DisplayManager manager, VulkanRenderer renderer, DisplayProperties properties) {
     struct Overrides {
         VulkanWindowOverrides overrides;
         void* aux;
@@ -114,7 +114,7 @@ DisplayId create_vulkan_window(DisplayManager manager, VulkanRenderer renderer, 
     return manager.create(properties);
 }
 
-void get_next_frame(DisplayManager manager, DisplayId id, out VulkanFrame frame) {
+void get_next_frame(ref DisplayManager manager, DisplayId id, out VulkanFrame frame) {
     auto window = cast(VulkanWindow*) manager.get_user_data(id);
 
     with (window) {
@@ -128,7 +128,7 @@ void get_next_frame(DisplayManager manager, DisplayId id, out VulkanFrame frame)
     }
 }
 
-void swap_buffers(DisplayManager manager, DisplayId id) {
+void swap_buffers(ref DisplayManager manager, DisplayId id) {
     auto window = cast(VulkanWindow*) manager.get_user_data(id);
 
     with (window) {

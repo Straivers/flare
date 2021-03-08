@@ -59,12 +59,12 @@ struct DisplayProperties {
     void* aux_data;
 }
 
-alias OnCreate = void function(DisplayManager, DisplayId, void* user_data, void* aux_data) nothrow;
-alias OnClose = void function(DisplayManager, DisplayId, void* user_data) nothrow;
-alias OnDestroy = void function(DisplayManager, DisplayId, void* user_data) nothrow;
+alias OnCreate = void function(DisplayManager*, DisplayId, void* user_data, void* aux_data) nothrow;
+alias OnClose = void function(DisplayManager*, DisplayId, void* user_data) nothrow;
+alias OnDestroy = void function(DisplayManager*, DisplayId, void* user_data) nothrow;
 
-alias OnResize = void function(DisplayManager, DisplayId, void* user_data, ushort width, ushort height) nothrow;
-alias OnKey = void function(DisplayManager, DisplayId, void* user_data, KeyCode, ButtonState) nothrow;
+alias OnResize = void function(DisplayManager*, DisplayId, void* user_data, ushort width, ushort height) nothrow;
+alias OnKey = void function(DisplayManager*, DisplayId, void* user_data, KeyCode, ButtonState) nothrow;
 
 struct Callbacks {
     /*

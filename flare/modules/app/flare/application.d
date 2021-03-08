@@ -1,6 +1,10 @@
 module flare.application;
 
 import flare.core.logger;
+import flare.display.manager;
+
+public import flare.core.memory.measures : kib, mib, gib;
+public import flare.core.memory.allocators;
 
 enum uint flare_version_major = 0;
 enum uint flare_version_minor = 1;
@@ -10,6 +14,7 @@ struct FlareAppSettings {
     const(char)[] name = "Flare Application";
     ushort main_window_width = 1280;
     ushort main_window_height = 720;
+    Allocator main_allocator;
 }
 
 abstract class FlareApp {
@@ -19,10 +24,13 @@ abstract class FlareApp {
         log.all("Flare Engine v%s.%s.%s", flare_version_major, flare_version_minor, flare_version_patch);
 
         app_settings = settings;
+        displays = DisplayManager(&log, memory);
     }
 
     ~this() {
+        destroy(displays);
         destroy(log);
+        destroy(memory);
     }
 
     /**
@@ -35,8 +43,14 @@ abstract class FlareApp {
 
     abstract void run();
 
+    pragma(inline, true)
+    Allocator memory() {
+        return app_settings.main_allocator;
+    }
+
     Logger log;
     FlareAppSettings app_settings;
+    DisplayManager displays;
 }
 
 void run_app(App: FlareApp)(ref FlareAppSettings settings) {
