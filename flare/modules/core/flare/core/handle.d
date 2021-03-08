@@ -107,7 +107,7 @@ public:
     }
 
     size_t num_allocated() const {
-        return _first_free_slot - _freelist_length;
+        return _num_allocated;
     }
 
     Ternary owns(Handle handle) const {
@@ -136,6 +136,7 @@ public:
             static if (!is(SlotData == void))
                 emplace(slot.slot_data, args);
 
+            _num_allocated++;
             return slot.handle.handle;
         }
         return Handle();
@@ -154,6 +155,7 @@ public:
                 destroy(*slot.data_ptr);
         }
 
+        _num_allocated--;
         _deallocate_slot(slot);
     }
 
@@ -229,6 +231,8 @@ private:
 
     Allocator _base_allocator;
     _Slot[] _slots;
+
+    uint _num_allocated;
 
     uint _top;
     uint _first_free_slot;

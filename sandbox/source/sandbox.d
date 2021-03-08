@@ -55,7 +55,7 @@ public:
                 height: app_settings.main_window_height,
                 mode: DisplayMode.Windowed,
                 is_resizable: true,
-                vsync: false,
+                vsync: true,
                 callbacks: {
                     on_key: (mgr, id, usr, key, state) nothrow {
                         if (key == KeyCode.Escape && state == ButtonState.Released)
@@ -97,54 +97,51 @@ public:
         destroy(_renderer);
     }
 
-    override void run() {
-        auto device = _renderer.device;
-        auto time = get_time();
+    override void on_update(Duration dt) {
+        import std.stdio;
+        writeln("on_update: ", dt.to_msecs);
+    }
+
+    override void on_draw(Duration dt) {
+        if (!displays.is_live(_display_id))
+            return;
+        
+        if (!displays.is_visible(_display_id))
+            return;
 
         char[256] title_storage;
         auto writer = TypedWriter!char(title_storage);
+        formattedWrite(writer, "%s: %s fps", app_settings.name, 1.secs / dt);
+        displays.retitle(_display_id, writer.data);
+        writer.clear();
 
-        while (displays.is_live(_display_id)) {
-            displays.process_events();
-            
-            if (!displays.is_live(_display_id))
-                continue;
+        auto device = _renderer.device;
 
-            const old_time = time;
-            time = get_time();
-            const dt = time - old_time;
-            formattedWrite(writer, "%s: %s fps", app_settings.name, 1000 / dt.to_msecs);
-            displays.retitle(_display_id, writer.data);
-            writer.clear();
+        VulkanFrame frame;
+        get_next_frame(displays, _display_id, frame);
+        wait_and_reset(device, frame.fence);
 
-            if (displays.is_visible(_display_id)) {
-                VulkanFrame frame;
-                get_next_frame(displays, _display_id, frame);
-                wait_and_reset(device, frame.fence);
-
-                {
-                    record_preamble(device, *_renderer.rp1, frame.command_buffer, _renderer.fb(frame.image.index), frame.image.image_size);
-                    record_mesh_draw(device.dispatch_table, frame.command_buffer, _buffers, _mesh);
-                    record_postamble(device, *_renderer.rp1, frame.command_buffer);
-                }
-                {
-                    uint wait_stage = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
-                    VkSubmitInfo submit_i = {
-                        waitSemaphoreCount: 1,
-                        pWaitSemaphores: &frame.acquire,
-                        pWaitDstStageMask: &wait_stage,
-                        commandBufferCount: 1,
-                        pCommandBuffers: &frame.command_buffer,
-                        signalSemaphoreCount: 1,
-                        pSignalSemaphores: &frame.present
-                    };
-
-                    _renderer.submit(submit_i, frame.fence);
-                }
-
-                swap_buffers(displays, _display_id);
-            }
+        {
+            record_preamble(device, *_renderer.rp1, frame.command_buffer, _renderer.fb(frame.image.index), frame.image.image_size);
+            record_mesh_draw(device.dispatch_table, frame.command_buffer, _buffers, _mesh);
+            record_postamble(device, *_renderer.rp1, frame.command_buffer);
         }
+        {
+            uint wait_stage = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+            VkSubmitInfo submit_i = {
+                waitSemaphoreCount: 1,
+                pWaitSemaphores: &frame.acquire,
+                pWaitDstStageMask: &wait_stage,
+                commandBufferCount: 1,
+                pCommandBuffers: &frame.command_buffer,
+                signalSemaphoreCount: 1,
+                pSignalSemaphores: &frame.present
+            };
+
+            _renderer.submit(submit_i, frame.fence);
+        }
+
+        swap_buffers(displays, _display_id);
     }
 
 private:

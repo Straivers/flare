@@ -98,39 +98,32 @@ SwapchainResizeOp resize_swapchain(VulkanDevice device, VkSurfaceKHR surface, bo
     SwapchainProperties properties;
     get_swapchain_properties(device, surface, vsync, properties);
 
-    const is_zero_size = properties.image_size == VkExtent2D();
-    const was_zero_size = swapchain.image_size == VkExtent2D();
-
-    if (was_zero_size && !is_zero_size) {
-        assert(swapchain.handle == null);
-        swapchain.handle = _create_swapchain(device, surface, properties, swapchain.handle);
-        swapchain.properties = properties;
-        _get_swapchain_images(device, swapchain);
-        return SwapchainResizeOp.Create;
-    }
-    else if (!was_zero_size && !is_zero_size) {
-        auto old = swapchain.handle;
-        swapchain.handle = _create_swapchain(device, surface, properties, old);
-        device.dispatch_table.DestroySwapchainKHR(old);
-
-        _free_swapchain_images(device, swapchain);
-        _get_swapchain_images(device, swapchain);
-        swapchain.properties = properties;
-        return SwapchainResizeOp.Replace;
+    if (properties.image_size == VkExtent2D()) {
+        destroy_swapchain(device, swapchain);
+        return SwapchainResizeOp.Destroy;
     }
     else {
-        _free_swapchain_images(device, swapchain);
-        device.dispatch_table.DestroySwapchainKHR(swapchain.handle);
-        swapchain = Swapchain();
-        return SwapchainResizeOp.Destroy;
+        auto old_swapchain = _create_swapchain(device, surface, properties, swapchain);
+        _update_swapchain_images(device, swapchain.handle, swapchain.format, swapchain.images, swapchain.views);
+
+        if (old_swapchain == null)
+            return SwapchainResizeOp.Create;
+
+        device.dispatch_table.DestroySwapchainKHR(old_swapchain);
+        return SwapchainResizeOp.Replace;
     }
 }
 
 void destroy_swapchain(VulkanDevice device, ref Swapchain swapchain) {
-    if (swapchain.handle) {
-        _free_swapchain_images(device, swapchain);
-        device.dispatch_table.DestroySwapchainKHR(swapchain.handle);
-    }
+    assert(swapchain.handle);
+
+    foreach (view; swapchain.views)
+        device.dispatch_table.DestroyImageView(view);
+
+    device.context.memory.dispose(swapchain.views);
+    device.context.memory.dispose(swapchain.images);
+    device.dispatch_table.DestroySwapchainKHR(swapchain.handle);
+
     swapchain = Swapchain();
 }
 
@@ -187,7 +180,8 @@ bool swap_buffers(VulkanDevice device, Swapchain* swapchain, VkSemaphore present
 }
 
 private:
-VkSwapchainKHR _create_swapchain(VulkanDevice device, VkSurfaceKHR surface, in SwapchainProperties properties, VkSwapchainKHR old) {
+
+VkSwapchainKHR _create_swapchain(VulkanDevice device, VkSurfaceKHR surface, in SwapchainProperties properties, ref Swapchain swapchain) {
     VkSwapchainCreateInfoKHR ci = {
         surface: surface,
         minImageCount: properties.n_images,
@@ -200,7 +194,7 @@ VkSwapchainKHR _create_swapchain(VulkanDevice device, VkSurfaceKHR surface, in S
         preTransform: VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR,
         compositeAlpha: VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR,
         clipped: VK_TRUE,
-        oldSwapchain: old
+        oldSwapchain: swapchain.handle // possibly null
     };
 
     const uint[2] shared_queue_indices = [device.graphics.family, device.present.family];
@@ -212,46 +206,41 @@ VkSwapchainKHR _create_swapchain(VulkanDevice device, VkSurfaceKHR surface, in S
     else
         ci.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;
 
-    VkSwapchainKHR swapchain;
-    device.dispatch_table.CreateSwapchainKHR(ci, swapchain);
+    device.dispatch_table.CreateSwapchainKHR(ci, swapchain.handle);
+    swapchain.properties = properties;
 
     device.log.info("Swapchain for surface %s created; %s images in %s mode", surface, properties.n_images, properties.present_mode);
 
-    return swapchain;
+    return ci.oldSwapchain;
 }
 
-void _get_swapchain_images(VulkanDevice device, ref Swapchain swapchain) {
+void _update_swapchain_images(VulkanDevice device, VkSwapchainKHR swapchain, VkFormat format, ref VkImage[] images, ref VkImageView[] views) {
     uint count;
-    device.dispatch_table.GetSwapchainImagesKHR(swapchain.handle, count, null);
-    swapchain.images = device.context.memory.make_array!VkImage(count);
-    device.dispatch_table.GetSwapchainImagesKHR(swapchain.handle, count, swapchain.images.ptr);
+    device.dispatch_table.GetSwapchainImagesKHR(swapchain, count, null);
+    resize_array(device.context.memory, images, count);
+    device.dispatch_table.GetSwapchainImagesKHR(swapchain, count, images.ptr);
 
-    swapchain.views = device.context.memory.make_array!VkImageView(count);
-    foreach (i, ref image; swapchain.images) {
-        VkImageViewCreateInfo vci = {
-            image: image,
-            format: swapchain.format,
-            viewType: VK_IMAGE_VIEW_TYPE_2D,
-            components: VkComponentMapping(),
-            subresourceRange: {
-                aspectMask: VK_IMAGE_ASPECT_COLOR_BIT,
-                baseArrayLayer: 0,
-                baseMipLevel: 0,
-                levelCount: 1,
-                layerCount: 1
-            }
-        };
+    foreach (view; views)
+        device.dispatch_table.DestroyImageView(view);
+    resize_array(device.context.memory, views, count);
 
-        device.dispatch_table.CreateImageView(vci, swapchain.views[i]);
+    VkImageViewCreateInfo vci = {
+        format: format,
+        viewType: VK_IMAGE_VIEW_TYPE_2D,
+        components: VkComponentMapping(),
+        subresourceRange: {
+            aspectMask: VK_IMAGE_ASPECT_COLOR_BIT,
+            baseArrayLayer: 0,
+            baseMipLevel: 0,
+            levelCount: 1,
+            layerCount: 1
+        }
+    };
+
+    foreach (i, image; images) {
+        vci.image = image;
+        device.dispatch_table.CreateImageView(vci, views[i]);
     }
-}
-
-void _free_swapchain_images(VulkanDevice device, ref Swapchain swapchain) {
-    foreach (i; 0 .. swapchain.images.length)
-        device.dispatch_table.DestroyImageView(swapchain.views[i]);
-
-    device.context.memory.dispose(swapchain.views);
-    device.context.memory.dispose(swapchain.images);
 }
 
 VkSurfaceFormatKHR _select(in VkSurfaceFormatKHR[] formats) {
@@ -264,10 +253,6 @@ VkPresentModeKHR _select(in VkPresentModeKHR[] modes, bool vsync) {
         const mailbox = find(modes, VK_PRESENT_MODE_MAILBOX_KHR);
         if (mailbox.length > 0)
             return mailbox[0];
-
-        const relaxed = find(modes, VK_PRESENT_MODE_FIFO_RELAXED_KHR);
-        if (relaxed.length > 0)
-            return relaxed[0];
     }
     else {
         const immediate = find(modes, VK_PRESENT_MODE_IMMEDIATE_KHR);

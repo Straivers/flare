@@ -63,7 +63,6 @@ public nothrow:
         _sys_logger.info("Initalizing new OS window into slot %8#0x: %s (w: %s, h: %s)", id.int_value, properties.title, properties.width, properties.height);
         _os.create_window(impl_callbacks, id, properties, display.os_impl);
         _sys_logger.info("Initialization for window %8#0x completed.", id.int_value);
-
         return id;
     }
 
@@ -76,7 +75,6 @@ public nothrow:
 
         _os.destroy_window(_displays.get(id).os_impl);
         _displays.dispose(id);
-        _num_allocated--;
     }
 
     ref const(DisplayState) get_state(DisplayId id) const nothrow {
@@ -159,6 +157,5 @@ private:
     ImplCallbacks impl_callbacks;
 
     OsWindowManager _os;
-    size_t _num_allocated;
     DisplayPool _displays;
 }

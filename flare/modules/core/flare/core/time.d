@@ -1,24 +1,62 @@
 module flare.core.time;
 
+Duration msecs(double dur) {
+    return from_msecs_impl(dur);
+}
+
+Duration secs(double dur) {
+    return from_secs_impl(dur);
+}
+
 /**
  An instant in time measured using the operating system's high-resolution timer.
  */
 struct Time {
-    private long _raw_time;
+    private double _raw_time;
 
-    /// Calculates the difference between two moments in time.
-    Duration opBinary(string op = '-')(Time rhs) @safe @nogc pure nothrow {
+@safe @nogc pure nothrow:
+    Duration opBinary(string op = '-')(in Time rhs) const {
         assert(_raw_time >= rhs._raw_time);
 
         return Duration(_raw_time - rhs._raw_time);
     }
+
+    Time opBinary(string op)(Duration duration) const {
+        return Time(_raw_time + duration._raw_delta);
+    }
 }
 
 struct Duration {
-    private long _raw_delta;
+    private double _raw_delta = 0;
 
-    double to_msecs() const @safe @nogc pure nothrow {
+@safe @nogc pure nothrow:
+    double to_msecs() const {
         return to_msecs_impl(this);
+    }
+
+    Duration opBinary(string op)(Duration rhs) const if (op == "+" || op == "-") {
+        mixin("return Duration(_raw_delta " ~ op ~ " rhs._raw_delta);");
+    }
+
+    double opBinary(string op)(Duration rhs) const if (op == "*" || op == "/") {
+        mixin("return _raw_delta " ~ op ~ " rhs._raw_delta;");
+    }
+
+    Duration opBinary(string op)(double rhs) const if (op == "*" || op == "/") {
+        mixin("return Duration(_raw_delta " ~ op ~ " rhs);");
+    }
+
+    Duration opOpAssign(string op)(Duration rhs) {
+        mixin("_raw_delta " ~ op ~ "= rhs._raw_delta;");
+        return this;
+    }
+
+    int opCmp(Duration rhs) const {
+        if (_raw_delta < rhs._raw_delta)
+            return -1;
+        if (_raw_delta > rhs._raw_delta)
+            return 1;
+        return 0;
     }
 }
 
@@ -118,7 +156,7 @@ private:
 version (Windows) {
     import core.sys.windows.windows;
 
-    immutable long perf_counter_frequency_hz;
+    immutable double perf_counter_frequency_hz;
     immutable real perf_counter_frequency_msecs;
 
     shared static this() {
@@ -126,7 +164,6 @@ version (Windows) {
         if (!QueryPerformanceFrequency(&hz))
             assert(false, "Failed to determine system timer frequency.");
         perf_counter_frequency_hz = hz;
-        
         perf_counter_frequency_msecs = real(perf_counter_frequency_hz) / 1000;
     }
 
@@ -143,6 +180,14 @@ version (Windows) {
 
     double to_msecs_impl(Duration d) @safe @nogc pure nothrow {
         return d._raw_delta / perf_counter_frequency_msecs;
+    }
+
+    Duration from_msecs_impl(double d) {
+        return Duration(d * perf_counter_frequency_msecs);
+    }
+
+    Duration from_secs_impl(double d) {
+        return Duration(d * perf_counter_frequency_hz);
     }
 
     TimeStamp get_timestamp_impl() @trusted @nogc nothrow {
