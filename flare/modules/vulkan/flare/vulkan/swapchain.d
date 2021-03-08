@@ -65,7 +65,7 @@ struct SwapchainImage {
     VkExtent2D image_size;
 }
 
-void get_swapchain_properties(VulkanDevice device, VkSurfaceKHR surface, out SwapchainProperties result) {
+void get_swapchain_properties(VulkanDevice device, VkSurfaceKHR surface, bool vsync, out SwapchainProperties result) {
     auto mem = scoped_arena(device.context.memory);
 
     VkSurfaceCapabilitiesKHR capabilities;
@@ -85,7 +85,7 @@ void get_swapchain_properties(VulkanDevice device, VkSurfaceKHR surface, out Swa
     result.image_size = _image_size(capabilities);
     result.format = _select(formats).format;
     result.color_space = _select(formats).colorSpace;
-    result.present_mode = _select(modes);
+    result.present_mode = _select(modes, vsync);
 }
 
 enum SwapchainResizeOp {
@@ -94,9 +94,9 @@ enum SwapchainResizeOp {
     Replace,
 }
 
-SwapchainResizeOp resize_swapchain(VulkanDevice device, VkSurfaceKHR surface, ref Swapchain swapchain) {
+SwapchainResizeOp resize_swapchain(VulkanDevice device, VkSurfaceKHR surface, bool vsync, ref Swapchain swapchain) {
     SwapchainProperties properties;
-    get_swapchain_properties(device, surface, properties);
+    get_swapchain_properties(device, surface, vsync, properties);
 
     const is_zero_size = properties.image_size == VkExtent2D();
     const was_zero_size = swapchain.image_size == VkExtent2D();
@@ -214,6 +214,9 @@ VkSwapchainKHR _create_swapchain(VulkanDevice device, VkSurfaceKHR surface, in S
 
     VkSwapchainKHR swapchain;
     device.dispatch_table.CreateSwapchainKHR(ci, swapchain);
+
+    device.log.info("Swapchain for surface %s created; %s images in %s mode", surface, properties.n_images, properties.present_mode);
+
     return swapchain;
 }
 
@@ -256,9 +259,23 @@ VkSurfaceFormatKHR _select(in VkSurfaceFormatKHR[] formats) {
     return format.length > 0 ? format[0] : formats[0];
 }
 
-VkPresentModeKHR _select(in VkPresentModeKHR[] modes) {
-    auto mode = find(modes, VK_PRESENT_MODE_MAILBOX_KHR);
-    return mode.length > 0 ? mode[0] : VK_PRESENT_MODE_FIFO_KHR;
+VkPresentModeKHR _select(in VkPresentModeKHR[] modes, bool vsync) {
+    if (vsync) {
+        const mailbox = find(modes, VK_PRESENT_MODE_MAILBOX_KHR);
+        if (mailbox.length > 0)
+            return mailbox[0];
+
+        const relaxed = find(modes, VK_PRESENT_MODE_FIFO_RELAXED_KHR);
+        if (relaxed.length > 0)
+            return relaxed[0];
+    }
+    else {
+        const immediate = find(modes, VK_PRESENT_MODE_IMMEDIATE_KHR);
+        if (immediate.length > 0)
+            return immediate[0];   
+    }
+
+    return VK_PRESENT_MODE_FIFO_KHR;
 }
 
 VkExtent2D _image_size(in VkSurfaceCapabilitiesKHR capabilities) {

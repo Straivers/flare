@@ -98,7 +98,7 @@ DisplayId create_vulkan_window(ref DisplayManager manager, VulkanRenderer render
 
     properties.callbacks.on_resize = (mgr, id, user_data, width, height) {
         auto window = cast(VulkanWindow*) user_data;
-        window.renderer.on_window_resize(window);
+        window.renderer.on_window_resize(window, mgr.get_state(id).vsync);
         window.overrides.on_resize.if_not_null(mgr, id, window.overrides.user_data, width, height);
     };
 
@@ -124,7 +124,7 @@ void get_next_frame(ref DisplayManager manager, DisplayId id, out VulkanFrame fr
         frame.present = present_semaphores[virtual_frame_id];
 
         if (!acquire_next_image(renderer.device, &swapchain, frame.acquire, frame.image))
-            window.renderer.on_window_resize(window);
+            window.renderer.on_window_resize(window, manager.get_state(id).vsync);
     }
 }
 
@@ -133,7 +133,7 @@ void swap_buffers(ref DisplayManager manager, DisplayId id) {
 
     with (window) {
         if (!flare.vulkan.swap_buffers(renderer.device, &swapchain, present_semaphores[virtual_frame_id]))
-            window.renderer.on_window_resize(window);
+            window.renderer.on_window_resize(window, manager.get_state(id).vsync);
 
         double_buffer_id ^= 1;
         virtual_frame_id = (virtual_frame_id + 1) % num_virtual_frames;

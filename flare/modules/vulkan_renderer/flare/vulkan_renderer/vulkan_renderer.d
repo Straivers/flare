@@ -85,10 +85,10 @@ nothrow:
         _windows.dispose(window);
     }
 
-    void on_window_resize(VulkanWindow* window) {
+    void on_window_resize(VulkanWindow* window, bool vsync) {
         wait(_device, window.fences);
 
-        final switch (resize_swapchain(_device, window.surface, window.swapchain)) {
+        final switch (resize_swapchain(_device, window.surface, vsync, window.swapchain)) {
         case SwapchainResizeOp.Create:
             if (_renderpass.handle && _renderpass.swapchain_attachment.format != window.swapchain.format) {
                 destroy_renderpass(_device, _renderpass);

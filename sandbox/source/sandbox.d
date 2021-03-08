@@ -55,6 +55,7 @@ public:
                 height: app_settings.main_window_height,
                 mode: DisplayMode.Windowed,
                 is_resizable: true,
+                vsync: false,
                 callbacks: {
                     on_key: (mgr, id, usr, key, state) nothrow {
                         if (key == KeyCode.Escape && state == ButtonState.Released)

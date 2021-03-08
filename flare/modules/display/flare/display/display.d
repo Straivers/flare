@@ -50,6 +50,7 @@ struct DisplayProperties {
     ushort width;
     ushort height;
     bool is_resizable;
+    bool vsync;
     DisplayMode mode;
     CursorIcon cursor_icon;
 
@@ -114,8 +115,9 @@ struct Callbacks {
 
 struct DisplayState {
     DisplayMode mode;
-    bool is_close_requested;
+    bool vsync;
     bool has_cursor;
+    bool is_close_requested;
     ushort width;
     ushort height;
 }

@@ -57,6 +57,7 @@ public nothrow:
         auto display = _displays.get(id);
         display.callbacks = properties.callbacks;
         display.user_data = properties.user_data;
+        display.state.vsync = properties.vsync;
 
         _sys_logger.info("Initalizing new OS window into slot %8#0x: %s (w: %s, h: %s)", id.int_value, properties.title, properties.width, properties.height);
         _os.create_window(impl_callbacks, id, properties, display.os_impl);
