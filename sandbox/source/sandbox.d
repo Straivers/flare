@@ -54,10 +54,10 @@ public:
                 height: app_settings.main_window_height,
                 mode: WindowMode.Windowed,
                 is_resizable: true,
-                vsync: true,
             };
 
-            _window_id = create_vulkan_window(os.windows, _renderer, properties);
+            _window_id = os.windows.create_window(properties);
+            _swapchain = _renderer.create_swapchain(os.windows.get_os_handle(_window_id), true);
         }
 
         {
@@ -98,8 +98,15 @@ public:
             }
         }
 
-        if (os.windows.get_state(_window_id).is_close_requested) {
+        const state = os.windows.get_state(_window_id);
+
+        if (state.width != _swapchain.swapchain.image_size.width || state.height != _swapchain.swapchain.image_size.height) {
+            _renderer.resize_swapchain(_swapchain);
+        }
+
+        if (state.is_close_requested) {
             os.windows.destroy_window(_window_id);
+            _renderer.destroy_swapchain(_swapchain);
             return;
         }
     }
@@ -120,7 +127,7 @@ public:
         auto device = _renderer.device;
 
         VulkanFrame frame;
-        get_next_frame(os.windows, _window_id, frame);
+        get_next_frame(_swapchain, frame);
         wait_and_reset(device, frame.fence);
 
         {
@@ -143,7 +150,7 @@ public:
             _renderer.submit(submit_i, frame.fence);
         }
 
-        swap_buffers(os.windows, _window_id);
+        _renderer.present_swapchain(_swapchain);
     }
 
 private:
@@ -152,6 +159,7 @@ private:
     WindowId _window_id;
 
     VulkanRenderer _renderer;
+    VulkanSwapchain* _swapchain;
 
     RawDeviceMemoryAllocator _device_memory;
     LinearPool _memory_pool;

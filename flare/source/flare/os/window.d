@@ -54,54 +54,12 @@ struct WindowProperties {
     ushort width;
     ushort height;
     bool is_resizable;
-    bool vsync;
+
     WindowMode mode;
     CursorIcon cursor_icon;
 
-    Callbacks callbacks;
-
     CheckedVoidPtr user_data;
     CheckedVoidPtr aux_data;
-}
-
-alias OnCreate = void function(OsWindowManager, WindowId, CheckedVoidPtr user_data, CheckedVoidPtr aux_data) nothrow;
-alias OnDestroy = void function(OsWindowManager, WindowId, CheckedVoidPtr user_data) nothrow;
-
-alias OnResize = void function(OsWindowManager, WindowId, CheckedVoidPtr user_data, ushort width, ushort height) nothrow;
-
-struct Callbacks {
-    /*
-    NOTE:
-        To add a new callback:
-            1) Create a new alias type for the callback function.
-            2) Add a pointer of that type to the `Callbacks` struct called `$callback_name$`.
-            3) Add a handler called `_$callback_name$(WindowId, Args...)`.
-            4) Add a delegate of the same type to `ImplCallbacks` for each OS implementation.
-            5) Add a case in the OS layer to call the delegate callback.
-            6) Add `WindowManager._$callback_name$(WindowId, Args...)` to the impl callbacks.
-            5) Update any sublcasses that need to make use of the callback.
-    */
-
-    /**
-    Callback called during window creation. This callback will be called after
-    the window has been created, and before the window is visible.
-    */
-    OnCreate on_create;
-
-    /**
-    Callback called during window destruction. This callback will be called
-    before the window is destroyed.
-    */
-    OnDestroy on_destroy;
-
-    /**
-    Callback called during window resizing.
-    */
-    OnResize on_resize;
-
-    void try_call(string name, Args...)(Args args) {
-        mixin("if(" ~ name ~ ") " ~ name ~ "(args);");
-    }
 }
 
 struct WindowState {

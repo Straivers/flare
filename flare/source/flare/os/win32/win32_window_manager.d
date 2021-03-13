@@ -21,7 +21,6 @@ struct Win32Window {
 
     HWND hwnd;
     WindowState state;
-    Callbacks callbacks;
     CheckedVoidPtr user_data;
 
     CursorIcon cursor_icon;
@@ -98,10 +97,6 @@ final class Win32WindowManager : OsWindowManager {
         window.id = id;
         window.manager = this;
         window.user_data = properties.user_data;
-        window.callbacks = properties.callbacks;
-
-        // TODO: Move to swapchain instead
-        window.state.vsync = properties.vsync;
 
         {
             auto style = WS_OVERLAPPEDWINDOW;
@@ -175,9 +170,6 @@ extern (Windows) LRESULT _window_procedure(HWND hwnd, uint msg, WPARAM wp, LPARA
         SetWindowLongPtr(hwnd, GWLP_USERDATA, cast(LONG_PTR) ci.window);
 
         ci.window.hwnd = hwnd;
-        with (ci.window)
-            if (callbacks.on_create)
-                callbacks.on_create(manager, id, user_data, ci.aux);
         return TRUE;
     }
 
@@ -202,8 +194,6 @@ extern (Windows) LRESULT _window_procedure(HWND hwnd, uint msg, WPARAM wp, LPARA
 
             state.width = LOWORD(lp);
             state.height = HIWORD(lp);
-            if (callbacks.on_resize)
-                callbacks.on_resize(manager, id, user_data, state.width, state.height);
         }
         return 0;
 
@@ -213,8 +203,6 @@ extern (Windows) LRESULT _window_procedure(HWND hwnd, uint msg, WPARAM wp, LPARA
 
     case WM_DESTROY:
         manager._destroy(id);
-        if (callbacks.on_destroy)
-            callbacks.on_destroy(manager, id, user_data);
         return 0;
 
     case WM_MOUSEMOVE:

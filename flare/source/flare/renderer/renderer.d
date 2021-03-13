@@ -5,7 +5,6 @@ struct SwapchainId {
 }
 
 interface Renderer {
-    enum max_swapchains = 64;
 
 nothrow:
     /**

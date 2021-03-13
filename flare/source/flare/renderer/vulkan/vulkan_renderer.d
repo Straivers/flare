@@ -3,7 +3,7 @@ module flare.renderer.vulkan.vulkan_renderer;
 import flare.memory;
 import flare.renderer.renderer;
 import flare.renderer.vulkan.api;
-import flare.renderer.vulkan.window;
+import flare.renderer.vulkan.swapchain;
 import flare.util.object_pool;
 
 // TEMP
@@ -24,9 +24,9 @@ final class VulkanRenderer {
     ];
 
 nothrow:
-    this(VulkanContext context, size_t max_windows) {
+    this(VulkanContext context, size_t max_swapchains) {
         _context = context;
-        _windows = ObjectPool!VulkanWindow(_context.memory, max_windows);
+        _swapchains = ObjectPool!VulkanSwapchain(_context.memory, max_swapchains);
     }
 
     ~this() {
@@ -38,7 +38,7 @@ nothrow:
         if (_device)
             destroy(_device);
 
-        destroy(_windows);
+        destroy(_swapchains);
     }
 
     VulkanDevice device() {
@@ -60,44 +60,44 @@ nothrow:
     }
     // TEMP
 
-    VulkanWindow* on_window_create(WindowId id, ref VulkanWindowOverrides overrides, void* hwnd) {
-        auto window = _windows.make(id, this, overrides);
-        window.surface = create_surface(_context, hwnd);
+    VulkanSwapchain* create_swapchain(void* hwnd, bool vsync) {
+        auto swapchain = _swapchains.make(this, vsync);
+        swapchain.surface = create_surface(_context, hwnd);
         // Swapchain creation handled on first resize operation.
 
         if (!_device)
-            _initialize(window.surface);
+            _initialize(swapchain.surface);
 
-        window.frames.initialize(_device, &_command_pool);
-        return window;
+        swapchain.frames.initialize(_device, &_command_pool);
+        return swapchain;
     }
 
-    void on_window_destroy(VulkanWindow* window) {
-        wait(_device, window.fences);
+    void destroy_swapchain(VulkanSwapchain* swapchain) {
+        wait(_device, swapchain.fences);
 
-        window.frames.destroy(_device, &_command_pool);
+        swapchain.frames.destroy(_device, &_command_pool);
 
-        destroy_swapchain(_device, window.swapchain);
-        _on_swapchain_destroy(window);
+        flare.renderer.vulkan.api.destroy_swapchain(_device, swapchain.swapchain);
+        _on_swapchain_destroy(swapchain);
 
-        vkDestroySurfaceKHR(_context.instance, window.surface, null);
+        vkDestroySurfaceKHR(_context.instance, swapchain.surface, null);
 
-        _windows.dispose(window);
+        _swapchains.dispose(swapchain);
     }
 
-    void on_window_resize(VulkanWindow* window, bool vsync) {
-        wait(_device, window.fences);
+    void resize_swapchain(VulkanSwapchain* swapchain) {
+        wait(_device, swapchain.fences);
 
-        final switch (resize_swapchain(_device, window.surface, vsync, window.swapchain)) {
+        final switch (flare.renderer.vulkan.api.resize_swapchain(_device, swapchain.surface, swapchain.vsync, swapchain.swapchain)) {
         case SwapchainResizeOp.Create:
-            if (_renderpass.handle && _renderpass.swapchain_attachment.format != window.swapchain.format) {
+            if (_renderpass.handle && _renderpass.swapchain_attachment.format != swapchain.swapchain.format) {
                 destroy_renderpass(_device, _renderpass);
             }
 
             if (!_renderpass.handle) {
                 const VkVertexInputAttributeDescription[2] attrs = Vertex.attribute_descriptions;
                 RenderPassSpec rps = {
-                    swapchain_attachment: AttachmentSpec(window.swapchain.format, [0, 0, 0, 1]),
+                    swapchain_attachment: AttachmentSpec(swapchain.swapchain.format, [0, 0, 0, 1]),
                     vertex_shader: _vertex_shader,
                     fragment_shader: _fragment_shader,
                     bindings: Vertex.binding_description,
@@ -107,14 +107,14 @@ nothrow:
                 create_renderpass_1(_device, rps, _renderpass);
             }
 
-            _framebuffers = _context.memory.make_array!VkFramebuffer(window.swapchain.images.length);
+            _framebuffers = _context.memory.make_array!VkFramebuffer(swapchain.swapchain.images.length);
             foreach (i, ref fb; _framebuffers) {
                 VkFramebufferCreateInfo framebuffer_ci = {
                     renderPass: _renderpass.handle,
                     attachmentCount: 1,
-                    pAttachments: &window.swapchain.views[i],
-                    width: window.swapchain.image_size.width,
-                    height: window.swapchain.image_size.height,
+                    pAttachments: &swapchain.swapchain.views[i],
+                    width: swapchain.swapchain.image_size.width,
+                    height: swapchain.swapchain.image_size.height,
                     layers: 1
                 };
 
@@ -123,11 +123,11 @@ nothrow:
             break;
 
         case SwapchainResizeOp.Destroy:
-            _on_swapchain_destroy(window);
+            _on_swapchain_destroy(swapchain);
             break;
 
         case SwapchainResizeOp.Replace:
-            assert(window.swapchain.n_images == _framebuffers.length);
+            assert(swapchain.swapchain.n_images == _framebuffers.length);
 
             foreach (fb; _framebuffers)
                 _device.dispatch_table.DestroyFramebuffer(fb);
@@ -136,9 +136,9 @@ nothrow:
                 VkFramebufferCreateInfo framebuffer_ci = {
                     renderPass: _renderpass.handle,
                     attachmentCount: 1,
-                    pAttachments: &window.swapchain.views[i],
-                    width: window.swapchain.image_size.width,
-                    height: window.swapchain.image_size.height,
+                    pAttachments: &swapchain.swapchain.views[i],
+                    width: swapchain.swapchain.image_size.width,
+                    height: swapchain.swapchain.image_size.height,
                     layers: 1
                 };
 
@@ -146,6 +146,14 @@ nothrow:
             } 
             break;
         }
+    }
+
+    void present_swapchain(VulkanSwapchain* swapchain) {
+        if (!swap_buffers(_device, &swapchain.swapchain, swapchain.present_semaphores[swapchain.virtual_frame_id]))
+            resize_swapchain(swapchain);
+
+        swapchain.double_buffer_id ^= 1;
+        swapchain.virtual_frame_id = (swapchain.virtual_frame_id + 1) % swapchain.num_virtual_frames;
     }
 
 private:
@@ -169,7 +177,7 @@ private:
         _fragment_shader = load_shader(_device, "shaders/frag.spv");
     }
 
-    void _on_swapchain_destroy(VulkanWindow* window) {
+    void _on_swapchain_destroy(VulkanSwapchain* window) {
         foreach (fb; _framebuffers)
             _device.dispatch_table.DestroyFramebuffer(fb);
     }
@@ -185,5 +193,5 @@ private:
     VulkanDevice _device;
     CommandPool _command_pool;
 
-    ObjectPool!VulkanWindow _windows;
+    ObjectPool!VulkanSwapchain _swapchains;
 }
