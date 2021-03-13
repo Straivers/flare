@@ -201,8 +201,6 @@ struct Logger {
         if (level > 0 && level < _level)
             return;
 
-        char[LogEvent.max_message_length] msgbuf;
-
         auto event = LogEvent(get_timestamp(), level, mod, line, func);
         auto writer = TypedWriter!char(event.message);
 

@@ -3,10 +3,10 @@ module flare.os.win32.win32_window;
 version (Windows):
 
 import core.sys.windows.windows;
-import flare.os.types : OsWindow;
-import flare.util.checked_pointer : CheckedVoidPtr;
-import flare.os.window;
 import flare.os.input;
+import flare.os.types : OsWindow;
+import flare.os.window;
+import flare.util.checked_pointer : CheckedVoidPtr;
 
 pragma(lib, "gdi32");
 pragma(lib, "user32");

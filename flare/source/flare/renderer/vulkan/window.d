@@ -1,12 +1,12 @@
 module flare.renderer.vulkan.window;
 
-import flare.memory: ObjectPool;
-import flare.util.functions: if_not_null;
-import flare.util.checked_pointer : CheckedVoidPtr;
-import flare.renderer.vulkan.api;
 import flare.os.window;
 import flare.os.window_manager;
+import flare.renderer.vulkan.api;
 import flare.renderer.vulkan.vulkan_renderer;
+import flare.util.checked_pointer : CheckedVoidPtr;
+import flare.util.functions : if_not_null;
+import flare.util.object_pool : ObjectPool;
 
 public import flare.os.window: WindowId, CursorIcon, WindowMode, WindowProperties, WindowState;
 

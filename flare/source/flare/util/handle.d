@@ -1,6 +1,6 @@
 module flare.util.handle;
 
-import flare.math.util : min, max;
+import flare.math.util : max, min;
 import flare.memory;
 import flare.memory.allocators.common;
 import std.traits : hasElaborateDestructor;

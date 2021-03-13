@@ -1,7 +1,7 @@
 module flare.application;
 
 import flare.logger;
-import flare.os: get_time, Duration, secs;
+import flare.os : Duration, get_time, secs;
 import flare.os.window_manager : WindowManager;
 
 public import flare.memory.measures : kib, mib, gib;

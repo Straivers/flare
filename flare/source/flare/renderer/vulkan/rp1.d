@@ -17,7 +17,7 @@ struct RenderPassSpec {
     VkShaderModule fragment_shader;
 
     VkVertexInputBindingDescription bindings;
-    VkVertexInputAttributeDescription[] attributes;
+    const(VkVertexInputAttributeDescription)[] attributes;
 }
 
 struct FrameResources {
@@ -152,7 +152,7 @@ void create_renderpass_1(VulkanDevice device, ref RenderPassSpec spec, out Rende
         };
 
         
-        VkDynamicState[2] dynamic_states = [VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR];
+        const VkDynamicState[2] dynamic_states = [VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR];
         VkPipelineDynamicStateCreateInfo dynamic_state = {
             dynamicStateCount: cast(uint) dynamic_states.length,
             pDynamicStates: dynamic_states.ptr

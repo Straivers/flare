@@ -1,8 +1,8 @@
 module flare.renderer.vulkan.buffer;
 
-import flare.util.handle: Handle32, HandlePool;
-import flare.memory: Allocator;
+import flare.memory : Allocator;
 import flare.renderer.vulkan.api;
+import flare.util.handle : Handle32, HandlePool;
 
 enum buffer_handle_name = "vulkan_buffer_handle_name";
 alias BufferHandle = Handle32!buffer_handle_name;
@@ -68,7 +68,7 @@ uint get_type_index(RawDeviceMemoryAllocator* allocator, DeviceHeap heap, Buffer
 
 struct BufferManager {
     import flare.math.util : round_to_next;
-    import flare.memory.allocators.pool: ObjectPool;
+    import flare.util.object_pool: ObjectPool;
 
     enum max_live_buffers = ushort.max + 1;
 

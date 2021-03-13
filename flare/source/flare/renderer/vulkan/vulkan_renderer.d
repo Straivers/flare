@@ -1,10 +1,11 @@
 module flare.renderer.vulkan.vulkan_renderer;
 
-import flare.renderer.renderer;
 import flare.memory;
-import flare.os.types: OsWindow;
+import flare.os.types : OsWindow;
+import flare.renderer.renderer;
 import flare.renderer.vulkan.api;
 import flare.renderer.vulkan.window;
+import flare.util.object_pool;
 
 // TEMP
 import flare.renderer.vulkan.mesh;
@@ -95,7 +96,7 @@ nothrow:
             }
 
             if (!_renderpass.handle) {
-                VkVertexInputAttributeDescription[2] attrs = Vertex.attribute_descriptions;
+                const VkVertexInputAttributeDescription[2] attrs = Vertex.attribute_descriptions;
                 RenderPassSpec rps = {
                     swapchain_attachment: AttachmentSpec(window.swapchain.format, [0, 0, 0, 1]),
                     vertex_shader: _vertex_shader,

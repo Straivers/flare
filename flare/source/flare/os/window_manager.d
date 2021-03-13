@@ -1,11 +1,11 @@
 module flare.os.window_manager;
 
-import flare.util.handle : HandlePool;
 import flare.logger : Logger;
 import flare.memory : Allocator, Ternary;
-import flare.util.checked_pointer : CheckedVoidPtr;
-import flare.os.window;
 import flare.os.input : ButtonState, KeyCode;
+import flare.os.window;
+import flare.util.checked_pointer : CheckedVoidPtr;
+import flare.util.handle : HandlePool;
 
 version (Windows)
     import flare.os.win32.win32_window;

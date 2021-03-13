@@ -1,9 +1,9 @@
 module flare.os.window;
 
-import flare.util.handle : Handle32;
-import flare.util.checked_pointer : CheckedVoidPtr;
 import flare.os.input;
 import flare.os.window_manager;
+import flare.util.checked_pointer : CheckedVoidPtr;
+import flare.util.handle : Handle32;
 
 /// The icon over the cursor. User defiend icons are currently not supported,
 /// and using those flags will cause an error.

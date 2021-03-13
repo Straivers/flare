@@ -1,9 +1,9 @@
 module flare.util.array;
 
 import flare.math.util : max;
-import flare.memory : Allocator, make_array, resize_array, dispose;
+import flare.memory : Allocator, dispose, make_array, resize_array;
 import std.algorithm : move;
-import std.traits: hasElaborateDestructor;
+import std.traits : hasElaborateDestructor;
 
 struct Array(T) {
     enum default_initial_size = 8;

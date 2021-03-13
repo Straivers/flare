@@ -2,12 +2,12 @@ module sandbox;
 
 import flare.application;
 import flare.math.vector;
-import flare.renderer.vulkan.api;
 import flare.memory;
-import flare.renderer.vulkan;
 import flare.os.input;
-import flare.os.window;
 import flare.os.time;
+import flare.os.window;
+import flare.renderer.vulkan;
+import flare.renderer.vulkan.api;
 import flare.util.buffer_writer;
 import std.format;
 
@@ -99,8 +99,6 @@ public:
     }
 
     override void on_update(Duration dt) {
-        import std.stdio;
-        writeln("on_update: ", dt.to_msecs);
     }
 
     override void on_draw(Duration dt) {
