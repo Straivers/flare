@@ -2,7 +2,7 @@ module flare.renderer.vulkan.buffer;
 
 import flare.memory : Allocator;
 import flare.renderer.vulkan.api;
-import flare.util.handle : Handle32, HandlePool;
+import flare.util.handle_pool : Handle32, HandlePool;
 
 enum buffer_handle_name = "vulkan_buffer_handle_name";
 alias BufferHandle = Handle32!buffer_handle_name;

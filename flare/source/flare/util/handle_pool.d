@@ -1,4 +1,4 @@
-module flare.util.handle;
+module flare.util.handle_pool;
 
 import flare.math.util : max, min;
 import flare.memory;

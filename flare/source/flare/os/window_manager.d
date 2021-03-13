@@ -5,7 +5,7 @@ import flare.memory : Allocator, Ternary;
 import flare.os.input : ButtonState, KeyCode;
 import flare.os.window;
 import flare.util.checked_pointer : CheckedVoidPtr;
-import flare.util.handle : HandlePool;
+import flare.util.handle_pool : HandlePool;
 
 version (Windows)
     import flare.os.win32.win32_window;
