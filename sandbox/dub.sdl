@@ -4,7 +4,7 @@ authors "David Zhang"
 copyright "Copyright © 2020, David Zhang"
 license "proprietary"
 
-dependency "flare:app" path="../flare"
+dependency "flare" path="../flare"
 
 targetType "executable"
 targetPath "build"
