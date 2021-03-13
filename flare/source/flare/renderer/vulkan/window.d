@@ -4,10 +4,11 @@ import flare.memory: ObjectPool;
 import flare.util.functions: if_not_null;
 import flare.util.checked_pointer : CheckedVoidPtr;
 import flare.renderer.vulkan.api;
-import flare.os.display;
+import flare.os.window;
+import flare.os.window_manager;
 import flare.renderer.vulkan.vulkan_renderer;
 
-public import flare.os.display: DisplayId, CursorIcon, DisplayMode, DisplayProperties, DisplayState;
+public import flare.os.window: WindowId, CursorIcon, WindowMode, WindowProperties, WindowState;
 
 struct VulkanFrame {
     SwapchainImage image;
@@ -20,7 +21,7 @@ struct VulkanFrame {
 }
 
 struct VulkanWindow {
-    DisplayId handle;
+    WindowId handle;
     VulkanRenderer renderer;
     VulkanWindowOverrides overrides;
 
@@ -71,7 +72,7 @@ struct VulkanFrameResources {
     }
 }
 
-DisplayId create_vulkan_window(ref DisplayManager manager, VulkanRenderer renderer, DisplayProperties properties) {
+WindowId create_vulkan_window(ref WindowManager manager, VulkanRenderer renderer, WindowProperties properties) {
     struct Overrides {
         VulkanWindowOverrides overrides;
         CheckedVoidPtr aux;
@@ -115,7 +116,7 @@ DisplayId create_vulkan_window(ref DisplayManager manager, VulkanRenderer render
     return manager.create(properties);
 }
 
-void get_next_frame(ref DisplayManager manager, DisplayId id, out VulkanFrame frame) {
+void get_next_frame(ref WindowManager manager, WindowId id, out VulkanFrame frame) {
     auto window = manager.get_user_data(id).get!VulkanWindow();
 
     with (window) {
@@ -129,7 +130,7 @@ void get_next_frame(ref DisplayManager manager, DisplayId id, out VulkanFrame fr
     }
 }
 
-void swap_buffers(ref DisplayManager manager, DisplayId id) {
+void swap_buffers(ref WindowManager manager, WindowId id) {
     auto window = manager.get_user_data(id).get!VulkanWindow();
 
     with (window) {

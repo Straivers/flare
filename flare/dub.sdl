@@ -3,4 +3,6 @@ description "A minimal D application."
 authors "David"
 copyright "Copyright © 2020, David"
 license "proprietary"
+
+targetPath "build/"
 dependency "erupted" version="~>2.1.12"

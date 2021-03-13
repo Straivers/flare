@@ -60,7 +60,7 @@ nothrow:
     }
     // TEMP
 
-    VulkanWindow* on_window_create(DisplayId id, ref VulkanWindowOverrides overrides, OsWindow hwnd) {
+    VulkanWindow* on_window_create(WindowId id, ref VulkanWindowOverrides overrides, OsWindow hwnd) {
         auto window = _windows.make(id, this, overrides);
         window.surface = create_surface(_context, hwnd);
         // Swapchain creation handled on first resize operation.

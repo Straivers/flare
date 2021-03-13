@@ -5,7 +5,8 @@ import flare.math.vector;
 import flare.renderer.vulkan.api;
 import flare.memory;
 import flare.renderer.vulkan;
-import flare.os.display;
+import flare.os.input;
+import flare.os.window;
 import flare.os.time;
 import flare.util.buffer_writer;
 import std.format;
@@ -49,11 +50,11 @@ public:
 
     override void on_init() {
         {
-            DisplayProperties properties = {
+            WindowProperties properties = {
                 title: app_settings.name,
                 width: app_settings.main_window_width,
                 height: app_settings.main_window_height,
-                mode: DisplayMode.Windowed,
+                mode: WindowMode.Windowed,
                 is_resizable: true,
                 vsync: true,
                 callbacks: {
@@ -147,7 +148,7 @@ public:
 private:
     VulkanContext _vulkan;
 
-    DisplayId _display_id;
+    WindowId _display_id;
 
     VulkanRenderer _renderer;
 

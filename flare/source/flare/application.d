@@ -1,8 +1,8 @@
 module flare.application;
 
 import flare.logger;
-import flare.os.time;
-import flare.os.display.manager;
+import flare.os: get_time, Duration, secs;
+import flare.os.window_manager : WindowManager;
 
 public import flare.memory.measures : kib, mib, gib;
 public import flare.memory.allocators;
@@ -26,7 +26,7 @@ abstract class FlareApp {
         log.all("Flare Engine v%s.%s.%s", flare_version_major, flare_version_minor, flare_version_patch);
 
         app_settings = settings;
-        displays = DisplayManager(&log, memory);
+        displays = WindowManager(&log, memory);
         tick_time = 1.secs / app_settings.tick_frequency;
     }
 
@@ -76,7 +76,7 @@ abstract class FlareApp {
 
     Logger log;
     FlareAppSettings app_settings;
-    DisplayManager displays;
+    WindowManager displays;
     Duration tick_time;
 }
 
