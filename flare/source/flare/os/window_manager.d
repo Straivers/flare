@@ -156,6 +156,6 @@ private:
 
     ImplCallbacks impl_callbacks;
 
-    OsWindowManager _os;
+    Win32WindowManager_old _os;
     DisplayPool _displays;
 }

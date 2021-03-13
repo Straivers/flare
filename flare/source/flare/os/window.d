@@ -122,3 +122,61 @@ struct WindowState {
     ushort width;
     ushort height;
 }
+
+interface OsWindowManager {
+    /// Processes all events pending since last call.
+    void poll_events();
+
+    /// Causes the thread to block and wait until an event is queued.
+    void wait_events();
+
+    /// The number of open windows.
+    size_t num_windows();
+
+    /// The maximum number of windows that may be open at any time.
+    size_t max_windows();
+
+    /// Checks if the window exists.
+    bool is_open(WindowId);
+
+    /// Gets the operating system handle for a window. It is invalid to call
+    /// this function with an invalid `WindowId`.
+    void* get_os_handle(WindowId);
+
+    /// Gets the user-specified pointer associated with the window. It is
+    /// invalid to call this function with an invalid `WindowId`.
+    CheckedVoidPtr get_user_data(WindowId);
+
+    /// Sets the user-specified pointer associated with the window. It is
+    /// invalid to call this function with an invalid `WindowId`.
+    void set_user_data(WindowId, CheckedVoidPtr);
+
+    /// Creates a new window. Failure will crash the program.
+    WindowId create_window(ref WindowProperties);
+
+    /// Destroys the window. It is invalid to call this function with an invalid
+    /// `WindowId`.
+    void destroy_window(WindowId);
+
+    /// Requests that the window be closed. This simply sets a flag, which may
+    /// be retrieved by `get_state(id).is_close_requested`. This is the same
+    /// mechanism used when the user clicks the 'X' icon to close a window.
+    void request_close(WindowId);
+
+    /// Returns a const reference to the window's current state. It is invalid
+    /// to call this function with an invalid `WindowId`.
+    ref const(WindowState) get_state(WindowId);
+
+    /// Sets the window's title. It is invalid to call this function with an
+    /// invalid `WindowId`.
+    void set_title(WindowId, const char[]);
+
+    /// Sets the size of the window's content area. The actual window size may
+    /// be larger to support OS decorations. It is invalid to call this function
+    /// with an invalid `WindowId`.
+    void set_size(WindowId, ushort, ushort);
+
+    /// Sets the window mode. It is invalid to call this function with an
+    /// invalid `WindowId`.
+    void set_mode(WindowId, WindowMode);
+}

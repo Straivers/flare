@@ -39,8 +39,6 @@ struct DisplayImpl {
     HWND hwnd;
     WindowId id;
 
-    bool has_cursor;
-
     void set_mode(WindowMode mode) nothrow {
         ShowWindow(hwnd, translate(mode));
     }
@@ -56,7 +54,7 @@ struct DisplayImpl {
     }
 }
 
-struct OsWindowManager {
+struct Win32WindowManager_old {
     void initialize() nothrow {
         WNDCLASSEXW wc = {
             cbSize: WNDCLASSEXW.sizeof,
@@ -185,7 +183,7 @@ extern (Windows) LRESULT window_procedure(HWND hwnd, uint msg, WPARAM wp, LPARAM
         return 0;
 
     case WM_MOUSEMOVE:
-        if (!display.has_cursor) {
+        if (!state.has_cursor) {
             state.has_cursor = true;
 
             TRACKMOUSEEVENT tme = {
