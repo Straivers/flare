@@ -42,7 +42,7 @@ public:
             };
 
             _vulkan = init_vulkan(options);
-            _renderer = new VulkanRenderer(_vulkan, windows.max_windows);
+            _renderer = new VulkanRenderer(_vulkan, os.windows.max_windows);
         }
     }
 
@@ -63,7 +63,7 @@ public:
                 }
             };
 
-            _window_id = create_vulkan_window(windows, _renderer, properties);
+            _window_id = create_vulkan_window(os.windows, _renderer, properties);
         }
 
         {
@@ -94,29 +94,29 @@ public:
     }
 
     override void on_update(Duration dt) {
-        assert(windows.num_windows == 1);
+        assert(os.windows.num_windows == 1);
 
-        if (windows.get_state(_window_id).is_close_requested)
-            windows.destroy_window(_window_id);
+        if (os.windows.get_state(_window_id).is_close_requested)
+            os.windows.destroy_window(_window_id);
     }
 
     override void on_draw(Duration dt) {
-        if (!windows.is_open(_window_id))
+        if (!os.windows.is_open(_window_id))
             return;
 
-        if (!windows.get_state(_window_id).mode.is_visible)
+        if (!os.windows.get_state(_window_id).mode.is_visible)
             return;
 
         char[256] title_storage;
         auto writer = TypedWriter!char(title_storage);
         formattedWrite(writer, "%s: %s fps", app_settings.name, 1.secs / dt);
-        windows.set_title(_window_id, writer.data);
+        os.windows.set_title(_window_id, writer.data);
         writer.clear();
 
         auto device = _renderer.device;
 
         VulkanFrame frame;
-        get_next_frame(windows, _window_id, frame);
+        get_next_frame(os.windows, _window_id, frame);
         wait_and_reset(device, frame.fence);
 
         {
@@ -139,7 +139,7 @@ public:
             _renderer.submit(submit_i, frame.fence);
         }
 
-        swap_buffers(windows, _window_id);
+        swap_buffers(os.windows, _window_id);
     }
 
 private:

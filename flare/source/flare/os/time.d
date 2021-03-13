@@ -136,63 +136,8 @@ struct TimeStamp {
     }
 }
 
-/// Retrieve the current system time from the OS's high-resolution timer for
-/// time-delta measurements.
-Time get_time() @trusted @nogc nothrow {
-    return get_time_impl();
+interface OsClock {
+    Time get_time() @trusted @nogc nothrow;
+
+    TimeStamp get_timestamp() @trusted @nogc nothrow;
 }
-
-/// Retrives the current system time from the OS's high-resolution timer.
-TimeStamp get_timestamp() @trusted @nogc nothrow {
-    return get_timestamp_impl();
-}
-
-private:
-
-version (Windows) {
-    import core.sys.windows.windows;
-
-    immutable double perf_counter_frequency_hz;
-
-    shared static this() {
-        long hz;
-        if (!QueryPerformanceFrequency(&hz))
-            assert(false, "Failed to determine system timer frequency.");
-        perf_counter_frequency_hz = hz;
-    }
-
-    // Because core.sys.windows.windows does not export this function.
-    extern (Windows) void GetSystemTimePreciseAsFileTime(LPFILETIME) @nogc nothrow;
-
-    Time get_time_impl() @trusted @nogc nothrow {
-        long time;
-        const qpc_err = QueryPerformanceCounter(&time);
-        assert(qpc_err != 0);
-
-        return Time(time / perf_counter_frequency_hz);
-    }
-
-    TimeStamp get_timestamp_impl() @trusted @nogc nothrow {
-        // Note, this is available only for >= Windows 8. We should be ok,
-        // right???
-        FILETIME file_time;
-        GetSystemTimePreciseAsFileTime(&file_time);
-
-        SYSTEMTIME system_time;
-        const err = FileTimeToSystemTime(&file_time, &system_time);
-        assert(err != 0);
-
-        with (system_time)
-            return TimeStamp(
-                    wYear,
-                    wMonth,
-                    wDay,
-                    wHour,
-                    wMinute,
-                    wSecond,
-                    wMilliseconds
-            );
-    }
-}
-else
-    static assert(false, "Unsupported platform");

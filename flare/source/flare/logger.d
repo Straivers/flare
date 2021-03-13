@@ -8,7 +8,7 @@
  */
 module flare.logger;
 
-import flare.os.time : TimeStamp, get_timestamp;
+import flare.os.time : TimeStamp, OsClock;
 
 /**
  Enumeration of logger levels of detail.
@@ -103,12 +103,17 @@ struct Logger {
     static immutable malformed_error_message = "ERR LOG MESSAGE MALFORMED";
 
 @safe nothrow public:
-    import flare.os.time : get_time;
 
-    /// Initialize this logger with a minimum level of detail, and an optional
-    /// parent.
-    @nogc this(LogLevel level, Logger* parent = null) {
+    /// Initialize this logger with a minimum level of detail.
+    @nogc this(LogLevel level, OsClock clock) {
         _level = level;
+        _clock = clock;
+    }
+
+    @nogc this(LogLevel level, Logger* parent) {
+        assert(parent);
+        _level = level;
+        _clock = parent._clock;
         _parent = parent;
     }
 
@@ -201,7 +206,7 @@ struct Logger {
         if (level > 0 && level < _level)
             return;
 
-        auto event = LogEvent(get_timestamp(), level, mod, line, func);
+        auto event = LogEvent(_clock.get_timestamp(), level, mod, line, func);
         auto writer = TypedWriter!char(event.message);
 
         try
@@ -229,6 +234,7 @@ private:
 
     LogLevel _level;
     Logger* _parent;
+    OsClock _clock;
     LogEventSink[max_event_sinks] _event_sinks;
 }
 

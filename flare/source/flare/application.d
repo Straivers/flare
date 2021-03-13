@@ -19,17 +19,17 @@ struct FlareAppSettings {
 
 abstract class FlareApp {
     this(ref FlareAppSettings settings) {
-        log = Logger(LogLevel.All);
+        app_settings = settings;
+        initialize_os_api(app_settings.main_allocator, os);
+        tick_time = 1.secs / app_settings.tick_frequency;
+
+        log = Logger(LogLevel.All, os.clock);
         log.add_sink(new ConsoleLogger(true));
         log.all("Flare Engine v%s.%s.%s", flare_version_major, flare_version_minor, flare_version_patch);
-
-        app_settings = settings;
-        windows = initialize_window_api(app_settings.main_allocator);
-        tick_time = 1.secs / app_settings.tick_frequency;
     }
 
     ~this() {
-        terminate_window_api(app_settings.main_allocator, windows);
+        terminate_os_api(app_settings.main_allocator, os);
         destroy(log);
         destroy(memory);
     }
@@ -47,18 +47,18 @@ abstract class FlareApp {
     abstract void on_draw(Duration dt);
 
     void run() {
-        auto last_time = get_time();
+        auto last_time = os.clock.get_time();
         Duration lag;
 
-        windows.poll_events();
+        os.windows.poll_events();
 
-        while (windows.num_windows > 0) {
-            const current_time = get_time();
+        while (os.windows.num_windows > 0) {
+            const current_time = os.clock.get_time();
             const elapsed_time = current_time - last_time;
             last_time = current_time;
             lag += elapsed_time;
 
-            windows.poll_events();
+            os.windows.poll_events();
 
             while (lag >= tick_time) {
                 on_update(tick_time);
@@ -76,7 +76,7 @@ abstract class FlareApp {
 
     Logger log;
     FlareAppSettings app_settings;
-    OsWindowManager windows;
+    OsApi os;
     Duration tick_time;
 }
 
