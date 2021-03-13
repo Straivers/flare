@@ -43,8 +43,8 @@ bool is_visible(WindowMode mode) {
     return (mode & (WindowMode.Windowed | WindowMode.Maximized)) != 0;
 }
 
-enum display_handle_name = "flare_handle32_display_id";
-alias WindowId = Handle32!display_handle_name;
+enum window_handle_name = "flare_handle32_window_id";
+alias WindowId = Handle32!window_handle_name;
 
 struct WindowProperties {
     enum max_title_length = 255;

@@ -2,6 +2,7 @@ module flare.os.win32.win32_window_manager;
 
 version (Windows):
 
+import flare.limits : max_open_windows;
 import flare.memory : Allocator, Ternary;
 import flare.os.input;
 import flare.os.window;
@@ -166,7 +167,7 @@ private:
 }
 
 private:
-alias WindowPool = HandlePool!(Win32Window, display_handle_name, 100);
+alias WindowPool = HandlePool!(Win32Window, window_handle_name, max_open_windows);
 
 extern (Windows) LRESULT _window_procedure(HWND hwnd, uint msg, WPARAM wp, LPARAM lp) nothrow {
     if (msg == WM_NCCREATE) {
