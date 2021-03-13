@@ -61,7 +61,7 @@ abstract class FlareApp {
             displays.process_events();
 
             while (lag >= tick_time) {
-                on_update(lag);
+                on_update(tick_time);
                 lag -= tick_time;
             }
 
