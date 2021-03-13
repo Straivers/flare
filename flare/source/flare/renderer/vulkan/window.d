@@ -1,7 +1,6 @@
 module flare.renderer.vulkan.window;
 
 import flare.os.window;
-import flare.os.window_manager;
 import flare.renderer.vulkan.api;
 import flare.renderer.vulkan.vulkan_renderer;
 import flare.util.checked_pointer : CheckedVoidPtr;
@@ -72,7 +71,7 @@ struct VulkanFrameResources {
     }
 }
 
-WindowId create_vulkan_window(ref WindowManager manager, VulkanRenderer renderer, WindowProperties properties) {
+WindowId create_vulkan_window(ref OsWindowManager manager, VulkanRenderer renderer, WindowProperties properties) {
     struct Overrides {
         VulkanWindowOverrides overrides;
         CheckedVoidPtr aux;
@@ -113,10 +112,10 @@ WindowId create_vulkan_window(ref WindowManager manager, VulkanRenderer renderer
     properties.user_data = &overrides;
     properties.aux_data = renderer;
 
-    return manager.create(properties);
+    return manager.create_window(properties);
 }
 
-void get_next_frame(ref WindowManager manager, WindowId id, out VulkanFrame frame) {
+void get_next_frame(ref OsWindowManager manager, WindowId id, out VulkanFrame frame) {
     auto window = manager.get_user_data(id).get!VulkanWindow();
 
     with (window) {
@@ -130,7 +129,7 @@ void get_next_frame(ref WindowManager manager, WindowId id, out VulkanFrame fram
     }
 }
 
-void swap_buffers(ref WindowManager manager, WindowId id) {
+void swap_buffers(ref OsWindowManager manager, WindowId id) {
     auto window = manager.get_user_data(id).get!VulkanWindow();
 
     with (window) {

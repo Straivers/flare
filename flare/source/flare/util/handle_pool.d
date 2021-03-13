@@ -87,10 +87,12 @@ public:
     }
 
     private this(_Slot[] slots) {
+        assert(slots);
         _slots = slots;
 
-        static if (num_generations > 1)
+        static if (num_generations > 1) {
             _deallocate_slot(_allocate_slot());
+        }
         else
             _top++;
     }

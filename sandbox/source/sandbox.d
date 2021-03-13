@@ -3,9 +3,7 @@ module sandbox;
 import flare.application;
 import flare.math.vector;
 import flare.memory;
-import flare.os.input;
-import flare.os.time;
-import flare.os.window;
+import flare.os;
 import flare.renderer.vulkan;
 import flare.renderer.vulkan.api;
 import flare.util.buffer_writer;
@@ -44,7 +42,7 @@ public:
             };
 
             _vulkan = init_vulkan(options);
-            _renderer = new VulkanRenderer(_vulkan, displays.max_open_displays);
+            _renderer = new VulkanRenderer(_vulkan, windows.max_windows);
         }
     }
 
@@ -60,15 +58,15 @@ public:
                 callbacks: {
                     on_key: (mgr, id, usr, key, state) nothrow {
                         if (key == KeyCode.Escape && state == ButtonState.Released)
-                            mgr.close(id);
+                            mgr.request_close(id);
                     },
                     on_close: (mgr, id, user) nothrow {
-                        mgr.destroy(id);
+                        mgr.destroy_window(id);
                     }
                 }
             };
 
-            _display_id = create_vulkan_window(displays, _renderer, properties);
+            _window_id = create_vulkan_window(windows, _renderer, properties);
         }
 
         {
@@ -102,22 +100,22 @@ public:
     }
 
     override void on_draw(Duration dt) {
-        if (!displays.is_live(_display_id))
+        if (!windows.is_open(_window_id))
             return;
         
-        if (!displays.is_visible(_display_id))
+        if (!windows.get_state(_window_id).mode.is_visible)
             return;
 
         char[256] title_storage;
         auto writer = TypedWriter!char(title_storage);
         formattedWrite(writer, "%s: %s fps", app_settings.name, 1.secs / dt);
-        displays.retitle(_display_id, writer.data);
+        windows.set_title(_window_id, writer.data);
         writer.clear();
 
         auto device = _renderer.device;
 
         VulkanFrame frame;
-        get_next_frame(displays, _display_id, frame);
+        get_next_frame(windows, _window_id, frame);
         wait_and_reset(device, frame.fence);
 
         {
@@ -140,13 +138,13 @@ public:
             _renderer.submit(submit_i, frame.fence);
         }
 
-        swap_buffers(displays, _display_id);
+        swap_buffers(windows, _window_id);
     }
 
 private:
     VulkanContext _vulkan;
 
-    WindowId _display_id;
+    WindowId _window_id;
 
     VulkanRenderer _renderer;
 

@@ -1,9 +1,7 @@
 module flare.application;
 
 import flare.logger;
-import flare.os : Duration, get_time, secs;
-import flare.os.window_manager : WindowManager;
-
+import flare.os;
 public import flare.memory.measures : kib, mib, gib;
 public import flare.memory.allocators;
 
@@ -26,12 +24,12 @@ abstract class FlareApp {
         log.all("Flare Engine v%s.%s.%s", flare_version_major, flare_version_minor, flare_version_patch);
 
         app_settings = settings;
-        displays = WindowManager(&log, memory);
+        windows = initialize_window_api(app_settings.main_allocator);
         tick_time = 1.secs / app_settings.tick_frequency;
     }
 
     ~this() {
-        destroy(displays);
+        terminate_window_api(app_settings.main_allocator, windows);
         destroy(log);
         destroy(memory);
     }
@@ -52,13 +50,15 @@ abstract class FlareApp {
         auto last_time = get_time();
         Duration lag;
 
-        while (displays.num_active_displays > 0) {
+        windows.poll_events();
+
+        while (windows.num_windows > 0) {
             const current_time = get_time();
             const elapsed_time = current_time - last_time;
             last_time = current_time;
             lag += elapsed_time;
 
-            displays.process_events();
+            windows.poll_events();
 
             while (lag >= tick_time) {
                 on_update(tick_time);
@@ -76,7 +76,7 @@ abstract class FlareApp {
 
     Logger log;
     FlareAppSettings app_settings;
-    WindowManager displays;
+    OsWindowManager windows;
     Duration tick_time;
 }
 
