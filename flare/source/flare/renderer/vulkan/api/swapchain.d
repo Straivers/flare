@@ -30,6 +30,8 @@ version (Windows) {
 struct SwapchainProperties {
     uint n_images;
 
+    bool vsync;
+
     /// The size of every image in the swapchain.
     VkExtent2D image_size;
 
@@ -82,6 +84,7 @@ void get_swapchain_properties(VulkanDevice device, VkSurfaceKHR surface, bool vs
     vkGetPhysicalDeviceSurfacePresentModesKHR(device.gpu.handle, surface, &n_modes, modes.ptr);
 
     result.n_images = _num_images(capabilities);
+    result.vsync = vsync;
     result.image_size = _image_size(capabilities);
     result.format = _select(formats).format;
     result.color_space = _select(formats).colorSpace;
@@ -94,27 +97,29 @@ enum SwapchainResizeOp {
     Replace,
 }
 
-SwapchainResizeOp resize_swapchain(VulkanDevice device, VkSurfaceKHR surface, bool vsync, ref Swapchain swapchain) {
+void create_swapchain(VulkanDevice device, VkSurfaceKHR surface, bool vsync, out Swapchain swapchain) {
     SwapchainProperties properties;
     get_swapchain_properties(device, surface, vsync, properties);
 
-    if (properties.image_size == VkExtent2D()) {
-        destroy_swapchain(device, swapchain);
-        return SwapchainResizeOp.Destroy;
-    }
-    else {
-        auto old_swapchain = _create_swapchain(device, surface, properties, swapchain);
-        _update_swapchain_images(device, swapchain.handle, swapchain.format, swapchain.images, swapchain.views);
-
-        if (old_swapchain == null)
-            return SwapchainResizeOp.Create;
-
-        device.dispatch_table.DestroySwapchainKHR(old_swapchain);
-        return SwapchainResizeOp.Replace;
-    }
+    const old = _create_swapchain(device, surface, properties, swapchain);
+    assert(old is null);
+    _update_swapchain_images(device, swapchain);
+    
+    device.log.info("[VkDevice %s] Swapchain for surface %s created; %s %s images in %s", device.handle, surface, swapchain.n_images, swapchain.format, swapchain.present_mode);
 }
 
-void destroy_swapchain(VulkanDevice device, ref Swapchain swapchain) {
+void resize_swapchain(VulkanDevice device, VkSurfaceKHR surface, ref Swapchain swapchain) {
+    SwapchainProperties properties;
+    get_swapchain_properties(device, surface, swapchain.vsync, properties);
+
+    auto old = _create_swapchain(device, surface, properties, swapchain);
+    _update_swapchain_images(device, swapchain);
+    device.dispatch_table.DestroySwapchainKHR(old);
+
+    device.log.info("[VkDevice %s] Swapchain for surface %s resized; %s %s images in %s", device.handle, surface, swapchain.n_images, swapchain.format, swapchain.present_mode);
+}
+
+void destroy_swapchain(VulkanDevice device, VkSurfaceKHR surface, ref Swapchain swapchain) {
     assert(swapchain.handle);
 
     foreach (view; swapchain.views)
@@ -123,8 +128,9 @@ void destroy_swapchain(VulkanDevice device, ref Swapchain swapchain) {
     device.context.memory.dispose(swapchain.views);
     device.context.memory.dispose(swapchain.images);
     device.dispatch_table.DestroySwapchainKHR(swapchain.handle);
-
     swapchain = Swapchain();
+
+    device.log.info("[VkDevice %s] Swapchain for surface %s destroyed.", device.handle, surface);
 }
 
 /**
@@ -139,18 +145,19 @@ Params:
 Returns:
     The index of the next swapchain image.
 */
-bool acquire_next_image(VulkanDevice device, Swapchain* swapchain, VkSemaphore acquire_sempahore, out SwapchainImage image) {
+bool acquire_next_image(VulkanDevice device, Swapchain* swapchain, VkSemaphore acquire_sempahore) {
     assert(swapchain.handle);
 
     const err = device.dispatch_table.AcquireNextImageKHR(swapchain.handle, ulong.max, acquire_sempahore, null, swapchain.current_frame_index);
+    return err != VK_ERROR_OUT_OF_DATE_KHR;
+}
 
+void get_image(Swapchain* swapchain, out SwapchainImage image) {
     image.index = swapchain.current_frame_index;
     image.handle = swapchain.images[swapchain.current_frame_index];
     image.format = swapchain.format;
     image.view = swapchain.views[swapchain.current_frame_index];
     image.image_size = swapchain.image_size;
-
-    return err != VK_ERROR_OUT_OF_DATE_KHR;
 }
 
 /**
@@ -209,23 +216,21 @@ VkSwapchainKHR _create_swapchain(VulkanDevice device, VkSurfaceKHR surface, in S
     device.dispatch_table.CreateSwapchainKHR(ci, swapchain.handle);
     swapchain.properties = properties;
 
-    device.log.info("Swapchain for surface %s created; %s images in %s mode", surface, properties.n_images, properties.present_mode);
-
     return ci.oldSwapchain;
 }
 
-void _update_swapchain_images(VulkanDevice device, VkSwapchainKHR swapchain, VkFormat format, ref VkImage[] images, ref VkImageView[] views) {
+void _update_swapchain_images(VulkanDevice device, ref Swapchain swapchain) {
     uint count;
-    device.dispatch_table.GetSwapchainImagesKHR(swapchain, count, null);
-    resize_array(device.context.memory, images, count);
-    device.dispatch_table.GetSwapchainImagesKHR(swapchain, count, images.ptr);
+    device.dispatch_table.GetSwapchainImagesKHR(swapchain.handle, count, null);
+    resize_array(device.context.memory, swapchain.images, count);
+    device.dispatch_table.GetSwapchainImagesKHR(swapchain.handle, count, swapchain.images.ptr);
 
-    foreach (view; views)
+    foreach (view; swapchain.views)
         device.dispatch_table.DestroyImageView(view);
-    resize_array(device.context.memory, views, count);
+    resize_array(device.context.memory, swapchain.views, count);
 
     VkImageViewCreateInfo vci = {
-        format: format,
+        format: swapchain.format,
         viewType: VK_IMAGE_VIEW_TYPE_2D,
         components: VkComponentMapping(),
         subresourceRange: {
@@ -237,9 +242,9 @@ void _update_swapchain_images(VulkanDevice device, VkSwapchainKHR swapchain, VkF
         }
     };
 
-    foreach (i, image; images) {
+    foreach (i, image; swapchain.images) {
         vci.image = image;
-        device.dispatch_table.CreateImageView(vci, views[i]);
+        device.dispatch_table.CreateImageView(vci, swapchain.views[i]);
     }
 }
 

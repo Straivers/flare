@@ -98,13 +98,7 @@ public:
             }
         }
 
-        const state = os.windows.get_state(_window_id);
-
-        if (state.width != _swapchain.swapchain.image_size.width || state.height != _swapchain.swapchain.image_size.height) {
-            _renderer.resize_swapchain(_swapchain);
-        }
-
-        if (state.is_close_requested) {
+        if (os.windows.get_state(_window_id).is_close_requested) {
             os.windows.destroy_window(_window_id);
             _renderer.destroy_swapchain(_swapchain);
             return;
@@ -127,7 +121,7 @@ public:
         auto device = _renderer.device;
 
         VulkanFrame frame;
-        get_next_frame(_swapchain, frame);
+        _renderer.get_frame(_swapchain, frame);
         wait_and_reset(device, frame.fence);
 
         {

@@ -61,18 +61,3 @@ struct VulkanFrameResources {
         command_pool.free(command_buffers);
     }
 }
-
-void get_next_frame(VulkanSwapchain* window, out VulkanFrame frame) {
-    with (window) {
-        frame.fence = fences[virtual_frame_id];
-        frame.command_buffer = command_buffers[(double_buffer_id * num_virtual_frames) + virtual_frame_id];
-        frame.acquire = acquire_semaphores[virtual_frame_id];
-        frame.present = present_semaphores[virtual_frame_id];
-
-        if (!window.swapchain.handle)
-            window.renderer.resize_swapchain(window);
-
-        if (!acquire_next_image(renderer.device, &swapchain, frame.acquire, frame.image))
-            window.renderer.resize_swapchain(window);
-    }
-}

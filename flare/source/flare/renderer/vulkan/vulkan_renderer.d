@@ -76,9 +76,10 @@ nothrow:
         wait(_device, swapchain.fences);
 
         swapchain.frames.destroy(_device, &_command_pool);
+        flare.renderer.vulkan.api.destroy_swapchain(_device, swapchain.surface, swapchain.swapchain);
 
-        flare.renderer.vulkan.api.destroy_swapchain(_device, swapchain.swapchain);
-        _on_swapchain_destroy(swapchain);
+        foreach (fb; _framebuffers)
+            _device.dispatch_table.DestroyFramebuffer(fb);
 
         vkDestroySurfaceKHR(_context.instance, swapchain.surface, null);
 
@@ -88,72 +89,58 @@ nothrow:
     void resize_swapchain(VulkanSwapchain* swapchain) {
         wait(_device, swapchain.fences);
 
-        final switch (flare.renderer.vulkan.api.resize_swapchain(_device, swapchain.surface, swapchain.vsync, swapchain.swapchain)) {
-        case SwapchainResizeOp.Create:
-            if (_renderpass.handle && _renderpass.swapchain_attachment.format != swapchain.swapchain.format) {
-                destroy_renderpass(_device, _renderpass);
-            }
+        flare.renderer.vulkan.api.resize_swapchain(_device, swapchain.surface, swapchain.swapchain);
 
-            if (!_renderpass.handle) {
-                const VkVertexInputAttributeDescription[2] attrs = Vertex.attribute_descriptions;
-                RenderPassSpec rps = {
-                    swapchain_attachment: AttachmentSpec(swapchain.swapchain.format, [0, 0, 0, 1]),
-                    vertex_shader: _vertex_shader,
-                    fragment_shader: _fragment_shader,
-                    bindings: Vertex.binding_description,
-                    attributes: attrs
-                };
+        foreach (fb; _framebuffers)
+            _device.dispatch_table.DestroyFramebuffer(fb);
 
-                create_renderpass_1(_device, rps, _renderpass);
-            }
+        VkFramebufferCreateInfo framebuffer_ci = {
+            renderPass: _renderpass.handle,
+            attachmentCount: 1,
+            width: swapchain.swapchain.image_size.width,
+            height: swapchain.swapchain.image_size.height,
+            layers: 1
+        };
 
-            _framebuffers = _context.memory.make_array!VkFramebuffer(swapchain.swapchain.images.length);
-            foreach (i, ref fb; _framebuffers) {
-                VkFramebufferCreateInfo framebuffer_ci = {
-                    renderPass: _renderpass.handle,
-                    attachmentCount: 1,
-                    pAttachments: &swapchain.swapchain.views[i],
-                    width: swapchain.swapchain.image_size.width,
-                    height: swapchain.swapchain.image_size.height,
-                    layers: 1
-                };
-
-                _device.dispatch_table.CreateFramebuffer(framebuffer_ci, fb);
-            }
-            break;
-
-        case SwapchainResizeOp.Destroy:
-            _on_swapchain_destroy(swapchain);
-            break;
-
-        case SwapchainResizeOp.Replace:
-            assert(swapchain.swapchain.n_images == _framebuffers.length);
-
-            foreach (fb; _framebuffers)
-                _device.dispatch_table.DestroyFramebuffer(fb);
-
-            foreach (i, ref fb; _framebuffers) {
-                VkFramebufferCreateInfo framebuffer_ci = {
-                    renderPass: _renderpass.handle,
-                    attachmentCount: 1,
-                    pAttachments: &swapchain.swapchain.views[i],
-                    width: swapchain.swapchain.image_size.width,
-                    height: swapchain.swapchain.image_size.height,
-                    layers: 1
-                };
-
-                _device.dispatch_table.CreateFramebuffer(framebuffer_ci, fb);
-            } 
-            break;
+        resize_array(_context.memory, _framebuffers, swapchain.swapchain.n_images);
+        foreach (i, ref fb; _framebuffers) {
+            framebuffer_ci.pAttachments = &swapchain.swapchain.views[i];
+            _device.dispatch_table.CreateFramebuffer(framebuffer_ci, fb);
         }
     }
 
+    void get_frame(VulkanSwapchain* swapchain, out VulkanFrame frame) {
+        frame.fence = swapchain.fences[swapchain.virtual_frame_id];
+        frame.command_buffer = swapchain.command_buffers[(swapchain.double_buffer_id * swapchain.num_virtual_frames) + swapchain.virtual_frame_id];
+        frame.acquire = swapchain.acquire_semaphores[swapchain.virtual_frame_id];
+        frame.present = swapchain.present_semaphores[swapchain.virtual_frame_id];
+
+        // Initialize swapchain if this is the first time get_frame() has been
+        // called on it.
+        if (!swapchain.swapchain.handle) {
+            _initialize_swapchain(swapchain);
+            if (!acquire_next_image(_device, &swapchain.swapchain, frame.acquire))
+                // We assume that after resize_swapchain, there is no need to
+                // check again if the swapchain is valid.
+                assert(0, "Assumption about swapchain resize/acquire sequence violated.");
+        }
+
+        get_image(&swapchain.swapchain, frame.image);
+    }
+
     void present_swapchain(VulkanSwapchain* swapchain) {
+        // If swap_buffers() fails, we skip a frame, and continue rendering.
         if (!swap_buffers(_device, &swapchain.swapchain, swapchain.present_semaphores[swapchain.virtual_frame_id]))
             resize_swapchain(swapchain);
 
         swapchain.double_buffer_id ^= 1;
         swapchain.virtual_frame_id = (swapchain.virtual_frame_id + 1) % swapchain.num_virtual_frames;
+
+        // We assume here that if the swapchain needs resizing when
+        // present_swapchain() is called, it will be caught by
+        // if(!swap_buffers(...)).
+        if (!acquire_next_image(_device, &swapchain.swapchain, swapchain.acquire_semaphores[swapchain.virtual_frame_id]))
+            assert(0, "Assumption about swapchain resize/acquire sequence violated.");
     }
 
 private:
@@ -177,9 +164,33 @@ private:
         _fragment_shader = load_shader(_device, "shaders/frag.spv");
     }
 
-    void _on_swapchain_destroy(VulkanSwapchain* window) {
-        foreach (fb; _framebuffers)
-            _device.dispatch_table.DestroyFramebuffer(fb);
+    void _initialize_swapchain(VulkanSwapchain* swapchain) {
+        flare.renderer.vulkan.api.create_swapchain(_device, swapchain.surface, swapchain.vsync, swapchain.swapchain);
+    
+        const VkVertexInputAttributeDescription[2] attrs = Vertex.attribute_descriptions;
+        RenderPassSpec rps = {
+            swapchain_attachment: AttachmentSpec(swapchain.swapchain.format, [0, 0, 0, 1]),
+            vertex_shader: _vertex_shader,
+            fragment_shader: _fragment_shader,
+            bindings: Vertex.binding_description,
+            attributes: attrs
+        };
+
+        create_renderpass_1(_device, rps, _renderpass);
+
+        _framebuffers = _context.memory.make_array!VkFramebuffer(swapchain.swapchain.images.length);
+        foreach (i, ref fb; _framebuffers) {
+            VkFramebufferCreateInfo framebuffer_ci = {
+                renderPass: _renderpass.handle,
+                attachmentCount: 1,
+                pAttachments: &swapchain.swapchain.views[i],
+                width: swapchain.swapchain.image_size.width,
+                height: swapchain.swapchain.image_size.height,
+                layers: 1
+            };
+
+            _device.dispatch_table.CreateFramebuffer(framebuffer_ci, fb);
+        }
     }
 
     // TEMP
