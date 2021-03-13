@@ -156,6 +156,10 @@ final class Win32WindowManager : OsWindowManager {
     }
 
 private:
+    void _destroy(WindowId id) nothrow {
+        _windows.dispose(id);
+    }
+
     WindowPool _windows;
 }
 
@@ -204,6 +208,7 @@ extern (Windows) LRESULT _window_procedure(HWND hwnd, uint msg, WPARAM wp, LPARA
         return 0;
 
     case WM_DESTROY:
+        manager._destroy(id);
         callbacks.on_destroy(manager, id, user_data);
         return 0;
 

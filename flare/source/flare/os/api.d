@@ -8,7 +8,7 @@ OsWindowManager initialize_window_api(Allocator allocator) {
     version (Windows) {
         import flare.os.win32.win32_window_manager : Win32WindowManager;
 
-        return new Win32WindowManager(allocator);
+        return allocator.make!Win32WindowManager(allocator);
     }
 }
 
