@@ -60,12 +60,13 @@ abstract class FlareApp {
 
             os.windows.poll_events();
 
-            while (lag >= tick_time) {
+            while (os.windows.num_windows > 0 && lag >= tick_time) {
                 on_update(tick_time);
                 lag -= tick_time;
             }
 
-            on_draw(elapsed_time);
+            if (os.windows.num_windows > 0)
+                on_draw(elapsed_time);
         }
     }
 
