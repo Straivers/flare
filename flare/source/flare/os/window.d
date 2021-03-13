@@ -68,7 +68,6 @@ alias OnCreate = void function(OsWindowManager, WindowId, CheckedVoidPtr user_da
 alias OnDestroy = void function(OsWindowManager, WindowId, CheckedVoidPtr user_data) nothrow;
 
 alias OnResize = void function(OsWindowManager, WindowId, CheckedVoidPtr user_data, ushort width, ushort height) nothrow;
-alias OnKey = void function(OsWindowManager, WindowId, CheckedVoidPtr user_data, KeyCode, ButtonState) nothrow;
 
 struct Callbacks {
     /*
@@ -99,11 +98,6 @@ struct Callbacks {
     Callback called during window resizing.
     */
     OnResize on_resize;
-
-    /**
-    Callback called when a keyboard event occurs within the window.
-    */
-    OnKey on_key;
 
     void try_call(string name, Args...)(Args args) {
         mixin("if(" ~ name ~ ") " ~ name ~ "(args);");

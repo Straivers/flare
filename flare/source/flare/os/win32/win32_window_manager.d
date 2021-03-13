@@ -32,8 +32,9 @@ struct WindowCreateInfo {
 }
 
 final class Win32WindowManager : OsWindowManager {
-    this(Allocator allocator) nothrow {
+    this(Allocator allocator, InputEventBuffer inputs) nothrow {
         _windows = WindowPool(allocator);
+        _inputs = inputs;
 
         WNDCLASSEXW wc = {
             cbSize: WNDCLASSEXW.sizeof,
@@ -161,6 +162,7 @@ private:
     }
 
     WindowPool _windows;
+    InputEventBuffer _inputs;
 }
 
 private:
@@ -223,16 +225,20 @@ extern (Windows) LRESULT _window_procedure(HWND hwnd, uint msg, WPARAM wp, LPARA
             };
             TrackMouseEvent(&tme);
         }
+        auto event = InputEvent(id, MousePosition(cast(short) LOWORD(lp), cast(short) HIWORD(lp)));
+        manager._inputs.push_event(event);
         return 0;
 
     case WM_KEYDOWN:
     case WM_SYSKEYDOWN:
-        callbacks.on_key(manager, id, user_data, keycode_table[wp], ButtonState.Pressed);
+        auto event = InputEvent(id, KeyState(keycode_table[wp], ButtonState.Pressed));
+        manager._inputs.push_event(event);
         return 0;
 
     case WM_KEYUP:
     case WM_SYSKEYUP:
-        callbacks.on_key(manager, id, user_data, keycode_table[wp], ButtonState.Released);
+        auto event = InputEvent(id, KeyState(keycode_table[wp], ButtonState.Released));
+        manager._inputs.push_event(event);
         return 0;
 
     default:

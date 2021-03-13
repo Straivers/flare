@@ -1,5 +1,8 @@
 module flare.os.input;
 
+import flare.os.window : WindowId;
+import flare.util.ring_buffer;
+
 /// The state of an input button such as a key on the keyboard or a mouse button.
 enum ButtonState : ubyte {
     Released,
@@ -14,6 +17,16 @@ enum MouseButton : ubyte {
     Middle,
     Button_4,
     Button_5
+}
+
+struct MousePosition {
+    short x;
+    short y;
+}
+
+struct MouseButtonState {
+    ButtonState state;
+    MouseButton button;
 }
 
 /**
@@ -183,4 +196,76 @@ enum KeyCode : ubyte {
     RightSuper = 147,
 
     KeyCodeTableSize
+}
+
+struct KeyState {
+    KeyCode key;
+    ButtonState state;
+}
+
+struct InputEvent {
+    enum Kind : ubyte {
+        None,
+        Key,
+        MouseClick,
+        MouseMove
+    }
+
+    Kind kind;
+    WindowId source;
+
+    private union {
+        KeyState _key;
+        MousePosition _move;
+        MouseButtonState _click;
+    }
+
+    this(WindowId source, KeyState key) nothrow {
+        this.source = source;
+        kind = Kind.Key;
+        _key = key;
+    }
+
+    this(WindowId source, MousePosition move) nothrow {
+        this.source = source;
+        kind = Kind.MouseMove;
+        _move = move;
+    }
+
+    this(WindowId source, MouseButtonState click) nothrow {
+        this.source = source;
+        kind = Kind.MouseClick;
+        _click = click;
+    }
+
+    // dfmt off
+    ref const(KeyState) key() nothrow const return { return _key; }
+    ref const(MousePosition) mouse_move() nothrow const return { return _move; }
+    ref const(MouseButtonState) mouse_click() nothrow const return { return _click; }
+    // dfmt on
+}
+
+final class InputEventBuffer {
+    bool is_empty() nothrow {
+        return _events.is_empty();
+    }
+
+    size_t count() nothrow {
+        return _events.count();
+    }
+
+    void push_event(InputEvent event) nothrow {
+        _events.push_back(event);
+    }
+
+    bool get_event(out InputEvent event) nothrow {
+        if (_events.is_empty)
+            return false;
+        
+        event = _events.pop_front();
+        return true;
+    }
+
+private:
+    FixedRingBuffer!(InputEvent, 64) _events;
 }

@@ -55,12 +55,6 @@ public:
                 mode: WindowMode.Windowed,
                 is_resizable: true,
                 vsync: true,
-                callbacks: {
-                    on_key: (mgr, id, usr, key, state) nothrow {
-                        if (key == KeyCode.Escape && state == ButtonState.Released)
-                            mgr.request_close(id);
-                    }
-                }
             };
 
             _window_id = create_vulkan_window(os.windows, _renderer, properties);
@@ -96,8 +90,18 @@ public:
     override void on_update(Duration dt) {
         assert(os.windows.num_windows == 1);
 
-        if (os.windows.get_state(_window_id).is_close_requested)
+        InputEvent event;
+        while (os.input_events.get_event(event)) {
+            if (event.kind == InputEvent.Kind.Key) {
+                if (event.key.key == KeyCode.Escape && event.key.state == ButtonState.Released)
+                    os.windows.request_close(event.source);
+            }
+        }
+
+        if (os.windows.get_state(_window_id).is_close_requested) {
             os.windows.destroy_window(_window_id);
+            return;
+        }
     }
 
     override void on_draw(Duration dt) {

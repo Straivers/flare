@@ -1,7 +1,6 @@
 module flare.renderer.vulkan.vulkan_renderer;
 
 import flare.memory;
-import flare.os.types : OsWindow;
 import flare.renderer.renderer;
 import flare.renderer.vulkan.api;
 import flare.renderer.vulkan.window;
@@ -61,7 +60,7 @@ nothrow:
     }
     // TEMP
 
-    VulkanWindow* on_window_create(WindowId id, ref VulkanWindowOverrides overrides, OsWindow hwnd) {
+    VulkanWindow* on_window_create(WindowId id, ref VulkanWindowOverrides overrides, void* hwnd) {
         auto window = _windows.make(id, this, overrides);
         window.surface = create_surface(_context, hwnd);
         // Swapchain creation handled on first resize operation.

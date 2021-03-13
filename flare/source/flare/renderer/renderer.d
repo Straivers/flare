@@ -5,8 +5,6 @@ struct SwapchainId {
 }
 
 interface Renderer {
-    import flare.os.types: OsWindow;
-
     enum max_swapchains = 64;
 
 nothrow:
@@ -15,7 +13,7 @@ nothrow:
      * visible, actual swapchain creation may be deferred to the first
      * `resize()` with nonzero width and height.
      */
-    SwapchainId create_swapchain(OsWindow);
+    SwapchainId create_swapchain(void*);
 
     /**
      * Destroys a swapchain. This function may cause the GPU to stall until the
