@@ -1,11 +1,11 @@
 module flare.application;
 
-import flare.core.logger;
-import flare.core.time;
-import flare.display.manager;
+import flare.logger;
+import flare.os.time;
+import flare.os.display.manager;
 
-public import flare.core.memory.measures : kib, mib, gib;
-public import flare.core.memory.allocators;
+public import flare.memory.measures : kib, mib, gib;
+public import flare.memory.allocators;
 
 enum uint flare_version_major = 0;
 enum uint flare_version_minor = 1;

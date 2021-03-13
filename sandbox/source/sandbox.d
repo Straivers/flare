@@ -1,13 +1,13 @@
 module sandbox;
 
 import flare.application;
-import flare.core.math.vector;
-import flare.vulkan;
-import flare.core.memory;
-import flare.vulkan_renderer;
-import flare.display;
-import flare.core.time;
-import flare.core.buffer_writer;
+import flare.math.vector;
+import flare.renderer.vulkan.api;
+import flare.memory;
+import flare.renderer.vulkan;
+import flare.os.display;
+import flare.os.time;
+import flare.util.buffer_writer;
 import std.format;
 
 immutable mesh = Mesh(
@@ -27,7 +27,7 @@ immutable mesh = Mesh(
 );
 
 class Sandbox : FlareApp {
-    import flare.core.memory: AllocatorApi, BuddyAllocator, mib;
+    import flare.memory: AllocatorApi, BuddyAllocator, mib;
 
 public:
     this(ref FlareAppSettings settings) {

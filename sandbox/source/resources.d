@@ -1,6 +1,6 @@
 module resources;
 
-import flare.vulkan;
+import flare.renderer.vulkan.api;
 
 /**
 Describes the location of an allocation, and the features that it must support.
@@ -55,8 +55,8 @@ align (8) struct AllocationId {
 }
 
 class VulkanResourceManager {
-    import flare.core.memory.virtual: vm_alloc, vm_commit, vm_free;
-    import flare.core.memory.allocators.allocator: make_array, dispose;
+    import flare.memory.virtual: vm_alloc, vm_commit, vm_free;
+    import flare.memory.allocators.allocator: make_array, dispose;
 
     /// 2 Million Allocations
     // At 8 bytes per index, 2 ^ 20 slots gives 16 mib for the table
@@ -214,7 +214,7 @@ public:
 }
 
 struct VulkanMemoryPool {
-    import flare.core.memory.measures: mib, gib;
+    import flare.memory.measures: mib, gib;
 
     enum chunk_size = 256.mib;
     enum max_chunk_size = 4.gib;

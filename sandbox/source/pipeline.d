@@ -1,8 +1,8 @@
 module pipeline;
 
-import flare.core.memory;
-import flare.core.os.file;
-import flare.vulkan;
+import flare.memory;
+import flare.os.file;
+import flare.renderer.vulkan.api;
 
 VkPipeline create_graphics_pipeline(
     VulkanDevice device,

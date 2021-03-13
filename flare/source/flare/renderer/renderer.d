@@ -5,7 +5,7 @@ struct SwapchainId {
 }
 
 interface Renderer {
-    import flare.core.os.types: OsWindow;
+    import flare.os.types: OsWindow;
 
     enum max_swapchains = 64;
 
