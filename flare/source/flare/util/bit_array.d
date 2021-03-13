@@ -1,4 +1,4 @@
-module flare.util.bitarray;
+module flare.util.bit_array;
 
 struct BitArray {
     ubyte[] array;

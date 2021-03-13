@@ -112,16 +112,16 @@ final class Win32WindowManager : OsWindowManager {
 
             auto ci = WindowCreateInfo(window, properties.aux_data);
             CreateWindowEx(
-                0,
-                wndclass_name.ptr,
-                WCharBuffer(properties.title).ptr,
-                style,
-                CW_USEDEFAULT, CW_USEDEFAULT,
-                rect.right - rect.left, rect.bottom - rect.top,
-                NULL,
-                NULL,
-                GetModuleHandle(null),
-                &ci
+                    0,
+                    wndclass_name.ptr,
+                    WCharBuffer(properties.title).ptr,
+                    style,
+                    CW_USEDEFAULT, CW_USEDEFAULT,
+                    rect.right - rect.left, rect.bottom - rect.top,
+                    NULL,
+                    NULL,
+                    GetModuleHandle(null),
+                    &ci
             );
             ShowWindow(window.hwnd, SW_SHOWDEFAULT);
         }
@@ -168,14 +168,15 @@ private:
 private:
 alias WindowPool = HandlePool!(Win32Window, display_handle_name, 100);
 
-
 extern (Windows) LRESULT _window_procedure(HWND hwnd, uint msg, WPARAM wp, LPARAM lp) nothrow {
     if (msg == WM_NCCREATE) {
-        auto ci = cast(WindowCreateInfo*) ((cast(CREATESTRUCT*) lp).lpCreateParams);
+        auto ci = cast(WindowCreateInfo*)((cast(CREATESTRUCT*) lp).lpCreateParams);
         SetWindowLongPtr(hwnd, GWLP_USERDATA, cast(LONG_PTR) ci.window);
 
         ci.window.hwnd = hwnd;
-        with (ci.window) callbacks.on_create(manager, id, user_data, ci.aux);
+        with (ci.window)
+            if (callbacks.on_create)
+                callbacks.on_create(manager, id, user_data, ci.aux);
         return TRUE;
     }
 
@@ -200,7 +201,8 @@ extern (Windows) LRESULT _window_procedure(HWND hwnd, uint msg, WPARAM wp, LPARA
 
             state.width = LOWORD(lp);
             state.height = HIWORD(lp);
-            callbacks.on_resize(manager, id, user_data, state.width, state.height);
+            if (callbacks.on_resize)
+                callbacks.on_resize(manager, id, user_data, state.width, state.height);
         }
         return 0;
 
@@ -210,7 +212,8 @@ extern (Windows) LRESULT _window_procedure(HWND hwnd, uint msg, WPARAM wp, LPARA
 
     case WM_DESTROY:
         manager._destroy(id);
-        callbacks.on_destroy(manager, id, user_data);
+        if (callbacks.on_destroy)
+            callbacks.on_destroy(manager, id, user_data);
         return 0;
 
     case WM_MOUSEMOVE:
@@ -253,6 +256,7 @@ HCURSOR translate(CursorIcon icon) nothrow {
 
     auto ico = () {
         switch (icon) with (CursorIcon) {
+            // dfmt off
             case Pointer:                           return IDC_ARROW;
             case Wait:                              return IDC_WAIT;
             case IBeam:                             return IDC_IBEAM;
@@ -261,6 +265,7 @@ HCURSOR translate(CursorIcon icon) nothrow {
             case ResizeNorthwestSoutheast:          return IDC_SIZENWSE;
             case ResizeCornerNortheastSouthwest:    return IDC_SIZENESW;
             default:                                assert(false, "Custom Cursor Icons not Implemented.");
+            // dfmt on
         }
     } ();
     () @trusted { cursor_icons[icon] = LoadCursor(null, ico); } ();
@@ -270,15 +275,17 @@ HCURSOR translate(CursorIcon icon) nothrow {
 
 int translate(WindowMode mode) nothrow {
     final switch (mode) with (WindowMode) {
-        case Hidden: return SW_HIDE;
-        case Windowed: return SW_SHOWNORMAL;
+        // dfmt off
+        case Hidden:    return SW_HIDE;
+        case Windowed:  return SW_SHOWNORMAL;
         case Minimized: return SW_SHOWMINIMIZED;
         case Maximized: return SW_SHOWMAXIMIZED;
+        // dfmt on
     }
 }
 
 struct WCharBuffer {
-    import flare.util.buffer_writer: TypedWriter;
+    import flare.util.buffer_writer : TypedWriter;
     import std.utf : byWchar;
 
 nothrow:
@@ -293,8 +300,6 @@ nothrow:
 }
 
 immutable keycode_table = () {
-    import flare.os.input: KeyCode;
-
     KeyCode[256] table;
 
     with (KeyCode) {

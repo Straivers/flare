@@ -3,7 +3,6 @@ module flare.os.win32.win32_time;
 version (Windows):
 
 import flare.os.time;
-
 import core.sys.windows.windows;
 
 final class Win32Clock : OsClock {
@@ -30,13 +29,13 @@ final class Win32Clock : OsClock {
             assert(0, "Failed to retrieve high-resolution timestamp information.");
 
         return TimeStamp(
-            sys.wYear,
-            sys.wMonth,
-            sys.wDay,
-            sys.wHour,
-            sys.wMinute,
-            sys.wSecond,
-            sys.wMilliseconds
+                sys.wYear,
+                sys.wMonth,
+                sys.wDay,
+                sys.wHour,
+                sys.wMinute,
+                sys.wSecond,
+                sys.wMilliseconds
         );
     }
 
