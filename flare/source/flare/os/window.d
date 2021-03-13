@@ -65,7 +65,6 @@ struct WindowProperties {
 }
 
 alias OnCreate = void function(OsWindowManager, WindowId, CheckedVoidPtr user_data, CheckedVoidPtr aux_data) nothrow;
-alias OnClose = void function(OsWindowManager, WindowId, CheckedVoidPtr user_data) nothrow;
 alias OnDestroy = void function(OsWindowManager, WindowId, CheckedVoidPtr user_data) nothrow;
 
 alias OnResize = void function(OsWindowManager, WindowId, CheckedVoidPtr user_data, ushort width, ushort height) nothrow;
@@ -89,12 +88,6 @@ struct Callbacks {
     the window has been created, and before the window is visible.
     */
     OnCreate on_create;
-
-    /**
-    Callback called when a user presses the `x` to close a window, or when
-    `WindowManager.close()` is called.
-    */
-    OnClose on_close;
 
     /**
     Callback called during window destruction. This callback will be called

@@ -59,9 +59,6 @@ public:
                     on_key: (mgr, id, usr, key, state) nothrow {
                         if (key == KeyCode.Escape && state == ButtonState.Released)
                             mgr.request_close(id);
-                    },
-                    on_close: (mgr, id, user) nothrow {
-                        mgr.destroy_window(id);
                     }
                 }
             };
@@ -97,12 +94,16 @@ public:
     }
 
     override void on_update(Duration dt) {
+        assert(windows.num_windows == 1);
+
+        if (windows.get_state(_window_id).is_close_requested)
+            windows.destroy_window(_window_id);
     }
 
     override void on_draw(Duration dt) {
         if (!windows.is_open(_window_id))
             return;
-        
+
         if (!windows.get_state(_window_id).mode.is_visible)
             return;
 

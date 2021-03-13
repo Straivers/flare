@@ -204,7 +204,6 @@ extern (Windows) LRESULT _window_procedure(HWND hwnd, uint msg, WPARAM wp, LPARA
 
     case WM_CLOSE:
         state.is_close_requested = true;
-        callbacks.on_close(manager, id, user_data);
         return 0;
 
     case WM_DESTROY:
