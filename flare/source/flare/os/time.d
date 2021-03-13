@@ -1,16 +1,16 @@
 module flare.os.time;
 
 Duration msecs(double dur) {
-    return from_msecs_impl(dur);
+    return Duration(dur / 1000);
 }
 
 Duration secs(double dur) {
-    return from_secs_impl(dur);
+    return Duration(dur);
 }
 
 /**
- An instant in time measured using the operating system's high-resolution timer.
- */
+An instant in time in seconds, taken from the OS' high-resolution timer.
+*/
 struct Time {
     private double _raw_time;
 
@@ -26,19 +26,22 @@ struct Time {
     }
 }
 
+/**
+A duration of time in seconds.
+*/
 struct Duration {
     private double _raw_delta = 0;
 
 @safe @nogc pure nothrow:
     double to_msecs() const {
-        return to_msecs_impl(this);
+        return _raw_delta * 1000;
     }
 
     Duration opBinary(string op)(Duration rhs) const if (op == "+" || op == "-") {
         mixin("return Duration(_raw_delta " ~ op ~ " rhs._raw_delta);");
     }
 
-    double opBinary(string op)(Duration rhs) const if (op == "*" || op == "/") {
+    double opBinary(string op)(Duration rhs) const if (op == "/") {
         mixin("return _raw_delta " ~ op ~ " rhs._raw_delta;");
     }
 
@@ -60,8 +63,6 @@ struct Duration {
     }
 }
 
-/// TODO: struct(DeltaTime) and Time - Time
-
 /**
  An instant in time in a more digestible format with millisecond resolution.
  */
@@ -70,20 +71,16 @@ struct TimeStamp {
 
     alias StringBuffer = char[23];
 
-    /// The year of the Gregorian Calendar.
-    short year;
-
-    /// Milliseconds past the current second.
-    ushort milliseconds;
-
 @safe @nogc pure nothrow:
 
     mixin(bitfields!(
+        uint, "year", 16,
         uint, "month", 5,
         uint, "day", 6,
         uint, "hour", 6,
         uint, "minute", 7,
         uint, "second", 7,
+        uint, "milliseconds", 16,
         uint, "", 1
     ));
 
@@ -145,8 +142,7 @@ Time get_time() @trusted @nogc nothrow {
     return get_time_impl();
 }
 
-/// Retrives the current system time from the OS's high-resolution timer since
-/// the UNIX Epoch.
+/// Retrives the current system time from the OS's high-resolution timer.
 TimeStamp get_timestamp() @trusted @nogc nothrow {
     return get_timestamp_impl();
 }
@@ -157,14 +153,12 @@ version (Windows) {
     import core.sys.windows.windows;
 
     immutable double perf_counter_frequency_hz;
-    immutable real perf_counter_frequency_msecs;
 
     shared static this() {
         long hz;
         if (!QueryPerformanceFrequency(&hz))
             assert(false, "Failed to determine system timer frequency.");
         perf_counter_frequency_hz = hz;
-        perf_counter_frequency_msecs = real(perf_counter_frequency_hz) / 1000;
     }
 
     // Because core.sys.windows.windows does not export this function.
@@ -175,19 +169,7 @@ version (Windows) {
         const qpc_err = QueryPerformanceCounter(&time);
         assert(qpc_err != 0);
 
-        return Time(time);
-    }
-
-    double to_msecs_impl(Duration d) @safe @nogc pure nothrow {
-        return d._raw_delta / perf_counter_frequency_msecs;
-    }
-
-    Duration from_msecs_impl(double d) {
-        return Duration(d * perf_counter_frequency_msecs);
-    }
-
-    Duration from_secs_impl(double d) {
-        return Duration(d * perf_counter_frequency_hz);
+        return Time(time / perf_counter_frequency_hz);
     }
 
     TimeStamp get_timestamp_impl() @trusted @nogc nothrow {
