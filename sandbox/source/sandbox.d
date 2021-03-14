@@ -4,6 +4,7 @@ import flare.application;
 import flare.math.vector;
 import flare.memory;
 import flare.os;
+import flare.renderer.renderer;
 import flare.renderer.vulkan;
 import flare.renderer.vulkan.api;
 import flare.util.buffer_writer;
@@ -153,7 +154,7 @@ private:
     WindowId _window_id;
 
     VulkanRenderer _renderer;
-    VulkanSwapchain* _swapchain;
+    SwapchainId _swapchain;
 
     RawDeviceMemoryAllocator _device_memory;
     LinearPool _memory_pool;

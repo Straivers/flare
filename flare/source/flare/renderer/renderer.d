@@ -1,33 +1,29 @@
 module flare.renderer.renderer;
 
-struct SwapchainId {
-    ulong value;
-}
+import flare.util.handle_pool;
+
+enum swapchain_handle_name = "flare_swapchain_handle_id";
+alias SwapchainId = Handle32!swapchain_handle_name;
 
 interface Renderer {
-
-nothrow:
     /**
-     * Creates a new swapchain associated with a window. If the window is not
-     * visible, actual swapchain creation may be deferred to the first
-     * `resize()` with nonzero width and height.
+     * Creates a new swapchain associated with a window.
      */
-    SwapchainId create_swapchain(void*);
+    SwapchainId create_swapchain(void*, bool vsync);
 
     /**
      * Destroys a swapchain. This function may cause the GPU to stall until the
      * swapchain's resources are no longer in use.
      */
-    void destroy(SwapchainId);
+    void destroy_swapchain(SwapchainId);
 
     /**
      * Resizes the swapchain.
      */
-    void resize(SwapchainId, ushort width, ushort height);
+    void resize_swapchain(SwapchainId);
 
     /**
-     * Causes the swapchain to display switch out the current image for a
-     * freshly rendered one.
+     * Causes the swapchain to display the currently rendered image.
      */
-    void swap_buffers(SwapchainId);
+    void present_swapchain(SwapchainId);
 }

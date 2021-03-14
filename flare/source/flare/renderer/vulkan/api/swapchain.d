@@ -145,14 +145,14 @@ Params:
 Returns:
     The index of the next swapchain image.
 */
-bool acquire_next_image(VulkanDevice device, Swapchain* swapchain, VkSemaphore acquire_sempahore) {
+bool acquire_next_image(VulkanDevice device, ref Swapchain swapchain, VkSemaphore acquire_sempahore) {
     assert(swapchain.handle);
 
     const err = device.dispatch_table.AcquireNextImageKHR(swapchain.handle, ulong.max, acquire_sempahore, null, swapchain.current_frame_index);
     return err != VK_ERROR_OUT_OF_DATE_KHR;
 }
 
-void get_image(Swapchain* swapchain, out SwapchainImage image) {
+void get_image(ref Swapchain swapchain, out SwapchainImage image) {
     image.index = swapchain.current_frame_index;
     image.handle = swapchain.images[swapchain.current_frame_index];
     image.format = swapchain.format;
@@ -171,7 +171,7 @@ Returns:
     `true` if the swapchain images were swapped, `false` if the buffer is out of
     date.
 */
-bool swap_buffers(VulkanDevice device, Swapchain* swapchain, VkSemaphore present_semaphore) {
+bool swap_buffers(VulkanDevice device, ref Swapchain swapchain, VkSemaphore present_semaphore) {
     uint index = swapchain.current_frame_index;
     VkPresentInfoKHR pi = {
         waitSemaphoreCount: 1,
